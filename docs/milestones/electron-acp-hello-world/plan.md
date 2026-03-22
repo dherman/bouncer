@@ -8,12 +8,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 1.1 Initialize electron-vite project
   - [x] 1.2 Install ACP SDK
   - [x] 1.3 Verify baseline (app launches, build succeeds)
-- [ ] **[Phase 2: Echo Agent](#phase-2-echo-agent)**
-  - [ ] 2.1 Create `electron/agents/echo-agent.ts`
-  - [ ] 2.2 Set up agent build/run mechanism
-  - [ ] 2.3 Write `scripts/test-echo-agent.ts` test harness
-  - [ ] 2.4 Smoke test: streamed echo response works end-to-end over ACP stdio
-  - [ ] 2.5 Document any SDK API deviations from design doc pseudocode
+- [x] **[Phase 2: Echo Agent](#phase-2-echo-agent)**
+  - [x] 2.1 Create `src/agents/echo-agent.ts`
+  - [x] 2.2 Set up agent build/run mechanism
+  - [x] 2.3 Write `scripts/test-echo-agent.ts` test harness
+  - [x] 2.4 Smoke test: streamed echo response works end-to-end over ACP stdio
+  - [x] 2.5 Document any SDK API deviations from design doc pseudocode
 - [ ] **[Phase 3: Session Manager](#phase-3-session-manager)**
   - [ ] 3.1 Define shared types (`electron/main/types.ts`)
   - [ ] 3.2 Implement `SessionManager.createSession()` (spawn agent, ACP handshake)
@@ -111,7 +111,7 @@ Build the echo agent as a standalone Node script before touching any Electron co
 
 ### 2.1 Create agent source file
 
-- [ ] Create `electron/agents/echo-agent.ts`
+- [x] Create `src/agents/echo-agent.ts`
 
 This script will be run as a child process — it reads JSON-RPC from stdin and writes to stdout.
 
@@ -195,7 +195,7 @@ process.stderr.write("Echo agent started\n");
 
 ### 2.2 Build the agent
 
-- [ ] Choose and set up a build/run mechanism for the agent
+- [x] Choose and set up a build/run mechanism for the agent
 
 Options:
 
@@ -221,7 +221,7 @@ For M0, Option A (tsx during dev) is simplest. We can optimize the build later.
 
 ### 2.3 Write test harness
 
-- [ ] Create `scripts/test-echo-agent.ts`
+- [x] Create `scripts/test-echo-agent.ts`
 
 Test the agent in isolation by piping JSON-RPC messages to it:
 
@@ -294,12 +294,12 @@ npx tsx scripts/test-echo-agent.ts
 
 ### 2.4 Smoke test
 
-- [ ] Test script prints streamed `agent_message_chunk` updates containing "Echo: Hello world"
-- [ ] Prompt response returns with `stopReason: "end_turn"`
+- [x] Test script prints streamed `agent_message_chunk` updates containing "Echo: Hello world"
+- [x] Prompt response returns with `stopReason: "end_turn"`
 
 ### 2.5 Document SDK deviations
 
-- [ ] Note any differences between design doc pseudocode and actual SDK API
+- [x] Note any differences between design doc pseudocode and actual SDK API
 
 > **Note on API discovery:** This phase is where we'll learn the most about the real ACP SDK API. The test script above is a best guess. If the `Client` interface requires different methods, if `sessionUpdate` has a different shape, or if there are required handshake steps we're missing, this is where we'll find out. Document any deviations from the design doc's pseudocode for reference in later milestones.
 

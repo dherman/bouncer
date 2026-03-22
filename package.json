@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Boundary-based sandboxing for AI agents",
+  "type": "module",
   "main": "./out/main/index.js",
   "engines": {
     "node": ">=18.0.0"
@@ -13,7 +14,8 @@
     "preview": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web"
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test:echo-agent": "tsx scripts/test-echo-agent.ts"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -24,6 +26,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^41.0.3",
     "electron-vite": "^5.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
   },
