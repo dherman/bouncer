@@ -26,14 +26,14 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 4.2 Add type declarations for renderer (`src/renderer/src/env.d.ts`)
   - [x] 4.3 Register `ipcMain.handle` handlers in main process
   - [x] 4.4 Verify: `window.glitterball.sessions.create()` works from renderer dev console
-- [ ] **[Phase 5: React UI](#phase-5-react-ui)**
-  - [ ] 5.1 App layout: two-panel flexbox (session list + chat)
-  - [ ] 5.2 `<SessionList />` component with status indicators
-  - [ ] 5.3 `<ChatPanel />` component with streaming message rendering
-  - [ ] 5.4 `<MessageInput />` component (Enter to send, disabled during turns)
-  - [ ] 5.5 Wire `onUpdate` handler for SessionUpdate events
-  - [ ] 5.6 Minimal CSS styling
-  - [ ] 5.7 Full flow test: launch → create session → send message → see streamed echo
+- [x] **[Phase 5: React UI](#phase-5-react-ui)**
+  - [x] 5.1 App layout: two-panel flexbox (session list + chat)
+  - [x] 5.2 `<SessionList />` component with status indicators
+  - [x] 5.3 `<ChatPanel />` component with streaming message rendering
+  - [x] 5.4 `<MessageInput />` component (Enter to send, disabled during turns)
+  - [x] 5.5 Wire `onUpdate` handler for SessionUpdate events
+  - [x] 5.6 Minimal CSS styling
+  - [x] 5.7 Full flow test: launch → create session → send message → see streamed echo
 - [ ] **[Phase 6: Edge Cases & Polish](#phase-6-edge-cases--polish)**
   - [ ] 6.1 Agent crash handling (error state in UI)
   - [ ] 6.2 Session switching (independent message histories)
@@ -484,9 +484,9 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ### 5.1 App layout
 
-- [ ] Replace scaffolded `src/App.tsx` with two-panel layout
-- [ ] Set up state: `sessions`, `activeSessionId`, `messagesBySession`, `streamingText`
-- [ ] Subscribe to `glitterball.sessions.onUpdate()` on mount
+- [x] Replace scaffolded `src/App.tsx` with two-panel layout
+- [x] Set up state: `sessions`, `activeSessionId`, `messagesBySession`, `streamingText`
+- [x] Subscribe to `glitterball.sessions.onUpdate()` on mount
 
 ```
 ┌──────────────┬─────────────────────────────────┐
@@ -507,10 +507,10 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ### 5.2 SessionList component
 
-- [ ] Create `src/components/SessionList.tsx`
-- [ ] Render session entries with status indicators (green=ready, yellow=initializing, red=error, gray=closed)
-- [ ] "New Session" button
-- [ ] Click to select
+- [x] Create `src/components/SessionList.tsx`
+- [x] Render session entries with status indicators (green=ready, yellow=initializing, red=error, gray=closed)
+- [x] "New Session" button
+- [x] Click to select
 
 ```typescript
 interface Props {
@@ -523,10 +523,10 @@ interface Props {
 
 ### 5.3 ChatPanel component
 
-- [ ] Create `src/components/ChatPanel.tsx`
-- [ ] Render message bubbles (user right/blue, agent left/gray)
-- [ ] Render in-progress streaming text with cursor indicator
-- [ ] Auto-scroll to bottom on new messages
+- [x] Create `src/components/ChatPanel.tsx`
+- [x] Render message bubbles (user right/blue, agent left/gray)
+- [x] Render in-progress streaming text with cursor indicator
+- [x] Auto-scroll to bottom on new messages
 
 ```typescript
 interface Props {
@@ -539,11 +539,11 @@ interface Props {
 
 ### 5.4 MessageInput component
 
-- [ ] Create `src/components/MessageInput.tsx`
-- [ ] Text input + Send button
-- [ ] Submit on Enter key or button click
-- [ ] Clear input after send
-- [ ] Disabled while agent is responding
+- [x] Create `src/components/MessageInput.tsx`
+- [x] Text input + Send button
+- [x] Submit on Enter key or button click
+- [x] Clear input after send
+- [x] Disabled while agent is responding
 
 ```typescript
 interface Props {
@@ -554,7 +554,7 @@ interface Props {
 
 ### 5.5 Wire `onUpdate` handler
 
-- [ ] Handle `status-change`, `message`, `stream-chunk`, `stream-end` events in `<App />`
+- [x] Handle `status-change`, `message`, `stream-chunk`, `stream-end` events in `<App />`
 
 ```typescript
 function handleUpdate(update: SessionUpdate) {
@@ -579,15 +579,15 @@ function handleUpdate(update: SessionUpdate) {
 
 ### 5.6 Minimal CSS
 
-- [ ] Flexbox two-column layout (session list ~200px, chat panel fills rest)
-- [ ] Message bubble styling (padding, border-radius, max-width ~70%)
-- [ ] User messages: blue background, white text, right-aligned
-- [ ] Agent messages: light gray background, dark text, left-aligned
-- [ ] Input bar pinned to bottom of chat panel
+- [x] Flexbox two-column layout (session list ~200px, chat panel fills rest)
+- [x] Message bubble styling (padding, border-radius, max-width ~70%)
+- [x] User messages: blue background, white text, right-aligned
+- [x] Agent messages: light gray background, dark text, left-aligned
+- [x] Input bar pinned to bottom of chat panel
 
 ### 5.7 Full flow test
 
-- [ ] Launch app → create session → send message → see "Echo: ..." stream in character by character
+- [x] Launch app → create session → send message → see "Echo: ..." stream in character by character
 
 ---
 
