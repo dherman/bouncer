@@ -4,6 +4,9 @@
   "private": true,
   "description": "Boundary-based sandboxing for AI agents",
   "main": "./out/main/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

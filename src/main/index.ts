@@ -10,7 +10,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -21,7 +21,14 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    try {
+      const parsedUrl = new URL(details.url)
+      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+        void shell.openExternal(details.url)
+      }
+    } catch {
+      // Ignore invalid URLs
+    }
     return { action: 'deny' }
   })
 

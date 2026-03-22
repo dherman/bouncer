@@ -11,8 +11,7 @@
     "strict": true,
     "skipLibCheck": true,
     "target": "ESNext",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["node"]
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": [
     "src/renderer/src/**/*"
