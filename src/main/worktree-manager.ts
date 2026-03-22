@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdir } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface WorktreeInfo {
   path: string; // Absolute path to the worktree directory
@@ -16,7 +18,7 @@ export class WorktreeManager {
   private basePath: string;
 
   constructor(basePath?: string) {
-    this.basePath = basePath ?? join(tmpdir(), "glitterball-worktrees");
+    this.basePath = resolve(basePath ?? join(tmpdir(), "glitterball-worktrees"));
   }
 
   /** Validate that a directory is a git repository. */
@@ -31,6 +33,10 @@ export class WorktreeManager {
 
   /** Create a worktree for a session, branched from HEAD. */
   async create(sessionId: string, projectDir: string): Promise<WorktreeInfo> {
+    if (!UUID_RE.test(sessionId)) {
+      throw new Error(`Invalid session ID (expected UUID): ${sessionId}`);
+    }
+
     const branch = `bouncer/${sessionId}`;
     const worktreePath = join(this.basePath, sessionId);
 
@@ -38,7 +44,7 @@ export class WorktreeManager {
 
     await execFileAsync(
       "git",
-      ["worktree", "add", worktreePath, "-b", branch, "HEAD"],
+      ["worktree", "add", "-b", branch, "--", worktreePath, "HEAD"],
       { cwd: projectDir }
     );
 
@@ -50,7 +56,7 @@ export class WorktreeManager {
     try {
       await execFileAsync(
         "git",
-        ["worktree", "remove", info.path, "--force"],
+        ["worktree", "remove", "--force", "--", info.path],
         { cwd: info.projectDir }
       );
     } catch (err) {
@@ -58,7 +64,7 @@ export class WorktreeManager {
     }
 
     try {
-      await execFileAsync("git", ["branch", "-D", info.branch], {
+      await execFileAsync("git", ["branch", "-D", "--", info.branch], {
         cwd: info.projectDir,
       });
     } catch {
