@@ -32,6 +32,9 @@ export function ChatPanel({
         {messages.length === 0 && sessionStatus === 'ready' && (
           <div className="empty-state">Send a message to begin</div>
         )}
+        {messages.length === 0 && sessionStatus === 'initializing' && (
+          <div className="empty-state">Starting session...</div>
+        )}
         {messages.map((msg) => {
           const msgStreaming = msg.streaming && streamingText.has(msg.id)
           const displayText = msgStreaming ? streamingText.get(msg.id)! : msg.text
@@ -58,7 +61,16 @@ export function ChatPanel({
         )}
         <div ref={bottomRef} />
       </div>
-      <MessageInput onSend={onSendMessage} disabled={inputDisabled} />
+      <MessageInput
+        onSend={onSendMessage}
+        disabled={inputDisabled}
+        placeholder={
+          sessionStatus === 'error' ? 'Session disconnected' :
+          sessionStatus === 'closed' ? 'Session closed' :
+          sessionStatus === 'initializing' ? 'Starting session...' :
+          undefined
+        }
+      />
     </div>
   )
 }

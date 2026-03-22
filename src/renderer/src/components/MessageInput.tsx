@@ -3,9 +3,10 @@ import { useState } from 'react'
 interface Props {
   onSend: (text: string) => void
   disabled: boolean
+  placeholder?: string
 }
 
-export function MessageInput({ onSend, disabled }: Props) {
+export function MessageInput({ onSend, disabled, placeholder }: Props) {
   const [text, setText] = useState('')
 
   function handleSubmit() {
@@ -24,7 +25,7 @@ export function MessageInput({ onSend, disabled }: Props) {
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleSubmit()
         }}
-        placeholder={disabled ? 'Agent is responding...' : 'Type a message...'}
+        placeholder={placeholder ?? (disabled ? 'Agent is responding...' : 'Type a message...')}
         disabled={disabled}
       />
       <button onClick={handleSubmit} disabled={disabled || !text.trim()}>

@@ -37,12 +37,13 @@ export function SessionList({ sessions, activeSessionId, onSelect, onCreate, onC
           <span className="session-status">{s.status}</span>
           {s.status !== 'closed' && (
             <button
+              type="button"
               className="close-btn"
               onClick={(e) => {
                 e.stopPropagation()
                 onClose(s.id)
               }}
-              title="Close session"
+              aria-label="Close session"
             >
               ×
             </button>
