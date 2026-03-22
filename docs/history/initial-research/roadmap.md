@@ -1,4 +1,12 @@
-# Bouncer: Research Roadmap
+# Bouncer: Initial Research Roadmap
+
+> **Status**: This research phase has been completed through PR 0. PRs 1 and 2 were superseded by a pivot to boundary-based sandboxing — see [docs/roadmap.md](../../roadmap.md) for the current plan.
+
+## Progress
+
+- [x] **[PR 0: Dataset Extraction](./pr-0-dataset-extraction.md)** — Extract and anonymize tool use records from session history into `data/tool-use-dataset.jsonl`
+- [ ] ~~**[PR 1: Read-Only Auto-Approval](./pr-1-read-only-auto-approval.md)** — Validate path-scoping, identify sensitive file edge cases, draft deterministic policy spec~~ *(superseded)*
+- [ ] ~~**[PR 2: Bash Command Classification](./pr-2-bash-classification.md)** — Build labeled dataset, develop L0-L4 taxonomy, prototype classifiers~~ *(superseded)*
 
 ## Context
 

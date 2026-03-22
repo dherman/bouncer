@@ -10,7 +10,7 @@ This approach is inspired by how real-world sandboxing systems work (Capsicum, W
 
 ### How We Got Here
 
-The project began with a research phase (see [docs/milestones/research/](milestones/research/)) focused on analyzing real Claude Code session data to understand tool-use patterns and develop per-action safety classifiers. That analysis produced two key insights:
+The project began with a research phase (see [docs/history/initial-research/](history/initial-research/)) focused on analyzing real Claude Code session data to understand tool-use patterns and develop per-action safety classifiers. That analysis produced two key insights:
 
 1. **Per-action classification has a ceiling.** It works for known commands (`ls`, `git status`) but fundamentally can't handle unknown executables, Turing-complete code execution (e.g., `python3 -c "..."`), or novel MCP tools. Over 51% of real Bash commands are compound (pipes, chaining, subshells), making deterministic parsing brittle.
 
@@ -170,7 +170,7 @@ The project is structured as an **Electron app** that serves as a multi-session 
 
 ## Prior Work
 
-- [Research phase goals and principles](milestones/research/goals.md)
-- [Original research roadmap](milestones/research/roadmap.md) (per-action classification approach, superseded by boundary-based framing)
-- [PR 0: Dataset extraction](milestones/research/pr-0-dataset-extraction.md) (completed — produced `data/tool-use-dataset.jsonl`)
+- [Initial research phase](history/initial-research/roadmap.md) — goals, data analysis, and original per-action classification plans (superseded by boundary-based framing)
+- [Research goals and principles](history/initial-research/goals.md)
+- [PR 0: Dataset extraction](history/initial-research/pr-0-dataset-extraction.md) (completed — produced `data/tool-use-dataset.jsonl`)
 - [Claude Code history analysis reference](reference/claude-code-history-analysis.md)
