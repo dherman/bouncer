@@ -40,7 +40,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 6.3 Close session action (kill agent, update UI)
   - [x] 6.4 Input disabled during agent turns
   - [x] 6.5 Empty states (no sessions, no messages, error state)
-- [ ] **[Verification](#verification-checklist)** — all manual checks pass
+- [x] **[Verification](#verification-checklist)** — all manual checks pass
 
 ---
 
@@ -628,15 +628,15 @@ function handleUpdate(update: SessionUpdate) {
 
 Run through this manually before considering M0 complete:
 
-- [ ] `npm run dev` launches the Electron app
-- [ ] Click "New Session" → session appears in list with green status
-- [ ] Type "Hello world" → agent responds with "Echo: Hello world" streamed progressively
-- [ ] Send another message in the same session → response appears below the first
-- [ ] Create a second session → it has independent message history
-- [ ] Switch between sessions → each shows its own messages
-- [ ] Kill the agent process externally (`kill <pid>`) → session shows error state
-- [ ] Close a session via UI → session marked as closed, agent process terminated
-- [ ] `npm run build` produces a working production build
+- [x] `npm run dev` launches the Electron app
+- [x] Click "New Session" → session appears in list with green status
+- [x] Type "Hello world" → agent responds with "Echo: Hello world" streamed progressively
+- [x] Send another message in the same session → response appears below the first
+- [x] Create a second session → it has independent message history
+- [x] Switch between sessions → each shows its own messages
+- [x] Kill the agent process externally (`kill <pid>`) → session shows error state
+- [x] Close a session via UI → session marked as closed, agent process terminated
+- [x] `npm run build` produces a working production build
 
 ---
 
