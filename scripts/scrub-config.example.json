@@ -1,0 +1,6 @@
+{
+  "username": "jsmith",
+  "email_local_parts": ["jsmith", "jane.smith"],
+  "full_name_patterns": ["Jane Smith", "jane.smith", "jane_smith"],
+  "exclude_sessions": []
+}

@@ -1,0 +1,44 @@
+{
+  "extraction_date": "2026-03-21",
+  "source_version": "1.0.0",
+  "total_records": 11491,
+  "projects_count": 35,
+  "sessions_count": 296,
+  "tool_distribution": {
+    "Bash": 3825,
+    "Read": 3719,
+    "Edit": 909,
+    "Grep": 653,
+    "Glob": 562,
+    "WebFetch": 454,
+    "WebSearch": 442,
+    "TodoWrite": 360,
+    "Write": 220,
+    "mcp__{project-name}__return_result": 111,
+    "ToolSearch": 63,
+    "Task": 54,
+    "Agent": 46,
+    "mcp__{project-name}__ast_grep": 15,
+    "AskUserQuestion": 14,
+    "mcp__{project-name}__current_time": 11,
+    "Skill": 9,
+    "TaskOutput": 7,
+    "ExitPlanMode": 7,
+    "EnterPlanMode": 6,
+    "TaskStop": 3,
+    "EnterWorktree": 1
+  },
+  "outcome_distribution": {
+    "approved": 10855,
+    "error": 621,
+    "rejected": 12,
+    "unknown": 3
+  },
+  "anonymization": {
+    "paths_scrubbed": true,
+    "projects_anonymized": true,
+    "sessions_anonymized": true,
+    "tool_results_excluded": true,
+    "write_content_excluded": true
+  }
+}
