@@ -1,32 +1,32 @@
 # Milestone 0: Electron + ACP Hello World — Implementation Plan
 
-This plan breaks the [design](design.md) into concrete, sequentially-executable steps. Each step has a clear done condition. The plan is informed by the actual API surfaces of `@agentclientprotocol/sdk` (v0.16.x) and `electron-vite`.
+This plan breaks the [design](design.md) into concrete, sequentially-executable phases. Each phase has a clear done condition. The plan is informed by the actual API surfaces of `@agentclientprotocol/sdk` (v0.16.x) and `electron-vite`.
 
 ## Progress
 
-- [ ] **[Step 1: Project Scaffolding](#step-1-project-scaffolding)**
+- [ ] **[Phase 1: Project Scaffolding](#phase-1-project-scaffolding)**
   - [ ] 1.1 Initialize electron-vite project
   - [ ] 1.2 Install ACP SDK
   - [ ] 1.3 Verify baseline (app launches, build succeeds)
-- [ ] **[Step 2: Echo Agent](#step-2-echo-agent)**
+- [ ] **[Phase 2: Echo Agent](#phase-2-echo-agent)**
   - [ ] 2.1 Create `electron/agents/echo-agent.ts`
   - [ ] 2.2 Set up agent build/run mechanism
   - [ ] 2.3 Write `scripts/test-echo-agent.ts` test harness
   - [ ] 2.4 Smoke test: streamed echo response works end-to-end over ACP stdio
   - [ ] 2.5 Document any SDK API deviations from design doc pseudocode
-- [ ] **[Step 3: Session Manager](#step-3-session-manager)**
+- [ ] **[Phase 3: Session Manager](#phase-3-session-manager)**
   - [ ] 3.1 Define shared types (`electron/main/types.ts`)
   - [ ] 3.2 Implement `SessionManager.createSession()` (spawn agent, ACP handshake)
   - [ ] 3.3 Implement `SessionManager.sendMessage()` (prompt + streaming)
   - [ ] 3.4 Implement `SessionManager.listSessions()` and `closeSession()`
   - [ ] 3.5 Wire IPC event emitter into SessionManager
   - [ ] 3.6 Verify from main process (console.log) before adding UI
-- [ ] **[Step 4: IPC Bridge](#step-4-ipc-bridge)**
+- [ ] **[Phase 4: IPC Bridge](#phase-4-ipc-bridge)**
   - [ ] 4.1 Implement preload script with `contextBridge` API
   - [ ] 4.2 Add type declarations for renderer (`src/env.d.ts`)
   - [ ] 4.3 Register `ipcMain.handle` handlers in main process
   - [ ] 4.4 Verify: `window.bouncer.sessions.create()` works from renderer dev console
-- [ ] **[Step 5: React UI](#step-5-react-ui)**
+- [ ] **[Phase 5: React UI](#phase-5-react-ui)**
   - [ ] 5.1 App layout: two-panel flexbox (session list + chat)
   - [ ] 5.2 `<SessionList />` component with status indicators
   - [ ] 5.3 `<ChatPanel />` component with streaming message rendering
@@ -34,7 +34,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [ ] 5.5 Wire `onUpdate` handler for SessionUpdate events
   - [ ] 5.6 Minimal CSS styling
   - [ ] 5.7 Full flow test: launch → create session → send message → see streamed echo
-- [ ] **[Step 6: Edge Cases & Polish](#step-6-edge-cases--polish)**
+- [ ] **[Phase 6: Edge Cases & Polish](#phase-6-edge-cases--polish)**
   - [ ] 6.1 Agent crash handling (error state in UI)
   - [ ] 6.2 Session switching (independent message histories)
   - [ ] 6.3 Close session action (kill agent, update UI)
@@ -44,7 +44,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ---
 
-## Step 1: Project Scaffolding
+## Phase 1: Project Scaffolding
 
 ### 1.1 Initialize electron-vite project
 
@@ -105,7 +105,7 @@ Confirm the Electron app launches and shows the default React template page. Thi
 
 ---
 
-## Step 2: Echo Agent
+## Phase 2: Echo Agent
 
 Build the echo agent as a standalone Node script before touching any Electron code. This is the fastest way to discover the real ACP SDK API surface and work through any surprises.
 
@@ -301,11 +301,11 @@ npx tsx scripts/test-echo-agent.ts
 
 - [ ] Note any differences between design doc pseudocode and actual SDK API
 
-> **Note on API discovery:** This step is where we'll learn the most about the real ACP SDK API. The test script above is a best guess. If the `Client` interface requires different methods, if `sessionUpdate` has a different shape, or if there are required handshake steps we're missing, this is where we'll find out. Document any deviations from the design doc's pseudocode for reference in later milestones.
+> **Note on API discovery:** This phase is where we'll learn the most about the real ACP SDK API. The test script above is a best guess. If the `Client` interface requires different methods, if `sessionUpdate` has a different shape, or if there are required handshake steps we're missing, this is where we'll find out. Document any deviations from the design doc's pseudocode for reference in later milestones.
 
 ---
 
-## Step 3: Session Manager
+## Phase 3: Session Manager
 
 ### 3.1 Define shared types
 
@@ -407,7 +407,7 @@ class SessionManager {
 
 ---
 
-## Step 4: IPC Bridge
+## Phase 4: IPC Bridge
 
 ### 4.1 Preload script
 
@@ -480,7 +480,7 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ---
 
-## Step 5: React UI
+## Phase 5: React UI
 
 ### 5.1 App layout
 
@@ -591,7 +591,7 @@ function handleUpdate(update: SessionUpdate) {
 
 ---
 
-## Step 6: Edge Cases & Polish
+## Phase 6: Edge Cases & Polish
 
 ### 6.1 Agent crash handling
 
@@ -642,13 +642,13 @@ Run through this manually before considering M0 complete:
 
 ## Sequencing Summary
 
-| Step | Description | Depends On | Key Risk |
+| Phase | Description | Depends On | Key Risk |
 |------|-------------|------------|----------|
 | 1 | Project scaffolding | — | electron-vite conflicts with existing files |
-| 2 | Echo agent | Step 1 (for deps) | ACP SDK API surface unknowns |
-| 3 | Session manager | Step 2 | Stdio transport in Electron main process |
-| 4 | IPC bridge | Step 3 | contextBridge typing ceremony |
-| 5 | React UI | Step 4 | Streaming state management |
-| 6 | Edge cases | Step 5 | Agent lifecycle edge cases |
+| 2 | Echo agent | Phase 1 (for deps) | ACP SDK API surface unknowns |
+| 3 | Session manager | Phase 2 | Stdio transport in Electron main process |
+| 4 | IPC bridge | Phase 3 | contextBridge typing ceremony |
+| 5 | React UI | Phase 4 | Streaming state management |
+| 6 | Edge cases | Phase 5 | Agent lifecycle edge cases |
 
-The **highest-risk step is 2** (echo agent) because it's our first real contact with the ACP SDK. Everything after that builds incrementally on known foundations. If Step 2 reveals that the SDK works differently than documented, update the design doc before proceeding.
+The **highest-risk phase is 2** (echo agent) because it's our first real contact with the ACP SDK. Everything after that builds incrementally on known foundations. If Phase 2 reveals that the SDK works differently than documented, update the design doc before proceeding.
