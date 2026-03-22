@@ -25,7 +25,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [ ] 4.1 Implement preload script with `contextBridge` API
   - [ ] 4.2 Add type declarations for renderer (`src/env.d.ts`)
   - [ ] 4.3 Register `ipcMain.handle` handlers in main process
-  - [ ] 4.4 Verify: `window.bouncer.sessions.create()` works from renderer dev console
+  - [ ] 4.4 Verify: `window.glitterball.sessions.create()` works from renderer dev console
 - [ ] **[Phase 5: React UI](#phase-5-react-ui)**
   - [ ] 5.1 App layout: two-panel flexbox (session list + chat)
   - [ ] 5.2 `<SessionList />` component with status indicators
@@ -131,7 +131,7 @@ new acp.AgentSideConnection(
     async initialize(params) {
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
-        agentInfo: { name: "bouncer-echo-agent", version: "0.1.0" },
+        agentInfo: { name: "glitterball-echo-agent", version: "0.1.0" },
         agentCapabilities: { streaming: true },
       };
     },
@@ -416,7 +416,7 @@ class SessionManager {
 ```typescript
 import { contextBridge, ipcRenderer } from "electron";
 
-contextBridge.exposeInMainWorld("bouncer", {
+contextBridge.exposeInMainWorld("glitterball", {
   sessions: {
     list: () => ipcRenderer.invoke("sessions:list"),
     create: () => ipcRenderer.invoke("sessions:create"),
@@ -435,10 +435,10 @@ contextBridge.exposeInMainWorld("bouncer", {
 
 ### 4.2 Type declarations for renderer
 
-- [ ] Create `src/env.d.ts` with `BouncerAPI` interface and `Window` augmentation
+- [ ] Create `src/env.d.ts` with `GlitterballAPI` interface and `Window` augmentation
 
 ```typescript
-interface BouncerAPI {
+interface GlitterballAPI {
   sessions: {
     list(): Promise<import("../electron/main/types").SessionSummary[]>;
     create(): Promise<import("../electron/main/types").SessionSummary>;
@@ -449,7 +449,7 @@ interface BouncerAPI {
 }
 
 interface Window {
-  bouncer: BouncerAPI;
+  glitterball: GlitterballAPI;
 }
 ```
 
@@ -476,7 +476,7 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ### 4.4 Verify from renderer
 
-- [ ] `window.bouncer.sessions.create()` works from renderer dev console
+- [ ] `window.glitterball.sessions.create()` works from renderer dev console
 
 ---
 
@@ -486,7 +486,7 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 - [ ] Replace scaffolded `src/App.tsx` with two-panel layout
 - [ ] Set up state: `sessions`, `activeSessionId`, `messagesBySession`, `streamingText`
-- [ ] Subscribe to `bouncer.sessions.onUpdate()` on mount
+- [ ] Subscribe to `glitterball.sessions.onUpdate()` on mount
 
 ```
 ┌──────────────┬─────────────────────────────────┐
@@ -607,7 +607,7 @@ function handleUpdate(update: SessionUpdate) {
 ### 6.3 Close session
 
 - [ ] Close button (X) on each session in the list
-- [ ] Calls `bouncer.sessions.closeSession(id)` → kills agent, marks closed
+- [ ] Calls `glitterball.sessions.closeSession(id)` → kills agent, marks closed
 - [ ] UI shows closed indicator, disables input
 
 ### 6.4 Input disabled during turns

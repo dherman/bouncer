@@ -50,11 +50,11 @@ Closing this gap requires a semantic layer above the OS sandbox — potentially 
 
 ## Architecture
 
-The project is structured as an **Electron app** that serves as a multi-session coding agent workbench. It uses the **Agent Client Protocol (ACP)** to communicate with coding agents, and **macOS Seatbelt** (with parameterized SBPL profiles) for OS-level sandbox enforcement.
+The project is structured as an **Electron app** (codename: **Glitter Ball**) that serves as a multi-session coding agent workbench. It uses the **Agent Client Protocol (ACP)** to communicate with coding agents, and **macOS Seatbelt** (with parameterized SBPL profiles) for OS-level sandbox enforcement.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                     Electron App                         │
+│                 Glitter Ball (Electron)                   │
 │                                                          │
 │  ┌───────────────────────────────────────────────────┐   │
 │  │                   React UI                        │   │

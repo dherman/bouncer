@@ -1,6 +1,6 @@
 # Agent Client Protocol (ACP) Reference
 
-Reference for using ACP in Bouncer. ACP is the protocol connecting the Electron harness to coding agents.
+Reference for using ACP in Bouncer. ACP is the protocol connecting the Glitter Ball harness (Electron app) to coding agents.
 
 ## Overview
 

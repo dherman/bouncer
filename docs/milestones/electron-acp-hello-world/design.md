@@ -111,7 +111,7 @@ const connection = new AgentSideConnection(process.stdin, process.stdout);
 
 connection.onInitialize(async (params) => {
   return {
-    name: "bouncer-echo-agent",
+    name: "glitterball-echo-agent",
     version: "0.1.0",
     // ... capabilities
   };
@@ -168,8 +168,8 @@ interface SessionState {
 Exposes a typed API to the renderer via `contextBridge.exposeInMainWorld`:
 
 ```typescript
-// Exposed as window.bouncer
-interface BouncerAPI {
+// Exposed as window.glitterball
+interface GlitterballAPI {
   sessions: {
     list(): Promise<SessionSummary[]>;
     create(): Promise<SessionSummary>;
@@ -199,13 +199,13 @@ Minimal two-panel layout. No routing library, no state management library — ju
 
 **Components:**
 
-**`<App />`** — Top-level layout. Holds `activeSessionId` state. Subscribes to `bouncer.sessions.onUpdate` for live updates.
+**`<App />`** — Top-level layout. Holds `activeSessionId` state. Subscribes to `glitterball.sessions.onUpdate` for live updates.
 
 **`<SessionList />`** — Left panel. Shows sessions with status indicators. "New Session" button at top. Click to select.
 
 **`<ChatPanel />`** — Right panel. Shows messages for the active session. Each message rendered as a simple bubble (user right-aligned, agent left-aligned). As `stream-chunk` updates arrive, appends text to the in-progress agent message. When the turn completes (`message` update), finalizes the message.
 
-**`<MessageInput />`** — Text input + submit button at bottom of chat panel. Disabled while a turn is in progress (waiting for agent response). Calls `bouncer.sessions.sendMessage`.
+**`<MessageInput />`** — Text input + submit button at bottom of chat panel. Disabled while a turn is in progress (waiting for agent response). Calls `glitterball.sessions.sendMessage`.
 
 **Styling:** Minimal CSS. Plain layout that works — no component library. We'll likely adopt one in later milestones if the UI grows.
 
