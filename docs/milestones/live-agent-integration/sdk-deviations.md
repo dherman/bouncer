@@ -14,6 +14,8 @@ The `sessionUpdate` notifications with `sessionUpdate: "tool_call"` and `"tool_c
 
 **For Milestone 2 (sandboxing):** This is actually good news. Since Claude Code spawns its own subprocesses, all child processes inherit the Seatbelt sandbox. We don't need to intercept tool execution at the ACP level — the OS sandbox handles it.
 
+**For Milestones 5-6 (application-layer policies):** ACP-level tool call interception may become relevant for domain-specific policies (e.g., restricting git operations, network allowlisting) that can't be enforced at the OS level alone. The ACP committee has a proxy design proposal that could enable this. David has an implementation of this in a separate repo — revisit when scoping M5-6.
+
 ## RequestPermission API changed
 
 **Plan assumed:** `{ outcome: { outcome: "approved" } }`
