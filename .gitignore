@@ -1,2 +1,6 @@
 .vscode/
 scripts/scrub-config.json
+node_modules/
+out/
+dist/
+.DS_Store
