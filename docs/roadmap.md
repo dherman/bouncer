@@ -1,5 +1,15 @@
 # Bouncer: Project Roadmap
 
+## Status
+
+- [ ] **[Milestone 0: Electron + ACP Hello World](#milestone-0-electron--acp-hello-world)**
+- [ ] **[Milestone 1: Live Agent Integration](#milestone-1-live-agent-integration)**
+- [ ] **[Milestone 2: Seatbelt Sandbox](#milestone-2-seatbelt-sandbox)**
+- [ ] **[Milestone 3: Policy Templates](#milestone-3-policy-templates)**
+- [ ] **[Milestone 4: Deterministic Test Agent](#milestone-4-deterministic-test-agent)**
+- [ ] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
+- [ ] **[Milestone 6: Network Boundary](#milestone-6-network-boundary)**
+
 ## Vision
 
 Bouncer is an experimental project exploring **boundary-based sandboxing and policy enforcement for AI coding agent sessions**. Rather than inspecting individual tool-use requests and deciding whether each one is safe, Bouncer defines a **capability envelope** per session — a boundary within which the agent can operate freely — and enforces that boundary at the OS level.
@@ -91,8 +101,6 @@ The project is structured as an **Electron app** that serves as a multi-session 
 | OS sandbox | macOS Seatbelt (`sandbox-exec`) | Parameterized SBPL profiles, inherits to all child processes |
 | Worktree management | git CLI | `git worktree add/remove` per session |
 | Network boundary (later) | HTTP/SOCKS proxy | Domain allowlisting, following Claude Code's proven approach |
-
-## Milestones
 
 ### Milestone 0: Electron + ACP Hello World
 
