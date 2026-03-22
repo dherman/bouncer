@@ -1,9 +1,13 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { SessionManager } from './session-manager.js'
+
+const isDev = !app.isPackaged
+
+let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
@@ -15,12 +19,13 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+  mainWindow = window
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  window.on('ready-to-show', () => {
+    window.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  window.webContents.setWindowOpenHandler((details) => {
     try {
       const parsedUrl = new URL(details.url)
       if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
@@ -33,23 +38,25 @@ function createWindow(): void {
   })
 
   // HMR for renderer in dev, load from file in production
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
+    window.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.bouncer')
+  createWindow()
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+  // SessionManager forwards events to the renderer via IPC
+  const sessionManager = new SessionManager((channel, data) => {
+    mainWindow?.webContents.send(channel, data)
   })
 
-  createWindow()
+  // Dev smoke test: verify session lifecycle from main process
+  if (isDev) {
+    smokeTest(sessionManager)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -61,3 +68,22 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+async function smokeTest(sessionManager: SessionManager): Promise<void> {
+  try {
+    console.log('[smoke-test] Creating session...')
+    const session = await sessionManager.createSession()
+    console.log('[smoke-test] Session created:', session)
+
+    console.log('[smoke-test] Sending message...')
+    await sessionManager.sendMessage(session.id, 'Hello from main process')
+
+    console.log('[smoke-test] Sessions:', sessionManager.listSessions())
+
+    console.log('[smoke-test] Closing session...')
+    await sessionManager.closeSession(session.id)
+    console.log('[smoke-test] Done. Sessions:', sessionManager.listSessions())
+  } catch (err) {
+    console.error('[smoke-test] Error:', err)
+  }
+}

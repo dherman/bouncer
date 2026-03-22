@@ -14,13 +14,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.3 Write `scripts/test-echo-agent.ts` test harness
   - [x] 2.4 Smoke test: streamed echo response works end-to-end over ACP stdio
   - [x] 2.5 Document any SDK API deviations from design doc pseudocode
-- [ ] **[Phase 3: Session Manager](#phase-3-session-manager)**
-  - [ ] 3.1 Define shared types (`electron/main/types.ts`)
-  - [ ] 3.2 Implement `SessionManager.createSession()` (spawn agent, ACP handshake)
-  - [ ] 3.3 Implement `SessionManager.sendMessage()` (prompt + streaming)
-  - [ ] 3.4 Implement `SessionManager.listSessions()` and `closeSession()`
-  - [ ] 3.5 Wire IPC event emitter into SessionManager
-  - [ ] 3.6 Verify from main process (console.log) before adding UI
+- [x] **[Phase 3: Session Manager](#phase-3-session-manager)**
+  - [x] 3.1 Define shared types (`src/main/types.ts`)
+  - [x] 3.2 Implement `SessionManager.createSession()` (spawn agent, ACP handshake)
+  - [x] 3.3 Implement `SessionManager.sendMessage()` (prompt + streaming)
+  - [x] 3.4 Implement `SessionManager.listSessions()` and `closeSession()`
+  - [x] 3.5 Wire IPC event emitter into SessionManager
+  - [x] 3.6 Verify from main process (console.log) before adding UI
 - [ ] **[Phase 4: IPC Bridge](#phase-4-ipc-bridge)**
   - [ ] 4.1 Implement preload script with `contextBridge` API
   - [ ] 4.2 Add type declarations for renderer (`src/env.d.ts`)
@@ -309,7 +309,7 @@ npx tsx scripts/test-echo-agent.ts
 
 ### 3.1 Define shared types
 
-- [ ] Create `electron/main/types.ts`
+- [x] Create `src/main/types.ts`
 
 ```typescript
 export interface Message {
@@ -335,12 +335,12 @@ export type SessionUpdate =
 
 ### 3.2 Implement `SessionManager.createSession()`
 
-- [ ] Create `electron/main/session-manager.ts`
-- [ ] Spawn echo agent as child process
-- [ ] Create `ndJsonStream` + `ClientSideConnection` over child's stdio
-- [ ] Send `InitializeRequest` then `NewSessionRequest`
-- [ ] Store `SessionState`, mark as `ready`
-- [ ] Listen for `exit`/`error` on child process → mark session `error`
+- [x] Create `src/main/session-manager.ts`
+- [x] Spawn echo agent as child process
+- [x] Create `ndJsonStream` + `ClientSideConnection` over child's stdio
+- [x] Send `InitializeRequest` then `NewSessionRequest`
+- [x] Store `SessionState`, mark as `ready`
+- [x] Listen for `exit`/`error` on child process → mark session `error`
 
 ```typescript
 import { spawn, ChildProcess } from "node:child_process";
@@ -372,10 +372,10 @@ interface SessionState {
 
 ### 3.3 Implement `SessionManager.sendMessage()`
 
-- [ ] Look up session, verify status is `ready`
-- [ ] Create user `Message` + placeholder agent `Message` (streaming), emit IPC events
-- [ ] Call `connection.prompt()`, handle streaming chunks via `Client.sessionUpdate`
-- [ ] On prompt completion, finalize agent message and emit `stream-end`
+- [x] Look up session, verify status is `ready`
+- [x] Create user `Message` + placeholder agent `Message` (streaming), emit IPC events
+- [x] Call `connection.prompt()`, handle streaming chunks via `Client.sessionUpdate`
+- [x] On prompt completion, finalize agent message and emit `stream-end`
 
 **`sendMessage()` flow:**
 1. Look up session, verify status is `ready`
@@ -387,13 +387,13 @@ interface SessionState {
 
 ### 3.4 Implement `listSessions()` and `closeSession()`
 
-- [ ] `listSessions()`: return summaries from in-memory map
-- [ ] `closeSession()`: kill child process, mark session as `closed`
+- [x] `listSessions()`: return summaries from in-memory map
+- [x] `closeSession()`: kill child process, mark session as `closed`
 
 ### 3.5 Wire IPC event emitter
 
-- [ ] SessionManager receives emitter callback in constructor
-- [ ] In `electron/main/index.ts`, pass `mainWindow.webContents.send` as the emitter
+- [x] SessionManager receives emitter callback in constructor
+- [x] In `src/main/index.ts`, pass `mainWindow.webContents.send` as the emitter
 
 ```typescript
 class SessionManager {
@@ -403,7 +403,7 @@ class SessionManager {
 
 ### 3.6 Verify from main process
 
-- [ ] Create-session + send-message flow works end-to-end via console.log (before adding UI)
+- [x] Create-session + send-message flow works end-to-end via console.log (before adding UI)
 
 ---
 
