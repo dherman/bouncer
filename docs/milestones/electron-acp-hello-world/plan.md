@@ -21,11 +21,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 3.4 Implement `SessionManager.listSessions()` and `closeSession()`
   - [x] 3.5 Wire IPC event emitter into SessionManager
   - [x] 3.6 Verify from main process (console.log) before adding UI
-- [ ] **[Phase 4: IPC Bridge](#phase-4-ipc-bridge)**
-  - [ ] 4.1 Implement preload script with `contextBridge` API
-  - [ ] 4.2 Add type declarations for renderer (`src/env.d.ts`)
-  - [ ] 4.3 Register `ipcMain.handle` handlers in main process
-  - [ ] 4.4 Verify: `window.glitterball.sessions.create()` works from renderer dev console
+- [x] **[Phase 4: IPC Bridge](#phase-4-ipc-bridge)**
+  - [x] 4.1 Implement preload script with `contextBridge` API
+  - [x] 4.2 Add type declarations for renderer (`src/renderer/src/env.d.ts`)
+  - [x] 4.3 Register `ipcMain.handle` handlers in main process
+  - [x] 4.4 Verify: `window.glitterball.sessions.create()` works from renderer dev console
 - [ ] **[Phase 5: React UI](#phase-5-react-ui)**
   - [ ] 5.1 App layout: two-panel flexbox (session list + chat)
   - [ ] 5.2 `<SessionList />` component with status indicators
@@ -411,7 +411,7 @@ class SessionManager {
 
 ### 4.1 Preload script
 
-- [ ] Update `electron/preload/index.ts` with `contextBridge.exposeInMainWorld`
+- [x] Update `src/preload/index.ts` with `contextBridge.exposeInMainWorld`
 
 ```typescript
 import { contextBridge, ipcRenderer } from "electron";
@@ -435,7 +435,7 @@ contextBridge.exposeInMainWorld("glitterball", {
 
 ### 4.2 Type declarations for renderer
 
-- [ ] Create `src/env.d.ts` with `GlitterballAPI` interface and `Window` augmentation
+- [x] Create `src/renderer/src/env.d.ts` with `GlitterballAPI` interface and `Window` augmentation
 
 ```typescript
 interface GlitterballAPI {
@@ -455,7 +455,7 @@ interface Window {
 
 ### 4.3 Main process handlers
 
-- [ ] Register `ipcMain.handle` handlers that delegate to `SessionManager`
+- [x] Register `ipcMain.handle` handlers that delegate to `SessionManager`
 
 ```typescript
 import { ipcMain } from "electron";
@@ -476,7 +476,7 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ### 4.4 Verify from renderer
 
-- [ ] `window.glitterball.sessions.create()` works from renderer dev console
+- [x] `window.glitterball.sessions.create()` works from renderer dev console (manual verification)
 
 ---
 

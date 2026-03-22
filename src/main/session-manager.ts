@@ -15,7 +15,11 @@ function resolveAgentCommand(): { cmd: string; args: string[]; env?: Record<stri
     const require = createRequire(app.getAppPath() + "/");
     const tsxBin = require.resolve("tsx/cli");
     const agentScript = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
-    return { cmd: process.execPath, args: [tsxBin, agentScript] };
+    return {
+      cmd: process.execPath,
+      args: [tsxBin, agentScript],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    };
   } else {
     const agentScript = join(__dirname, "..", "agents", "echo-agent.js");
     return {

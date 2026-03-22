@@ -1,6 +1,18 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer } from 'electron'
 
-// Expose electron APIs to the renderer process via contextBridge.
-// This will be extended in Phase 4 with the glitterball session API.
-contextBridge.exposeInMainWorld('electron', electronAPI)
+contextBridge.exposeInMainWorld('glitterball', {
+  sessions: {
+    list: () => ipcRenderer.invoke('sessions:list'),
+    create: () => ipcRenderer.invoke('sessions:create'),
+    sendMessage: (sessionId: string, text: string) =>
+      ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
+    closeSession: (sessionId: string) =>
+      ipcRenderer.invoke('sessions:close', sessionId),
+    onUpdate: (callback: (update: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, update: unknown): void =>
+        callback(update)
+      ipcRenderer.on('session-update', handler)
+      return () => ipcRenderer.removeListener('session-update', handler)
+    },
+  },
+})
