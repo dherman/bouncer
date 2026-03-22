@@ -56,12 +56,18 @@ app.whenReady().then(() => {
   // IPC handlers for renderer → main communication
   ipcMain.handle('sessions:list', () => sessionManager.listSessions())
   ipcMain.handle('sessions:create', () => sessionManager.createSession())
-  ipcMain.handle('sessions:sendMessage', (_e, sessionId: string, text: string) =>
-    sessionManager.sendMessage(sessionId, text)
-  )
-  ipcMain.handle('sessions:close', (_e, sessionId: string) =>
-    sessionManager.closeSession(sessionId)
-  )
+  ipcMain.handle('sessions:sendMessage', (_e, sessionId: unknown, text: unknown) => {
+    if (typeof sessionId !== 'string' || typeof text !== 'string') {
+      throw new Error('Invalid arguments: sessionId and text must be strings')
+    }
+    return sessionManager.sendMessage(sessionId, text)
+  })
+  ipcMain.handle('sessions:close', (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') {
+      throw new Error('Invalid argument: sessionId must be a string')
+    }
+    return sessionManager.closeSession(sessionId)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
