@@ -33,7 +33,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 5.4 `<MessageInput />` component (Enter to send, disabled during turns)
   - [x] 5.5 Wire `onUpdate` handler for SessionUpdate events
   - [x] 5.6 Minimal CSS styling
-  - [ ] 5.7 Full flow test: launch → create session → send message → see streamed echo
+  - [x] 5.7 Full flow test: launch → create session → send message → see streamed echo
 - [ ] **[Phase 6: Edge Cases & Polish](#phase-6-edge-cases--polish)**
   - [ ] 6.1 Agent crash handling (error state in UI)
   - [ ] 6.2 Session switching (independent message histories)
@@ -587,7 +587,7 @@ function handleUpdate(update: SessionUpdate) {
 
 ### 5.7 Full flow test
 
-- [ ] Launch app → create session → send message → see "Echo: ..." stream in character by character
+- [x] Launch app → create session → send message → see "Echo: ..." stream in character by character
 
 ---
 
