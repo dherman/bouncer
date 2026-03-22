@@ -8,6 +8,10 @@ Bouncer experiments with automating permission requests in coding agents, aiming
 
 Research phase. See [docs/workstreams/research/roadmap.md](docs/workstreams/research/roadmap.md) for details.
 
+## Credits
+
+Background image: Photo by [Dustin Tramel](https://unsplash.com/@dustintramel?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText) on [Unsplash](https://unsplash.com/photos/hanging-mirror-ball-jXkeRL4k6-g?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+
 ## License
 
 [MIT](LICENSE)
