@@ -26,7 +26,6 @@ function App() {
           next.set(update.sessionId, [...msgs, update.message])
           return next
         })
-        // Initialize streaming text for agent messages that are streaming
         if (update.message.streaming) {
           setStreamingText((prev) => {
             const next = new Map(prev)
@@ -44,22 +43,21 @@ function App() {
         })
         break
 
-      case 'stream-end':
-        // Finalize: copy streaming text into the message, remove from streaming map
+      case 'stream-end': {
         setStreamingText((prev) => {
           const finalText = prev.get(update.messageId) ?? ''
-          // Update the message with the final text
           setMessagesBySession((prevMsgs) => {
             const next = new Map(prevMsgs)
-            for (const [sessionId, msgs] of next) {
-              const updated = msgs.map((m) =>
-                m.id === update.messageId
-                  ? { ...m, text: finalText, streaming: false }
-                  : m
+            const msgs = next.get(update.sessionId)
+            if (msgs) {
+              next.set(
+                update.sessionId,
+                msgs.map((m) =>
+                  m.id === update.messageId
+                    ? { ...m, text: finalText, streaming: false }
+                    : m
+                )
               )
-              if (updated !== msgs) {
-                next.set(sessionId, updated)
-              }
             }
             return next
           })
@@ -68,23 +66,39 @@ function App() {
           return next
         })
         break
+      }
     }
   }, [])
 
+  // Load existing sessions on mount (survives HMR/devtools reloads)
   useEffect(() => {
+    window.glitterball.sessions.list().then((list) => {
+      if (list.length > 0) {
+        setSessions(list)
+        setActiveSessionId(list[0].id)
+      }
+    })
     const unsubscribe = window.glitterball.sessions.onUpdate(handleUpdate)
     return unsubscribe
   }, [handleUpdate])
 
   async function handleCreateSession() {
-    const session = await window.glitterball.sessions.create()
-    setSessions((prev) => [...prev, session])
-    setActiveSessionId(session.id)
+    try {
+      const session = await window.glitterball.sessions.create()
+      setSessions((prev) => [...prev, session])
+      setActiveSessionId(session.id)
+    } catch (err) {
+      console.error('Failed to create session:', err)
+    }
   }
 
   async function handleSendMessage(text: string) {
     if (!activeSessionId) return
-    await window.glitterball.sessions.sendMessage(activeSessionId, text)
+    try {
+      await window.glitterball.sessions.sendMessage(activeSessionId, text)
+    } catch (err) {
+      console.error('Failed to send message:', err)
+    }
   }
 
   const activeMessages = activeSessionId

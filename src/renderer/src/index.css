@@ -32,10 +32,15 @@ body {
   border-right: 1px solid #333;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   background-color: #252525;
 }
 
 .new-session-btn {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: #252525;
   padding: 10px;
   margin: 8px;
   background-color: #0078d4;

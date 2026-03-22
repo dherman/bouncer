@@ -12,9 +12,11 @@ interface Props {
 export function ChatPanel({ messages, streamingText, onSendMessage, disabled }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  const isStreaming = messages.some((m) => m.streaming)
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingText])
+    bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' })
+  }, [messages, streamingText, isStreaming])
 
   return (
     <div className="chat-panel">
