@@ -4,10 +4,10 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ## Progress
 
-- [ ] **[Phase 1: Project Scaffolding](#phase-1-project-scaffolding)**
-  - [ ] 1.1 Initialize electron-vite project
-  - [ ] 1.2 Install ACP SDK
-  - [ ] 1.3 Verify baseline (app launches, build succeeds)
+- [x] **[Phase 1: Project Scaffolding](#phase-1-project-scaffolding)**
+  - [x] 1.1 Initialize electron-vite project
+  - [x] 1.2 Install ACP SDK
+  - [x] 1.3 Verify baseline (app launches, build succeeds)
 - [ ] **[Phase 2: Echo Agent](#phase-2-echo-agent)**
   - [ ] 2.1 Create `electron/agents/echo-agent.ts`
   - [ ] 2.2 Set up agent build/run mechanism
@@ -48,7 +48,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ### 1.1 Initialize electron-vite project
 
-- [ ] Run scaffolder or manually set up electron-vite
+- [x] Run scaffolder or manually set up electron-vite
 
 ```bash
 cd /Users/dherman/Code/bouncer
@@ -80,7 +80,7 @@ bouncer/
 
 ### 1.2 Install ACP SDK
 
-- [ ] Install `@agentclientprotocol/sdk` and peer dependencies
+- [x] Install `@agentclientprotocol/sdk` and peer dependencies
 
 ```bash
 npm install @agentclientprotocol/sdk
@@ -94,8 +94,8 @@ npm install zod
 
 ### 1.3 Verify baseline
 
-- [ ] `npm run dev` launches Electron with React content
-- [ ] `npm run build` succeeds cleanly
+- [x] `npm run dev` launches Electron with React content
+- [x] `npm run build` succeeds cleanly
 
 ```bash
 npm run dev
