@@ -2,11 +2,53 @@
 
 This plan breaks the [design](design.md) into concrete, sequentially-executable steps. Each step has a clear done condition. The plan is informed by the actual API surfaces of `@agentclientprotocol/sdk` (v0.16.x) and `electron-vite`.
 
+## Progress
+
+- [ ] **[Step 1: Project Scaffolding](#step-1-project-scaffolding)**
+  - [ ] 1.1 Initialize electron-vite project
+  - [ ] 1.2 Install ACP SDK
+  - [ ] 1.3 Verify baseline (app launches, build succeeds)
+- [ ] **[Step 2: Echo Agent](#step-2-echo-agent)**
+  - [ ] 2.1 Create `electron/agents/echo-agent.ts`
+  - [ ] 2.2 Set up agent build/run mechanism
+  - [ ] 2.3 Write `scripts/test-echo-agent.ts` test harness
+  - [ ] 2.4 Smoke test: streamed echo response works end-to-end over ACP stdio
+  - [ ] 2.5 Document any SDK API deviations from design doc pseudocode
+- [ ] **[Step 3: Session Manager](#step-3-session-manager)**
+  - [ ] 3.1 Define shared types (`electron/main/types.ts`)
+  - [ ] 3.2 Implement `SessionManager.createSession()` (spawn agent, ACP handshake)
+  - [ ] 3.3 Implement `SessionManager.sendMessage()` (prompt + streaming)
+  - [ ] 3.4 Implement `SessionManager.listSessions()` and `closeSession()`
+  - [ ] 3.5 Wire IPC event emitter into SessionManager
+  - [ ] 3.6 Verify from main process (console.log) before adding UI
+- [ ] **[Step 4: IPC Bridge](#step-4-ipc-bridge)**
+  - [ ] 4.1 Implement preload script with `contextBridge` API
+  - [ ] 4.2 Add type declarations for renderer (`src/env.d.ts`)
+  - [ ] 4.3 Register `ipcMain.handle` handlers in main process
+  - [ ] 4.4 Verify: `window.bouncer.sessions.create()` works from renderer dev console
+- [ ] **[Step 5: React UI](#step-5-react-ui)**
+  - [ ] 5.1 App layout: two-panel flexbox (session list + chat)
+  - [ ] 5.2 `<SessionList />` component with status indicators
+  - [ ] 5.3 `<ChatPanel />` component with streaming message rendering
+  - [ ] 5.4 `<MessageInput />` component (Enter to send, disabled during turns)
+  - [ ] 5.5 Wire `onUpdate` handler for SessionUpdate events
+  - [ ] 5.6 Minimal CSS styling
+  - [ ] 5.7 Full flow test: launch → create session → send message → see streamed echo
+- [ ] **[Step 6: Edge Cases & Polish](#step-6-edge-cases--polish)**
+  - [ ] 6.1 Agent crash handling (error state in UI)
+  - [ ] 6.2 Session switching (independent message histories)
+  - [ ] 6.3 Close session action (kill agent, update UI)
+  - [ ] 6.4 Input disabled during agent turns
+  - [ ] 6.5 Empty states (no sessions, no messages, error state)
+- [ ] **[Verification](#verification-checklist)** — all manual checks pass
+
 ---
 
 ## Step 1: Project Scaffolding
 
 ### 1.1 Initialize electron-vite project
+
+- [ ] Run scaffolder or manually set up electron-vite
 
 ```bash
 cd /Users/dherman/Code/bouncer
@@ -38,6 +80,8 @@ bouncer/
 
 ### 1.2 Install ACP SDK
 
+- [ ] Install `@agentclientprotocol/sdk` and peer dependencies
+
 ```bash
 npm install @agentclientprotocol/sdk
 ```
@@ -50,13 +94,14 @@ npm install zod
 
 ### 1.3 Verify baseline
 
+- [ ] `npm run dev` launches Electron with React content
+- [ ] `npm run build` succeeds cleanly
+
 ```bash
 npm run dev
 ```
 
 Confirm the Electron app launches and shows the default React template page. This validates the toolchain before we change anything.
-
-**Done when:** Electron window opens with React content, `npm run build` succeeds cleanly.
 
 ---
 
@@ -66,7 +111,9 @@ Build the echo agent as a standalone Node script before touching any Electron co
 
 ### 2.1 Create agent source file
 
-Create `electron/agents/echo-agent.ts`. This script will be run as a child process — it reads JSON-RPC from stdin and writes to stdout.
+- [ ] Create `electron/agents/echo-agent.ts`
+
+This script will be run as a child process — it reads JSON-RPC from stdin and writes to stdout.
 
 ```typescript
 import * as acp from "@agentclientprotocol/sdk";
@@ -148,7 +195,9 @@ process.stderr.write("Echo agent started\n");
 
 ### 2.2 Build the agent
 
-Add a build script for the agent. Options:
+- [ ] Choose and set up a build/run mechanism for the agent
+
+Options:
 
 **Option A (recommended for dev): Run directly with tsx**
 ```bash
@@ -170,7 +219,9 @@ Import with `?modulePath` suffix in main process code. This lets electron-vite h
 
 For M0, Option A (tsx during dev) is simplest. We can optimize the build later.
 
-### 2.3 Manual smoke test
+### 2.3 Write test harness
+
+- [ ] Create `scripts/test-echo-agent.ts`
 
 Test the agent in isolation by piping JSON-RPC messages to it:
 
@@ -241,7 +292,14 @@ Run with:
 npx tsx scripts/test-echo-agent.ts
 ```
 
-**Done when:** The test script prints streamed `agent_message_chunk` updates containing "Echo: Hello world", followed by a prompt response with `stopReason: "end_turn"`.
+### 2.4 Smoke test
+
+- [ ] Test script prints streamed `agent_message_chunk` updates containing "Echo: Hello world"
+- [ ] Prompt response returns with `stopReason: "end_turn"`
+
+### 2.5 Document SDK deviations
+
+- [ ] Note any differences between design doc pseudocode and actual SDK API
 
 > **Note on API discovery:** This step is where we'll learn the most about the real ACP SDK API. The test script above is a best guess. If the `Client` interface requires different methods, if `sessionUpdate` has a different shape, or if there are required handshake steps we're missing, this is where we'll find out. Document any deviations from the design doc's pseudocode for reference in later milestones.
 
@@ -251,7 +309,7 @@ npx tsx scripts/test-echo-agent.ts
 
 ### 3.1 Define shared types
 
-Create `electron/main/types.ts` with the types shared between main process and renderer:
+- [ ] Create `electron/main/types.ts`
 
 ```typescript
 export interface Message {
@@ -275,9 +333,14 @@ export type SessionUpdate =
   | { sessionId: string; type: "stream-end"; messageId: string };
 ```
 
-### 3.2 Implement SessionManager
+### 3.2 Implement `SessionManager.createSession()`
 
-Create `electron/main/session-manager.ts`:
+- [ ] Create `electron/main/session-manager.ts`
+- [ ] Spawn echo agent as child process
+- [ ] Create `ndJsonStream` + `ClientSideConnection` over child's stdio
+- [ ] Send `InitializeRequest` then `NewSessionRequest`
+- [ ] Store `SessionState`, mark as `ready`
+- [ ] Listen for `exit`/`error` on child process → mark session `error`
 
 ```typescript
 import { spawn, ChildProcess } from "node:child_process";
@@ -294,9 +357,7 @@ interface SessionState {
 }
 ```
 
-Key responsibilities:
-
-**`createSession(): Promise<SessionSummary>`**
+**`createSession()` flow:**
 1. Generate a local session ID (`crypto.randomUUID()`)
 2. Spawn the echo agent: `spawn("npx", ["tsx", "electron/agents/echo-agent.ts"], { stdio: ["pipe", "pipe", "inherit"] })`
    - In production builds, spawn `node dist-electron/agents/echo-agent.js` instead
@@ -309,7 +370,14 @@ Key responsibilities:
 7. Store the `SessionState`, mark as `ready`
 8. Listen for `exit`/`error` on the child process → mark session as `error`
 
-**`sendMessage(sessionId: string, text: string): Promise<void>`**
+### 3.3 Implement `SessionManager.sendMessage()`
+
+- [ ] Look up session, verify status is `ready`
+- [ ] Create user `Message` + placeholder agent `Message` (streaming), emit IPC events
+- [ ] Call `connection.prompt()`, handle streaming chunks via `Client.sessionUpdate`
+- [ ] On prompt completion, finalize agent message and emit `stream-end`
+
+**`sendMessage()` flow:**
 1. Look up session, verify status is `ready`
 2. Create a user `Message`, push to `messages[]`, emit IPC event
 3. Create an agent `Message` (empty, `streaming: true`), push to `messages[]`, emit IPC event
@@ -317,15 +385,15 @@ Key responsibilities:
    - The `Client.sessionUpdate` callback handles streaming chunks — each chunk appends to the agent message text and emits an IPC `stream-chunk` event
 5. When `prompt()` resolves, mark the agent message as `streaming: false`, emit `stream-end`
 
-**`listSessions(): SessionSummary[]`**
-- Return summaries from the in-memory map
+### 3.4 Implement `listSessions()` and `closeSession()`
 
-**`closeSession(sessionId: string): void`**
-- Kill the child process, mark session as `closed`
+- [ ] `listSessions()`: return summaries from in-memory map
+- [ ] `closeSession()`: kill child process, mark session as `closed`
 
-### 3.3 Wire IPC events
+### 3.5 Wire IPC event emitter
 
-The `SessionManager` needs a way to push events to the renderer. It receives a callback (or `BrowserWindow.webContents.send`) during construction:
+- [ ] SessionManager receives emitter callback in constructor
+- [ ] In `electron/main/index.ts`, pass `mainWindow.webContents.send` as the emitter
 
 ```typescript
 class SessionManager {
@@ -333,9 +401,9 @@ class SessionManager {
 }
 ```
 
-In `electron/main/index.ts`, pass `mainWindow.webContents.send` as the emitter.
+### 3.6 Verify from main process
 
-**Done when:** SessionManager compiles and the create-session + send-message flow works end-to-end in a unit test or manual console test from the main process (before adding UI).
+- [ ] Create-session + send-message flow works end-to-end via console.log (before adding UI)
 
 ---
 
@@ -343,7 +411,7 @@ In `electron/main/index.ts`, pass `mainWindow.webContents.send` as the emitter.
 
 ### 4.1 Preload script
 
-Update `electron/preload/index.ts`:
+- [ ] Update `electron/preload/index.ts` with `contextBridge.exposeInMainWorld`
 
 ```typescript
 import { contextBridge, ipcRenderer } from "electron";
@@ -365,9 +433,9 @@ contextBridge.exposeInMainWorld("bouncer", {
 });
 ```
 
-### 4.2 Type declaration for renderer
+### 4.2 Type declarations for renderer
 
-Create `src/env.d.ts` (or augment existing):
+- [ ] Create `src/env.d.ts` with `BouncerAPI` interface and `Window` augmentation
 
 ```typescript
 interface BouncerAPI {
@@ -387,7 +455,7 @@ interface Window {
 
 ### 4.3 Main process handlers
 
-In `electron/main/index.ts`, after creating the window and `SessionManager`:
+- [ ] Register `ipcMain.handle` handlers that delegate to `SessionManager`
 
 ```typescript
 import { ipcMain } from "electron";
@@ -406,7 +474,9 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 );
 ```
 
-**Done when:** You can call `window.bouncer.sessions.create()` from the renderer dev console and see a session created (check main process logs).
+### 4.4 Verify from renderer
+
+- [ ] `window.bouncer.sessions.create()` works from renderer dev console
 
 ---
 
@@ -414,7 +484,9 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ### 5.1 App layout
 
-Replace the scaffolded `src/App.tsx` with a two-panel layout:
+- [ ] Replace scaffolded `src/App.tsx` with two-panel layout
+- [ ] Set up state: `sessions`, `activeSessionId`, `messagesBySession`, `streamingText`
+- [ ] Subscribe to `bouncer.sessions.onUpdate()` on mount
 
 ```
 ┌──────────────┬─────────────────────────────────┐
@@ -433,20 +505,14 @@ Replace the scaffolded `src/App.tsx` with a two-panel layout:
 └──────────────┴─────────────────────────────────┘
 ```
 
-State in `<App />`:
-- `sessions: SessionSummary[]`
-- `activeSessionId: string | null`
-- `messagesBySession: Map<string, Message[]>`
-- `streamingText: Map<string, string>` — in-progress agent message text, keyed by message ID
-
-On mount:
-- Call `bouncer.sessions.list()` to populate initial state
-- Subscribe to `bouncer.sessions.onUpdate()` to handle live updates
-
 ### 5.2 SessionList component
 
+- [ ] Create `src/components/SessionList.tsx`
+- [ ] Render session entries with status indicators (green=ready, yellow=initializing, red=error, gray=closed)
+- [ ] "New Session" button
+- [ ] Click to select
+
 ```typescript
-// src/components/SessionList.tsx
 interface Props {
   sessions: SessionSummary[];
   activeSessionId: string | null;
@@ -455,45 +521,40 @@ interface Props {
 }
 ```
 
-- Renders session entries with status indicator (colored dot: green=ready, yellow=initializing, red=error, gray=closed)
-- "New Session" button calls `onCreate`
-- Click on a session calls `onSelect`
-
 ### 5.3 ChatPanel component
 
+- [ ] Create `src/components/ChatPanel.tsx`
+- [ ] Render message bubbles (user right/blue, agent left/gray)
+- [ ] Render in-progress streaming text with cursor indicator
+- [ ] Auto-scroll to bottom on new messages
+
 ```typescript
-// src/components/ChatPanel.tsx
 interface Props {
   messages: Message[];
   streamingText: Map<string, string>;
   onSendMessage: (text: string) => void;
-  disabled: boolean; // true when no session selected or session not ready
+  disabled: boolean;
 }
 ```
 
-- Renders messages as bubbles (user right-aligned with blue background, agent left-aligned with gray background)
-- For messages with `streaming: true`, renders the accumulated text from `streamingText` map with a blinking cursor indicator
-- Auto-scrolls to bottom on new messages
-- Contains `<MessageInput />` at the bottom
-
 ### 5.4 MessageInput component
 
+- [ ] Create `src/components/MessageInput.tsx`
+- [ ] Text input + Send button
+- [ ] Submit on Enter key or button click
+- [ ] Clear input after send
+- [ ] Disabled while agent is responding
+
 ```typescript
-// src/components/MessageInput.tsx
 interface Props {
   onSend: (text: string) => void;
   disabled: boolean;
 }
 ```
 
-- Text input + Send button
-- Submits on Enter key or button click
-- Clears input after send
-- Disabled while agent is responding (any message in active session has `streaming: true`)
+### 5.5 Wire `onUpdate` handler
 
-### 5.5 Wiring it all together
-
-The `<App />` `onUpdate` handler processes `SessionUpdate` events:
+- [ ] Handle `status-change`, `message`, `stream-chunk`, `stream-end` events in `<App />`
 
 ```typescript
 function handleUpdate(update: SessionUpdate) {
@@ -518,16 +579,15 @@ function handleUpdate(update: SessionUpdate) {
 
 ### 5.6 Minimal CSS
 
-Plain CSS in `src/index.css`. No CSS framework. Key styles:
+- [ ] Flexbox two-column layout (session list ~200px, chat panel fills rest)
+- [ ] Message bubble styling (padding, border-radius, max-width ~70%)
+- [ ] User messages: blue background, white text, right-aligned
+- [ ] Agent messages: light gray background, dark text, left-aligned
+- [ ] Input bar pinned to bottom of chat panel
 
-- Flexbox two-column layout (session list ~200px, chat panel fills rest)
-- Message bubbles with padding, border-radius, max-width ~70%
-- User messages: blue background, white text, right-aligned
-- Agent messages: light gray background, dark text, left-aligned
-- Monospace font for message text (agent output often contains code)
-- Input bar pinned to bottom of chat panel
+### 5.7 Full flow test
 
-**Done when:** Full flow works — launch app, click "New Session", type a message, see "Echo: ..." stream in character by character.
+- [ ] Launch app → create session → send message → see "Echo: ..." stream in character by character
 
 ---
 
@@ -535,41 +595,32 @@ Plain CSS in `src/index.css`. No CSS framework. Key styles:
 
 ### 6.1 Agent crash handling
 
-When the child process exits unexpectedly:
-- `SessionManager` listens for `exit` event on the child process
-- Marks session status as `error`
-- Emits a `status-change` update to the renderer
-- UI shows error indicator on the session and disables the input
+- [ ] `SessionManager` listens for `exit` event on child process
+- [ ] Marks session status as `error`, emits `status-change`
+- [ ] UI shows error indicator and disables input
 
 ### 6.2 Session switching
 
-When user clicks a different session in the list:
-- UI swaps `activeSessionId`
-- `ChatPanel` renders the messages for the new active session
-- No IPC call needed — all message history is already in renderer state
-- In-progress streaming for the previous session continues in the background (the updates still arrive and get stored, they're just not visible until the user switches back)
+- [ ] Clicking a different session swaps `activeSessionId` and renders its messages
+- [ ] In-progress streaming for background sessions continues and is stored
 
 ### 6.3 Close session
 
-Add a close button (X) on each session in the list:
-- Calls `bouncer.sessions.closeSession(id)`
-- `SessionManager` kills the agent process, marks session as `closed`
-- UI shows closed indicator, disables input for that session
+- [ ] Close button (X) on each session in the list
+- [ ] Calls `bouncer.sessions.closeSession(id)` → kills agent, marks closed
+- [ ] UI shows closed indicator, disables input
 
 ### 6.4 Input disabled during turns
 
-While an agent response is streaming:
-- Disable the text input and Send button
-- Show a subtle "Agent is responding..." indicator
-- Re-enable when `stream-end` arrives
+- [ ] Disable text input and Send button while agent is streaming
+- [ ] Show "Agent is responding..." indicator
+- [ ] Re-enable when `stream-end` arrives
 
 ### 6.5 Empty states
 
-- No sessions yet: show "Create a new session to get started" in the chat panel area
-- Session selected but no messages: show "Send a message to begin"
-- Session in error state: show "Session disconnected" with option to close
-
-**Done when:** All edge cases handled. App doesn't crash when agent dies. Multiple sessions work independently. User can't send while agent is streaming.
+- [ ] No sessions: "Create a new session to get started"
+- [ ] Session selected but no messages: "Send a message to begin"
+- [ ] Session in error state: "Session disconnected" with close option
 
 ---
 
