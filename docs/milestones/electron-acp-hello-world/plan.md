@@ -34,12 +34,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 5.5 Wire `onUpdate` handler for SessionUpdate events
   - [x] 5.6 Minimal CSS styling
   - [x] 5.7 Full flow test: launch → create session → send message → see streamed echo
-- [ ] **[Phase 6: Edge Cases & Polish](#phase-6-edge-cases--polish)**
-  - [ ] 6.1 Agent crash handling (error state in UI)
-  - [ ] 6.2 Session switching (independent message histories)
-  - [ ] 6.3 Close session action (kill agent, update UI)
-  - [ ] 6.4 Input disabled during agent turns
-  - [ ] 6.5 Empty states (no sessions, no messages, error state)
+- [x] **[Phase 6: Edge Cases & Polish](#phase-6-edge-cases--polish)**
+  - [x] 6.1 Agent crash handling (error state in UI)
+  - [x] 6.2 Session switching (independent message histories)
+  - [x] 6.3 Close session action (kill agent, update UI)
+  - [x] 6.4 Input disabled during agent turns
+  - [x] 6.5 Empty states (no sessions, no messages, error state)
 - [ ] **[Verification](#verification-checklist)** — all manual checks pass
 
 ---
@@ -595,32 +595,32 @@ function handleUpdate(update: SessionUpdate) {
 
 ### 6.1 Agent crash handling
 
-- [ ] `SessionManager` listens for `exit` event on child process
-- [ ] Marks session status as `error`, emits `status-change`
-- [ ] UI shows error indicator and disables input
+- [x] `SessionManager` listens for `exit` event on child process
+- [x] Marks session status as `error`, emits `status-change`
+- [x] UI shows error indicator and disables input
 
 ### 6.2 Session switching
 
-- [ ] Clicking a different session swaps `activeSessionId` and renders its messages
-- [ ] In-progress streaming for background sessions continues and is stored
+- [x] Clicking a different session swaps `activeSessionId` and renders its messages
+- [x] In-progress streaming for background sessions continues and is stored
 
 ### 6.3 Close session
 
-- [ ] Close button (X) on each session in the list
-- [ ] Calls `glitterball.sessions.closeSession(id)` → kills agent, marks closed
-- [ ] UI shows closed indicator, disables input
+- [x] Close button (X) on each session in the list
+- [x] Calls `glitterball.sessions.closeSession(id)` → kills agent, marks closed
+- [x] UI shows closed indicator, disables input
 
 ### 6.4 Input disabled during turns
 
-- [ ] Disable text input and Send button while agent is streaming
-- [ ] Show "Agent is responding..." indicator
-- [ ] Re-enable when `stream-end` arrives
+- [x] Disable text input and Send button while agent is streaming
+- [x] Show "Agent is responding..." indicator
+- [x] Re-enable when `stream-end` arrives
 
 ### 6.5 Empty states
 
-- [ ] No sessions: "Create a new session to get started"
-- [ ] Session selected but no messages: "Send a message to begin"
-- [ ] Session in error state: "Session disconnected" with close option
+- [x] No sessions: "Create a new session to get started"
+- [x] Session selected but no messages: "Send a message to begin"
+- [x] Session in error state: "Session disconnected" with close option
 
 ---
 

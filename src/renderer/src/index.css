@@ -90,6 +90,21 @@ body {
   margin-left: auto;
 }
 
+.close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.close-btn:hover {
+  color: #d9534f;
+}
+
 /* Chat panel */
 .chat-panel {
   flex: 1;
@@ -206,4 +221,40 @@ body {
 
 .chat-panel > .empty-state {
   margin: auto;
+}
+
+/* Session state banners */
+.session-state-banner {
+  text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.session-state-banner.error {
+  background-color: rgba(217, 83, 79, 0.15);
+  color: #d9534f;
+}
+
+.session-state-banner.closed {
+  background-color: rgba(153, 153, 153, 0.15);
+  color: #999;
+}
+
+.session-state-banner button {
+  padding: 4px 12px;
+  background-color: #444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.session-state-banner button:hover {
+  background-color: #555;
 }

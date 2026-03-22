@@ -12,9 +12,10 @@ interface Props {
   activeSessionId: string | null
   onSelect: (id: string) => void
   onCreate: () => void
+  onClose: (id: string) => void
 }
 
-export function SessionList({ sessions, activeSessionId, onSelect, onCreate }: Props) {
+export function SessionList({ sessions, activeSessionId, onSelect, onCreate, onClose }: Props) {
   return (
     <div className="session-list">
       <button className="new-session-btn" onClick={onCreate}>
@@ -34,6 +35,18 @@ export function SessionList({ sessions, activeSessionId, onSelect, onCreate }: P
             {s.id.slice(0, 8)}
           </span>
           <span className="session-status">{s.status}</span>
+          {s.status !== 'closed' && (
+            <button
+              className="close-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                onClose(s.id)
+              }}
+              title="Close session"
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
       {sessions.length === 0 && (
