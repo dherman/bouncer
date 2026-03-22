@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Writable, Readable } from "node:stream";
@@ -6,18 +7,22 @@ import * as acp from "@agentclientprotocol/sdk";
 import { app } from "electron";
 import type { Message, SessionSummary, SessionUpdate } from "./types.js";
 
-function resolveAgentCommand(): { cmd: string; args: string[] } {
+function resolveAgentCommand(): { cmd: string; args: string[]; env?: Record<string, string> } {
   // In dev, run the TypeScript source via tsx
-  // In production, run the compiled JS directly
+  // In production, run the compiled JS as plain Node (not Electron)
   const isDev = !app.isPackaged;
   if (isDev) {
-    const projectRoot = app.getAppPath();
-    const tsxBin = join(projectRoot, "node_modules", ".bin", "tsx");
-    const agentScript = join(projectRoot, "src", "agents", "echo-agent.ts");
-    return { cmd: tsxBin, args: [agentScript] };
+    const require = createRequire(app.getAppPath() + "/");
+    const tsxBin = require.resolve("tsx/cli");
+    const agentScript = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
+    return { cmd: process.execPath, args: [tsxBin, agentScript] };
   } else {
     const agentScript = join(__dirname, "..", "agents", "echo-agent.js");
-    return { cmd: process.execPath, args: [agentScript] };
+    return {
+      cmd: process.execPath,
+      args: [agentScript],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    };
   }
 }
 
@@ -51,9 +56,10 @@ export class SessionManager {
 
     try {
       // Spawn the echo agent
-      const { cmd, args } = resolveAgentCommand();
+      const { cmd, args, env } = resolveAgentCommand();
       const agentProcess = spawn(cmd, args, {
         stdio: ["pipe", "pipe", "inherit"],
+        env: { ...process.env, ...env },
       });
       session.agentProcess = agentProcess;
 
@@ -121,6 +127,7 @@ export class SessionManager {
       this.emit("session-update", { sessionId: id, type: "status-change", status: "ready" });
     } catch (err) {
       console.error(`Failed to create session ${id}:`, err);
+      session.agentProcess?.kill();
       session.status = "error";
       this.emit("session-update", { sessionId: id, type: "status-change", status: "error" });
     }
