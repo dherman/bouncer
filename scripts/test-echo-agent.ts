@@ -7,10 +7,14 @@
  * Usage: npx tsx scripts/test-echo-agent.ts
  */
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 
-const agent = spawn("npx", ["tsx", "src/agents/echo-agent.ts"], {
+const require = createRequire(import.meta.url);
+const tsxBin = require.resolve("tsx/cli");
+
+const agent = spawn(process.execPath, [tsxBin, "src/agents/echo-agent.ts"], {
   stdio: ["pipe", "pipe", "inherit"],
 });
 

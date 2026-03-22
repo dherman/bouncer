@@ -1,4 +1,5 @@
 import * as acp from "@agentclientprotocol/sdk";
+import { randomUUID } from "node:crypto";
 import { Writable, Readable } from "node:stream";
 
 const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
@@ -16,7 +17,7 @@ new acp.AgentSideConnection(
 
     async newSession(_params) {
       return {
-        sessionId: crypto.randomUUID(),
+        sessionId: randomUUID(),
       };
     },
 
