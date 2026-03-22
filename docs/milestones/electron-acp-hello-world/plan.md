@@ -25,7 +25,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 4.1 Implement preload script with `contextBridge` API
   - [x] 4.2 Add type declarations for renderer (`src/renderer/src/env.d.ts`)
   - [x] 4.3 Register `ipcMain.handle` handlers in main process
-  - [ ] 4.4 Verify: `window.glitterball.sessions.create()` works from renderer dev console
+  - [x] 4.4 Verify: `window.glitterball.sessions.create()` works from renderer dev console
 - [ ] **[Phase 5: React UI](#phase-5-react-ui)**
   - [ ] 5.1 App layout: two-panel flexbox (session list + chat)
   - [ ] 5.2 `<SessionList />` component with status indicators
@@ -476,7 +476,7 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ### 4.4 Verify from renderer
 
-- [ ] `window.glitterball.sessions.create()` works from renderer dev console (manual verification)
+- [x] `window.glitterball.sessions.create()` works from renderer dev console (manual verification)
 
 ---
 
