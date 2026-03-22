@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, ipcMain, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
 
@@ -53,10 +53,15 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send(channel, data)
   })
 
-  // Dev smoke test: verify session lifecycle from main process
-  if (isDev) {
-    smokeTest(sessionManager)
-  }
+  // IPC handlers for renderer → main communication
+  ipcMain.handle('sessions:list', () => sessionManager.listSessions())
+  ipcMain.handle('sessions:create', () => sessionManager.createSession())
+  ipcMain.handle('sessions:sendMessage', (_e, sessionId: string, text: string) =>
+    sessionManager.sendMessage(sessionId, text)
+  )
+  ipcMain.handle('sessions:close', (_e, sessionId: string) =>
+    sessionManager.closeSession(sessionId)
+  )
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -68,22 +73,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
-async function smokeTest(sessionManager: SessionManager): Promise<void> {
-  try {
-    console.log('[smoke-test] Creating session...')
-    const session = await sessionManager.createSession()
-    console.log('[smoke-test] Session created:', session)
-
-    console.log('[smoke-test] Sending message...')
-    await sessionManager.sendMessage(session.id, 'Hello from main process')
-
-    console.log('[smoke-test] Sessions:', sessionManager.listSessions())
-
-    console.log('[smoke-test] Closing session...')
-    await sessionManager.closeSession(session.id)
-    console.log('[smoke-test] Done. Sessions:', sessionManager.listSessions())
-  } catch (err) {
-    console.error('[smoke-test] Error:', err)
-  }
-}
