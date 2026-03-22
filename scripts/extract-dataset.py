@@ -219,12 +219,34 @@ def make_anonymizer(home_dir: str, username: str,
         result = {}
         for key, value in tool_input.items():
             if tool_name == "Bash" and key == "command":
-                result[key] = scrub_all_project_names(scrub_bash_command(value, project_dir))
+                scrubbed = scrub_all_project_names(scrub_bash_command(value, project_dir))
+                # Truncate long commands (heredocs, inline scripts) — we only
+                # need enough to classify the command, not the full payload.
+                if len(scrubbed) > 500:
+                    scrubbed = scrubbed[:500] + "...{truncated}"
+                result[key] = scrubbed
             elif tool_name == "Write" and key == "content":
                 # Replace file contents entirely — not needed for policy research
                 result[key] = "{file_content}"
             elif tool_name == "NotebookEdit" and key in ("new_source", "source"):
                 result[key] = "{cell_content}"
+            elif tool_name == "Edit" and key in ("old_string", "new_string"):
+                # Keep a short prefix for pattern recognition, drop the bulk
+                scrubbed = scrub_value(value, project_dir)
+                if isinstance(scrubbed, str) and len(scrubbed) > 200:
+                    result[key] = scrubbed[:200] + "...{truncated}"
+                else:
+                    result[key] = scrubbed
+            elif tool_name == "TodoWrite" and key == "todos":
+                # Replace todo content — not needed for policy research
+                if isinstance(value, list):
+                    result[key] = [{"status": t.get("status", "pending")} if isinstance(t, dict) else t
+                                   for t in value]
+                else:
+                    result[key] = value
+            elif tool_name.startswith("mcp__") and len(json.dumps(value)) > 200:
+                # MCP tool payloads can be large; not needed for policy
+                result[key] = "{mcp_content}"
             else:
                 result[key] = scrub_value(value, project_dir)
         return result
