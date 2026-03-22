@@ -15,7 +15,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "test:echo-agent": "tsx scripts/test-echo-agent.ts"
+    "test:echo-agent": "tsx scripts/test-echo-agent.ts",
+    "test:worktree": "tsx scripts/test-worktree.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

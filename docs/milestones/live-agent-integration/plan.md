@@ -4,13 +4,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ## Progress
 
-- [ ] **[Phase 1: Worktree Manager](#phase-1-worktree-manager)**
-  - [ ] 1.1 Create `src/main/worktree-manager.ts`
-  - [ ] 1.2 Implement `validateGitRepo()`
-  - [ ] 1.3 Implement `create()` (worktree + branch)
-  - [ ] 1.4 Implement `remove()` (worktree + branch cleanup)
-  - [ ] 1.5 Write `scripts/test-worktree.ts` test harness
-  - [ ] 1.6 Smoke test: create, verify, remove a worktree
+- [x] **[Phase 1: Worktree Manager](#phase-1-worktree-manager)**
+  - [x] 1.1 Create `src/main/worktree-manager.ts`
+  - [x] 1.2 Implement `validateGitRepo()`
+  - [x] 1.3 Implement `create()` (worktree + branch)
+  - [x] 1.4 Implement `remove()` (worktree + branch cleanup)
+  - [x] 1.5 Write `scripts/test-worktree.ts` test harness
+  - [x] 1.6 Smoke test: create, verify, remove a worktree
 - [ ] **[Phase 2: Claude Code Agent Discovery](#phase-2-claude-code-agent-discovery)**
   - [ ] 2.1 Install `@zed-industries/claude-agent-acp`
   - [ ] 2.2 Discover binary entry point and spawn mechanism
