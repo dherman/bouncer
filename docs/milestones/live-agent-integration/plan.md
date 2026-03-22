@@ -11,13 +11,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 1.4 Implement `remove()` (worktree + branch cleanup)
   - [x] 1.5 Write `scripts/test-worktree.ts` test harness
   - [x] 1.6 Smoke test: create, verify, remove a worktree
-- [ ] **[Phase 2: Claude Code Agent Discovery](#phase-2-claude-code-agent-discovery)**
-  - [ ] 2.1 Install `@zed-industries/claude-agent-acp`
-  - [ ] 2.2 Discover binary entry point and spawn mechanism
-  - [ ] 2.3 Discover which ACP Client methods Claude Code calls
-  - [ ] 2.4 Write `scripts/test-claude-agent.ts` standalone test
-  - [ ] 2.5 Smoke test: ACP handshake + simple prompt with Claude Code
-  - [ ] 2.6 Document deviations in `sdk-deviations.md`
+- [x] **[Phase 2: Claude Code Agent Discovery](#phase-2-claude-code-agent-discovery)**
+  - [x] 2.1 Install `@zed-industries/claude-agent-acp`
+  - [x] 2.2 Discover binary entry point and spawn mechanism
+  - [x] 2.3 Discover which ACP Client methods Claude Code calls
+  - [x] 2.4 Write `scripts/test-claude-agent.ts` standalone test
+  - [x] 2.5 Smoke test: ACP handshake + simple prompt with Claude Code
+  - [x] 2.6 Document deviations in `sdk-deviations.md`
 - [ ] **[Phase 3: Terminal Management](#phase-3-terminal-management)**
   - [ ] 3.1 Define `TerminalState` type
   - [ ] 3.2 Implement `createTerminal()` — spawn shell in worktree
