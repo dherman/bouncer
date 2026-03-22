@@ -1,18 +1,26 @@
 import { useEffect, useRef } from 'react'
-import type { Message } from '../../../main/types'
+import type { Message, SessionSummary } from '../../../main/types'
 import { MessageInput } from './MessageInput'
 
 interface Props {
   messages: Message[]
   streamingText: Map<string, string>
+  sessionStatus: SessionSummary['status']
   onSendMessage: (text: string) => void
-  disabled: boolean
+  onCloseSession: () => void
 }
 
-export function ChatPanel({ messages, streamingText, onSendMessage, disabled }: Props) {
+export function ChatPanel({
+  messages,
+  streamingText,
+  sessionStatus,
+  onSendMessage,
+  onCloseSession,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const isStreaming = messages.some((m) => m.streaming)
+  const inputDisabled = isStreaming || sessionStatus !== 'ready'
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' })
@@ -21,25 +29,48 @@ export function ChatPanel({ messages, streamingText, onSendMessage, disabled }: 
   return (
     <div className="chat-panel">
       <div className="messages">
-        {messages.length === 0 && (
+        {messages.length === 0 && sessionStatus === 'ready' && (
           <div className="empty-state">Send a message to begin</div>
         )}
+        {messages.length === 0 && sessionStatus === 'initializing' && (
+          <div className="empty-state">Starting session...</div>
+        )}
         {messages.map((msg) => {
-          const isStreaming = msg.streaming && streamingText.has(msg.id)
-          const displayText = isStreaming ? streamingText.get(msg.id)! : msg.text
+          const msgStreaming = msg.streaming && streamingText.has(msg.id)
+          const displayText = msgStreaming ? streamingText.get(msg.id)! : msg.text
 
           return (
             <div key={msg.id} className={`message ${msg.role}`}>
               <div className="bubble">
                 {displayText}
-                {isStreaming && <span className="cursor">|</span>}
+                {msgStreaming && <span className="cursor">|</span>}
               </div>
             </div>
           )
         })}
+        {sessionStatus === 'error' && (
+          <div className="session-state-banner error">
+            Session disconnected
+            <button onClick={onCloseSession}>Close session</button>
+          </div>
+        )}
+        {sessionStatus === 'closed' && (
+          <div className="session-state-banner closed">
+            Session closed
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
-      <MessageInput onSend={onSendMessage} disabled={disabled} />
+      <MessageInput
+        onSend={onSendMessage}
+        disabled={inputDisabled}
+        placeholder={
+          sessionStatus === 'error' ? 'Session disconnected' :
+          sessionStatus === 'closed' ? 'Session closed' :
+          sessionStatus === 'initializing' ? 'Starting session...' :
+          undefined
+        }
+      />
     </div>
   )
 }

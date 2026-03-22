@@ -70,7 +70,6 @@ function App() {
     }
   }, [])
 
-  // Load existing sessions on mount (survives HMR/devtools reloads)
   useEffect(() => {
     window.glitterball.sessions.list().then((list) => {
       if (list.length > 0) {
@@ -101,11 +100,18 @@ function App() {
     }
   }
 
+  async function handleCloseSession(id: string) {
+    try {
+      await window.glitterball.sessions.closeSession(id)
+    } catch (err) {
+      console.error('Failed to close session:', err)
+    }
+  }
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId)
   const activeMessages = activeSessionId
     ? messagesBySession.get(activeSessionId) ?? []
     : []
-
-  const isStreaming = activeMessages.some((m) => m.streaming)
 
   return (
     <div className="app">
@@ -114,13 +120,15 @@ function App() {
         activeSessionId={activeSessionId}
         onSelect={setActiveSessionId}
         onCreate={handleCreateSession}
+        onClose={handleCloseSession}
       />
-      {activeSessionId ? (
+      {activeSession ? (
         <ChatPanel
           messages={activeMessages}
           streamingText={streamingText}
+          sessionStatus={activeSession.status}
           onSendMessage={handleSendMessage}
-          disabled={isStreaming}
+          onCloseSession={() => handleCloseSession(activeSession.id)}
         />
       ) : (
         <div className="chat-panel">
