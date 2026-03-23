@@ -40,7 +40,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 6.4 Echo agent fallback — works at backend level (no UI toggle needed for M1)
   - [x] 6.5 Session close cleanup — worktree removed, agent killed (verified)
   - [x] 6.6 Orphan worktree cleanup on app startup + session cleanup on quit
-- [ ] **[Verification](#verification-checklist)** — all manual checks pass
+- [x] **[Verification](#verification-checklist)** — all manual checks pass
 
 ---
 
