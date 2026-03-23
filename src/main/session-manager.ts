@@ -143,37 +143,7 @@ export class SessionManager {
 
     const workingDir = worktree?.path ?? projectDir;
 
-    // Build sandbox config from policy template
     let sandboxConfig: SandboxConfig | null = null;
-    const safehouseAvailable = await isSafehouseAvailable();
-    if (agentType === "claude-code" && !safehouseAvailable) {
-      if (!this.safehouseWarningLogged) {
-        console.warn(
-          "safehouse not available — agent will run without OS-level sandboxing"
-        );
-        this.safehouseWarningLogged = true;
-      }
-    }
-    if (template && safehouseAvailable) {
-      await ensurePolicyDir();
-
-      // Grant read-only access to the app's entire node_modules tree.
-      // The agent binary lives under node_modules/@zed-industries/claude-agent-acp,
-      // but ESM bare-specifier resolution walks up to the parent node_modules
-      // to find peer dependencies (e.g. @agentclientprotocol/sdk). Granting
-      // only the agent package dir is insufficient.
-      const appNodeModules = join(app.getAppPath(), "node_modules");
-
-      sandboxConfig = policyToSandboxConfig(template, {
-        sessionId: id,
-        worktreePath: workingDir,
-        gitCommonDir: worktree?.gitCommonDir,
-        readOnlyDirs: [appNodeModules],
-      });
-
-      // Write append profile file before spawning (if needed)
-      await writeAppendProfile(sandboxConfig);
-    }
 
     const session: SessionState = {
       id,
@@ -198,6 +168,37 @@ export class SessionManager {
     });
 
     try {
+      // Build sandbox config from policy template
+      const safehouseAvailable = await isSafehouseAvailable();
+      if (agentType === "claude-code" && !safehouseAvailable) {
+        if (!this.safehouseWarningLogged) {
+          console.warn(
+            "safehouse not available — agent will run without OS-level sandboxing"
+          );
+          this.safehouseWarningLogged = true;
+        }
+      }
+      if (template && safehouseAvailable) {
+        await ensurePolicyDir();
+
+        // Grant read-only access to the app's entire node_modules tree.
+        // The agent binary lives under node_modules/@zed-industries/claude-agent-acp,
+        // but ESM bare-specifier resolution walks up to the parent node_modules
+        // to find peer dependencies (e.g. @agentclientprotocol/sdk). Granting
+        // only the agent package dir is insufficient.
+        const appNodeModules = join(app.getAppPath(), "node_modules");
+
+        sandboxConfig = policyToSandboxConfig(template, {
+          sessionId: id,
+          worktreePath: workingDir,
+          gitCommonDir: worktree?.gitCommonDir,
+          readOnlyDirs: [appNodeModules],
+        });
+        session.sandboxConfig = sandboxConfig;
+
+        // Write append profile file before spawning (if needed)
+        await writeAppendProfile(sandboxConfig);
+      }
       // Spawn the agent (sandboxed via safehouse if config present)
       const { cmd, args, env, cwd } = resolveAgentCommand(
         agentType,
