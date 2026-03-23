@@ -86,6 +86,13 @@ app.whenReady().then(() => {
     return sessionManager.closeSession(sessionId)
   })
 
+  ipcMain.handle('sessions:getSandboxViolations', (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') {
+      throw new Error('Invalid argument: sessionId must be a string')
+    }
+    return sessionManager.getSandboxViolations(sessionId)
+  })
+
   ipcMain.handle('dialog:selectDirectory', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (!window) return null

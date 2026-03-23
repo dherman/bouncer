@@ -96,11 +96,14 @@ export function defaultSandboxConfig({
   sessionId,
   worktreePath,
   gitCommonDir,
+  readOnlyDirs: extraReadOnlyDirs,
 }: {
   sessionId: string;
   worktreePath: string;
   /** The git common dir for linked worktrees (parent repo's .git). */
   gitCommonDir?: string;
+  /** Additional directories to grant read-only access (e.g., agent binary package dir). */
+  readOnlyDirs?: string[];
 }): SandboxConfig {
   const writableDirs = [worktreePath];
 
@@ -114,7 +117,7 @@ export function defaultSandboxConfig({
   return {
     workdir: worktreePath,
     writableDirs,
-    readOnlyDirs: [],
+    readOnlyDirs: extraReadOnlyDirs ?? [],
     envPassthrough: [
       // Claude Code auth
       "ANTHROPIC_API_KEY",

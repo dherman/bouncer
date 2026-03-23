@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
-import type { Message, SessionSummary, ToolCallInfo } from '../../../main/types'
+import type { Message, SandboxViolationInfo, SessionSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
+import { SandboxLog } from './SandboxLog'
 
 interface Props {
   messages: Message[]
   streamingText: Map<string, string>
   sessionStatus: SessionSummary['status']
   sessionError?: string
+  violations: SandboxViolationInfo[]
   onSendMessage: (text: string) => void
   onCloseSession: () => void
 }
@@ -39,6 +41,7 @@ export function ChatPanel({
   streamingText,
   sessionStatus,
   sessionError,
+  violations,
   onSendMessage,
   onCloseSession,
 }: Props) {
@@ -91,6 +94,7 @@ export function ChatPanel({
         )}
         <div ref={bottomRef} />
       </div>
+      <SandboxLog violations={violations} />
       <MessageInput
         onSend={onSendMessage}
         disabled={inputDisabled}

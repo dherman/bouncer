@@ -10,6 +10,7 @@ const STATUS_INDICATOR: Record<SessionSummary['status'], string> = {
 interface Props {
   sessions: SessionSummary[]
   activeSessionId: string | null
+  violationCounts: Map<string, number>
   onSelect: (id: string) => void
   onCreate: () => void
   onClose: (id: string) => void
@@ -22,7 +23,7 @@ function projectLabel(session: SessionSummary): string {
   return session.id.slice(0, 8)
 }
 
-export function SessionList({ sessions, activeSessionId, onSelect, onCreate, onClose }: Props) {
+export function SessionList({ sessions, activeSessionId, violationCounts, onSelect, onCreate, onClose }: Props) {
   return (
     <div className="session-list">
       <button className="new-session-btn" onClick={onCreate}>
@@ -41,6 +42,10 @@ export function SessionList({ sessions, activeSessionId, onSelect, onCreate, onC
           <span className="session-label">
             {projectLabel(s)}
             {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
+            {s.sandboxed && <span className="sandbox-badge">&#x1F6E1;</span>}
+            {(violationCounts.get(s.id) ?? 0) > 0 && (
+              <span className="violation-count">{violationCounts.get(s.id)}</span>
+            )}
           </span>
           <span className="session-status">{s.status}</span>
           {s.status !== 'closed' && (

@@ -336,6 +336,91 @@ body {
   font-style: italic;
 }
 
+/* Sandbox badge in session list */
+.sandbox-badge {
+  font-size: 11px;
+  margin-left: 2px;
+}
+
+.violation-count {
+  font-size: 10px;
+  background-color: #d9534f;
+  color: white;
+  border-radius: 8px;
+  padding: 0 5px;
+  margin-left: 4px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+/* Sandbox log panel */
+.sandbox-log {
+  border-top: 1px solid #333;
+  background-color: #1a1a1a;
+}
+
+.sandbox-log-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: #d9534f;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sandbox-log-toggle:hover {
+  background-color: rgba(217, 83, 79, 0.1);
+}
+
+.sandbox-log-icon {
+  font-size: 14px;
+}
+
+.sandbox-log-chevron {
+  margin-left: auto;
+  font-size: 10px;
+  color: #888;
+}
+
+.sandbox-log-entries {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 0 12px 8px;
+}
+
+.sandbox-log-entry {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 2px 0;
+  color: #ccc;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sandbox-log-op {
+  color: #d9534f;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sandbox-log-process {
+  color: #f0ad4e;
+  flex-shrink: 0;
+}
+
+.sandbox-log-path {
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Tool call blocks */
 .tool-calls {
   margin-top: 8px;
