@@ -96,40 +96,32 @@ This means:
 
 ## Key Design Decisions
 
-### Deny-default posture
+### Delegate to agent-safehouse
 
-The SBPL profile starts with `(deny default)` and explicitly allows only what's needed. This is the standard approach used by Claude Code's own sandbox, Cursor, and Codex. It ensures that any path we haven't considered is blocked by default, and we discover gaps empirically.
+Rather than maintaining our own SBPL profiles, we delegate sandbox profile generation to [agent-safehouse](https://agent-safehouse.dev) — an open-source CLI tool with curated, community-tested macOS Seatbelt profiles. This is a fully reversible decision (Apache 2.0 licensed) that saves us from duplicating substantial platform-specific knowledge.
 
-### Parameterized profiles
+Agent-safehouse uses a deny-default posture with modular, composable profile layers (system runtime, toolchains, agent-specific state, git integration, etc.) and handles the session-specific parameterization via CLI flags (`--workdir`, `--add-dirs`, `--env-pass`).
 
-The SBPL profile is a template with parameters injected at spawn time via `sandbox-exec -D KEY=VALUE`. This keeps the profile file generic and reusable across sessions.
+Our session manager spawns `safehouse [...flags] -- node <agent-bin>` instead of calling `sandbox-exec` directly. Safehouse handles `sandbox-exec` internally, and stdio passes through transparently for ACP JSON-RPC.
 
-Parameters:
-- `WORKTREE` — absolute path to the session's git worktree (read-write)
-- `HOME` — user's home directory (selective read-only access)
-- `TMPDIR` — temporary directory (read-write for the session's `/tmp` subdirectory)
+### Session-specific sandbox configuration
 
-### Profile generation vs. static profile
+Each session provides safehouse with:
+- `--workdir=<worktree>` — enables git root auto-detection and worktree handling
+- `--add-dirs=<worktree>` — grants read-write access to the session's worktree
+- `--add-dirs=<gitCommonDir>` — grants write access to the parent repo's `.git` (needed for git operations from linked worktrees)
+- `--env-pass=ANTHROPIC_API_KEY,...` — passes specific environment variables through safehouse's sanitized environment
+- `--output=<path>` — persists the policy file so we control its lifecycle (cleanup on session close)
 
-We generate the `.sb` profile file at session creation time rather than using a single static file. This allows:
-- Injecting session-specific allowed paths (e.g., worktree location)
-- Iterating on the profile in code (TypeScript) rather than editing raw SBPL
-- Adding conditional rules based on session context (future: policy templates in Milestone 3)
+Policy files are stored at `{tmpdir}/glitterball-sandbox/<session-id>.sb` for inspection and debugging.
 
-However, the generated profile is written to disk so it can be inspected for debugging. Profiles are stored at:
-```
-{app.getPath('temp')}/glitterball-sandbox/<session-id>.sb
-```
+### Network policy
 
-### Network: deny all (for now)
+Safehouse's default network policy allows full network access. For Milestone 2 we accept this default — the primary focus is filesystem sandboxing. Milestone 6 will add proxy-based network control, potentially using safehouse's `--append-profile` to inject a deny-network overlay combined with localhost proxy exceptions.
 
-The Milestone 2 profile blocks all network access. This is intentionally restrictive — many agent operations (git push, npm install, web research) will fail. This is by design:
+### Extensibility via `--append-profile`
 
-1. It gives us a clean baseline to understand what network access the agent actually needs
-2. It validates that the sandbox can enforce network boundaries
-3. Milestone 6 adds the proxy-based network layer that opens up controlled network access
-
-For testing during this milestone, we'll use coding tasks that don't require network access (local file editing, local git operations, running existing tests).
+If we discover that safehouse's default profile needs adjustment for specific workflows, we can use `--append-profile` to overlay custom SBPL rules. Appended profiles are loaded last and can further restrict (deny) or extend (allow) the base profile. This gives us an escape hatch without forking safehouse.
 
 ### Sandbox violation monitoring strategy
 
@@ -382,141 +374,66 @@ Color-coded: red for denied operations. The panel auto-scrolls as new events arr
 
 ---
 
-## SBPL Profile: Starting Point and Iteration Plan
+## Iteration Plan
 
-The initial profile will be deliberately conservative. We expect it to break things. The iteration process is:
+Agent-safehouse provides a comprehensive starting profile. The iteration process for Milestone 2 is:
 
-1. **Start with the deny-default profile** described above
-2. **Run a real coding task** (e.g., "add a function to src/main/foo.ts, write a test, run it")
-3. **Observe what breaks** — both from sandbox violations in the log and from EPERM errors in agent output
-4. **Categorize each violation**:
+1. **Run a real coding task** under safehouse
+2. **Observe what breaks** — via sandbox violations in the log and EPERM errors in agent output
+3. **Categorize each issue**:
    - **Expected and acceptable**: e.g., agent tried to write outside worktree → working as intended
-   - **Legitimate operation we need to allow**: e.g., agent needs to read `~/.npmrc` → add to read-only paths
-   - **Surprising system path**: e.g., dyld cache, Spotlight metadata → investigate and allow if necessary
+   - **Fixable via safehouse flags**: add `--add-dirs`, `--add-dirs-ro`, or `--enable` integrations
+   - **Needs `--append-profile`**: custom SBPL overlay for edge cases safehouse doesn't cover
    - **Application-layer gap**: e.g., agent tried to `git push` (allowed by filesystem rules but semantically restricted) → note for Milestone 5
-5. **Update the profile** and repeat
+4. **Update `defaultSandboxConfig()`** or add safehouse flags, and repeat
 
-### Expected friction areas (from roadmap open questions)
-
-Based on prior art from Claude Code's sandbox, Cursor's sandbox, and the roadmap's open questions:
-
-| Area | Expected Issue | Likely Resolution |
-|------|---------------|-------------------|
-| `~/.gitconfig` | Git reads this for user.name, user.email, aliases | Read-only access (already in default policy) |
-| SSH keys | `git` operations may need `~/.ssh/` for auth | Read-only access (already in default policy) |
-| npm/pnpm cache | Package managers write to global cache dirs | Allow write to cache dir, or accept failure and note for policy templates |
-| Homebrew paths | System binaries under `/opt/homebrew` | Read-only access (already in default policy) |
-| macOS dyld cache | Dynamic linker shared cache at `/private/var/db/dyld/` | Read-only access (already in default policy) |
-| Temp files | Various tools write to `/tmp` or `$TMPDIR` | Session-scoped tmp directory with write access |
-| CoreFoundation | Mach IPC lookups for system services | Broad `mach-lookup` allow (already in profile) |
-| Claude Code state | Writes to `~/.claude/` (session data, todos, etc.) | **Resolved**: write access to `~/.claude/`, `~/.cache/claude`, `~/.config/claude`, `~/.local/state/claude`, `~/.local/share/claude` (following agent-safehouse `60-agents/claude-code.sb`) |
-| Git worktree common dir | Linked worktrees store refs/metadata in parent repo's `.git` | **Resolved**: `defaultPolicy()` accepts `gitCommonDir` parameter; write access to parent `.git` dir (following agent-safehouse `50-integrations-core/worktree-common-dir.sb`) |
+Most friction areas identified in the original design (`.gitconfig`, SSH keys, npm caches, dyld cache, temp files, Mach IPC, Claude Code state, git worktree common dir) are already handled by agent-safehouse's curated profiles.
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Sandbox Profile Generator
-
-1. Create `src/main/sandbox-profile.ts` with `SandboxPolicy` interface, `defaultPolicy()`, and `generateProfile()`
-2. Write `writePolicyToDisk()` — stores profile at `{tmpdir}/glitterball-sandbox/<session-id>.sb`
-3. Write a manual test: generate a profile, print it, visually inspect the SBPL
-4. Validate the generated profile works with a trivial command: `sandbox-exec -f <profile> /bin/ls <worktree-path>` (should succeed); `sandbox-exec -f <profile> /bin/ls /Users/<user>/Desktop` (should fail with EPERM)
-
-### Phase 2: Sandboxed Agent Spawning
-
-5. Update `resolveClaudeCodeCommand()` to wrap in `sandbox-exec -f <profile>`
-6. Update `createSession()` to generate profile before spawning agent
-7. Update `SessionState` with sandbox-related fields
-8. Test: create a session, verify the agent starts and completes the ACP handshake under the sandbox
-9. Send a simple prompt ("What files are in this directory?") — verify the agent can read the worktree
-10. Send a mutation prompt ("Create a file called test.txt with 'hello'") — verify the agent can write within the worktree
-11. Document any startup failures and iterate on the profile
-
-### Phase 3: Sandbox Monitor
-
-12. Create `src/main/sandbox-monitor.ts` with `SandboxMonitor` class
-13. Implement `log stream` spawning with NDJSON parsing
-14. Implement PID-tree filtering (match violations to the agent's process tree)
-15. Wire into session manager: start monitor after agent spawn, stop on session close
-16. Test: trigger a known violation (e.g., agent tries to write to `/tmp` outside the session-scoped dir) and verify the monitor captures it
-
-### Phase 4: UI Integration
-
-17. Add `sandbox-violation` to `SessionUpdate` union type
-18. Forward violations through IPC to the renderer
-19. Build the sandbox event log panel in the chat UI
-20. Add sandbox status badge to session list
-21. Test: perform a coding task that triggers violations, verify they appear in real time in the UI
-
-### Phase 5: Empirical Iteration
-
-22. Run a set of representative coding tasks under the sandbox:
-    - "Read the README and summarize it" (read-only)
-    - "Add a new function to an existing file" (read + write within worktree)
-    - "Run the existing tests" (spawns subprocesses, reads node_modules)
-    - "Create a new file and commit it" (git operations)
-    - "Install a package and use it" (npm/pnpm — expect network failure)
-23. For each task, collect:
-    - All sandbox violations from the monitor
-    - Whether the task succeeded or failed
-    - What profile changes were needed to make it work
-24. Iterate on `defaultPolicy()` to accommodate legitimate operations
-25. Document findings in `docs/milestones/seatbelt-sandbox/findings.md`
-
-### Phase 6: Cleanup and Polish
-
-26. Update `closeSession()` to stop monitor and clean up profile files
-27. Handle edge cases: monitor process crashes, profile generation failures
-28. Ensure echo agent sessions still work (no sandbox applied to echo agent)
-29. Update session creation to gracefully degrade if `sandbox-exec` is unavailable (e.g., wrong OS)
+See the detailed [implementation plan](plan.md) for phase-by-phase breakdown with code samples and done conditions.
 
 ---
 
 ## Risks and Open Questions
 
+### Agent-safehouse as a runtime dependency
+
+We depend on `safehouse` being installed on the developer's machine. If it's missing, agent sessions run unsandboxed.
+
+**Mitigation**: Graceful degradation — the session manager checks `isSafehouseAvailable()` and falls back to unsandboxed spawning with a warning. The Homebrew install is straightforward (`brew install eugene1g/safehouse/agent-safehouse`). This is also a fully reversible decision — if safehouse becomes unmaintained, we can vendor the profiles or revert to our own SBPL generation.
+
+### Safehouse environment sanitization
+
+Safehouse sanitizes the environment by default, passing through only a curated whitelist. If the agent needs environment variables we haven't listed in `--env-pass`, it will silently miss them.
+
+**Mitigation**: The `--env-pass` flag lets us add specific variables. We start with `ANTHROPIC_API_KEY`, `NODE_OPTIONS`, `NODE_PATH`, and common git/editor vars. Phase 5 empirical testing will reveal any missing variables.
+
 ### `log stream` reliability and performance
 
-The `log stream` command is a real-time tail of the macOS unified log. Concerns:
+The `log stream` command is a real-time tail of the macOS unified log. The `--predicate` filter reduces volume, but format stability is undocumented.
 
-- **Volume**: On a busy system, `log stream` may produce high output volume. The `--predicate` filter reduces this, but we should monitor CPU/memory impact.
-- **Latency**: Log entries may appear with some delay after the actual violation. The UI should not depend on real-time log delivery for functional behavior (i.e., the sandbox enforces boundaries regardless of whether the monitor sees the event).
-- **Format stability**: The NDJSON output format is undocumented and could change between macOS versions.
-
-**Mitigation**: The monitor is informational, not load-bearing. The sandbox enforces boundaries at the kernel level. If log monitoring proves unreliable, we can fall back to EPERM detection in tool call results.
+**Mitigation**: The monitor is informational, not load-bearing. The sandbox enforces boundaries at the kernel level regardless. If log monitoring proves unreliable, we can fall back to EPERM detection in tool call results.
 
 ### PID-tree tracking
 
-`log stream` doesn't filter by PID tree natively. Our monitor needs to maintain a set of known child PIDs. Challenges:
+`log stream` doesn't filter by PID tree natively. Short-lived processes may appear in the log before we've discovered their PID.
 
-- Short-lived processes may appear in the log before we've discovered their PID via `pgrep`
-- Process names in log entries may not directly correspond to PIDs we're tracking
-
-**Mitigation**: Accept that some violations may be missed or misattributed. The monitor is a best-effort debugging tool, not a security enforcement mechanism. We can also use the `eventMessage contains` predicate to filter by process name patterns common to the agent's subprocess tree.
-
-### Claude Code writing to `~/.claude/`
-
-As noted above, Claude Code may need write access to its own state directory. If it crashes or behaves incorrectly without write access, we'll need to open up `~/.claude/` or specific subdirectories.
-
-**Mitigation**: Test this in Phase 2. If writes to `~/.claude/` are required, add them to the writable paths with a clear comment explaining why.
+**Mitigation**: Accept that some violations may be missed or misattributed. The monitor is a best-effort debugging tool, not a security enforcement mechanism.
 
 ### `sandbox-exec` deprecation
 
-`sandbox-exec` is marked deprecated but remains functional on macOS 15.x (Sequoia). Claude Code, Cursor, and Codex all rely on it in production. The risk of Apple removing it without replacement is low in the near term, but we should be aware.
+`sandbox-exec` is marked deprecated but remains functional on macOS 15.x. Claude Code, Cursor, Codex, and agent-safehouse all rely on it in production.
 
-**Mitigation**: This is a known risk accepted by the entire coding agent ecosystem. If Apple removes `sandbox-exec`, Bouncer (and everyone else) will need to find an alternative. Not a Milestone 2 concern.
-
-### Mach IPC scope
-
-The initial profile allows all `mach-lookup` operations. This is a broad permission — a malicious or compromised agent could potentially use Mach IPC to communicate with system services in unintended ways.
-
-**Mitigation**: For Milestone 2 (a research/spike milestone), this is acceptable. If we move toward production hardening, we can audit which Mach services the agent actually uses and restrict to those. Claude Code's own sandbox takes the same broad approach.
+**Mitigation**: This is a known ecosystem-wide risk. If Apple removes `sandbox-exec`, both Bouncer and agent-safehouse will need to adapt. By depending on agent-safehouse, we share this burden with the community rather than bearing it alone.
 
 ### `open` command escaping the sandbox
 
-As noted in the [seatbelt reference](../../reference/seatbelt-reference.md), processes launched via `LaunchServices.framework` (the `open` command) may not inherit the sandbox. If the agent runs `open` to launch an application, that application runs unsandboxed.
+Processes launched via `LaunchServices.framework` (the `open` command) may not inherit the sandbox.
 
-**Mitigation**: This is an edge case — coding agents rarely use `open`. If needed, we can block `process-exec` for `/usr/bin/open` specifically, or address it in Milestone 5 (application-layer policies).
+**Mitigation**: Edge case — coding agents rarely use `open`. Can be addressed via `--append-profile` with a deny rule for `/usr/bin/open`, or in Milestone 5 (application-layer policies).
 
 ---
 
@@ -525,7 +442,8 @@ As noted in the [seatbelt reference](../../reference/seatbelt-reference.md), pro
 Completing Milestone 2 gives us:
 
 - **Validated OS-level sandboxing** for coding agent sessions, with empirical data on what works and what breaks
-- **A working SBPL profile** that Milestone 3 parameterizes into policy templates (standard-pr, research-only, permissive)
+- **A working safehouse integration** that Milestone 3 parameterizes into policy templates (using `--append-profile` for per-template overrides, or `--enable` for optional integrations)
 - **A sandbox monitor** that Milestone 3 uses for policy violation alerting and Milestone 4 uses for batch testing
-- **An iteration methodology** (run task → observe violations → refine profile) that scales to testing more policies in Milestone 4
+- **An iteration methodology** (run task → observe violations → adjust safehouse flags) that scales to testing more policies in Milestone 4
 - **Empirical findings** documenting the real-world friction of filesystem sandboxing for coding agents — directly answering the roadmap's open question: "What legitimate operations does Seatbelt break?"
+- **Community alignment** with agent-safehouse, sharing the maintenance burden for platform-specific sandbox rules rather than maintaining our own
