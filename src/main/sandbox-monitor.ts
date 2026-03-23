@@ -34,7 +34,18 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
    * first few seconds, then filter once the PID tree is populated.
    */
   start(pid: number): void {
+    // Clean up any previous monitoring session
+    if (this.logProcess) {
+      this.logProcess.kill();
+      this.logProcess = null;
+    }
+    if (this.pidRefreshTimer) {
+      clearInterval(this.pidRefreshTimer);
+      this.pidRefreshTimer = null;
+    }
+
     this.rootPid = pid;
+    this.knownPids.clear();
     this.knownPids.add(pid);
 
     // Accept all violations for the first 5 seconds while we build
@@ -142,8 +153,14 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
           }
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         // pgrep returns exit code 1 when no children found — expected
+        const err = error as { code?: number | string | null; message?: string };
+        if (err?.code === 1 || err?.code === "1") return;
+        console.warn(
+          `SandboxMonitor: pgrep failed for PID ${parentPid}:`,
+          err?.message ?? error
+        );
       });
   }
 }

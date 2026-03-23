@@ -56,16 +56,16 @@ monitor.on("violation", (v) => {
 // repeatedly so the monitor has time to start and discover the PID tree.
 const homedir = (await import("node:os")).homedir();
 const badFile = join(homedir, `.sandbox-monitor-test-${sessionId}`);
+// Use $1 to avoid shell injection if homedir has special characters
 const shellCmd = [
-  // Repeatedly trigger violations with short delays
   `for i in 1 2 3 4 5; do`,
-  `  touch ${badFile} 2>/dev/null;`,
+  `  touch "$1" 2>/dev/null;`,
   `  sleep 1;`,
   `done;`,
   `echo done`,
 ].join(" ");
 
-const args = buildSafehouseArgs(config, ["/bin/sh", "-c", shellCmd]);
+const args = buildSafehouseArgs(config, ["/bin/sh", "-c", shellCmd, "--", badFile]);
 
 console.log("Spawning sandboxed process that will trigger violations...\n");
 const proc = spawn("safehouse", args, {

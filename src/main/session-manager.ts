@@ -15,7 +15,7 @@ import {
   cleanupPolicy,
   cleanupOrphanPolicies,
 } from "./sandbox.js";
-import { SandboxMonitor, type SandboxViolation } from "./sandbox-monitor.js";
+import { SandboxMonitor } from "./sandbox-monitor.js";
 import type {
   AgentType,
   Message,
@@ -477,7 +477,7 @@ export class SessionManager {
   getSandboxViolations(sessionId: string): SandboxViolationInfo[] {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
-    return session.sandboxViolations;
+    return session.sandboxViolations.slice();
   }
 
   private summarize(session: SessionState): SessionSummary {
