@@ -5,6 +5,7 @@
 //
 // Usage: npx tsx scripts/test-policy-sandbox.ts
 
+import assert from "node:assert/strict";
 import { PolicyTemplateRegistry } from "../src/main/policy-registry.js";
 import { policyToSandboxConfig } from "../src/main/policy-sandbox.js";
 import { buildSafehouseArgs } from "../src/main/sandbox.js";
@@ -41,19 +42,19 @@ for (const summary of registry.list()) {
   const hasWorktreeReadOnly = config.readOnlyDirs.includes(ctx.worktreePath);
 
   if (summary.id === "standard-pr") {
-    console.assert(hasWorktreeWritable, "standard-pr: worktree should be writable");
-    console.assert(!hasWorktreeReadOnly, "standard-pr: worktree should not be read-only");
-    console.assert(hasAppendProfile, "standard-pr: should have append profile (network deny)");
-    console.assert(config.appendProfileContent!.includes("deny network-outbound"),
+    assert(hasWorktreeWritable, "standard-pr: worktree should be writable");
+    assert(!hasWorktreeReadOnly, "standard-pr: worktree should not be read-only");
+    assert(hasAppendProfile, "standard-pr: should have append profile (network deny)");
+    assert(config.appendProfileContent!.includes("deny network-outbound"),
       "standard-pr: append profile should deny network");
   } else if (summary.id === "research-only") {
-    console.assert(!hasWorktreeWritable, "research-only: worktree should not be writable");
-    console.assert(hasWorktreeReadOnly, "research-only: worktree should be read-only");
-    console.assert(!hasAppendProfile, "research-only: should not have append profile");
+    assert(!hasWorktreeWritable, "research-only: worktree should not be writable");
+    assert(hasWorktreeReadOnly, "research-only: worktree should be read-only");
+    assert(!hasAppendProfile, "research-only: should not have append profile");
   } else if (summary.id === "permissive") {
-    console.assert(hasWorktreeWritable, "permissive: worktree should be writable");
-    console.assert(!hasWorktreeReadOnly, "permissive: worktree should not be read-only");
-    console.assert(!hasAppendProfile, "permissive: should not have append profile");
+    assert(hasWorktreeWritable, "permissive: worktree should be writable");
+    assert(!hasWorktreeReadOnly, "permissive: worktree should not be read-only");
+    assert(!hasAppendProfile, "permissive: should not have append profile");
   }
 
   console.log(`  ✓ Assertions passed\n`);

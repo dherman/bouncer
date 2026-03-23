@@ -1,9 +1,7 @@
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import type { PolicyTemplate } from "./types.js";
+import { POLICY_DIR, BASE_ENV_PASSTHROUGH } from "./sandbox.js";
 import type { SandboxConfig } from "./sandbox.js";
-
-const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
 
 export interface SessionContext {
   sessionId: string;
@@ -12,17 +10,6 @@ export interface SessionContext {
   readOnlyDirs?: string[];
 }
 
-const BASE_ENV = [
-  "ANTHROPIC_API_KEY",
-  "NODE_OPTIONS",
-  "NODE_PATH",
-  "EDITOR",
-  "VISUAL",
-  "GIT_AUTHOR_NAME",
-  "GIT_AUTHOR_EMAIL",
-  "GIT_COMMITTER_NAME",
-  "GIT_COMMITTER_EMAIL",
-];
 
 export function policyToSandboxConfig(
   template: PolicyTemplate,
@@ -53,7 +40,7 @@ export function policyToSandboxConfig(
 
   // Environment variables: base set minus excludes, plus additions
   const envPassthrough = [
-    ...BASE_ENV.filter((v) => !template.env.exclude.includes(v)),
+    ...BASE_ENV_PASSTHROUGH.filter((v) => !template.env.exclude.includes(v)),
     ...template.env.additional,
   ];
 
@@ -66,6 +53,10 @@ export function policyToSandboxConfig(
       ";; Block all outbound network access.",
       "(deny network-outbound)",
       "(deny network-bind)",
+    );
+  } else if (template.network.access === "filtered") {
+    throw new Error(
+      "Network access mode 'filtered' is not yet supported by policyToSandboxConfig",
     );
   }
 

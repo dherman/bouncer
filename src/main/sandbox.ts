@@ -26,7 +26,19 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
 
-const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
+export const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
+
+export const BASE_ENV_PASSTHROUGH = [
+  "ANTHROPIC_API_KEY",
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "EDITOR",
+  "VISUAL",
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+];
 
 export interface SandboxConfig {
   /** Working directory for the sandboxed process (and git root detection). */
@@ -126,20 +138,7 @@ export function defaultSandboxConfig({
     workdir: worktreePath,
     writableDirs,
     readOnlyDirs: extraReadOnlyDirs ?? [],
-    envPassthrough: [
-      // Claude Code auth
-      "ANTHROPIC_API_KEY",
-      // Node.js runtime
-      "NODE_OPTIONS",
-      "NODE_PATH",
-      // Common dev env vars
-      "EDITOR",
-      "VISUAL",
-      "GIT_AUTHOR_NAME",
-      "GIT_AUTHOR_EMAIL",
-      "GIT_COMMITTER_NAME",
-      "GIT_COMMITTER_EMAIL",
-    ],
+    envPassthrough: [...BASE_ENV_PASSTHROUGH],
     policyOutputPath: join(POLICY_DIR, `${sessionId}.sb`),
   };
 }
