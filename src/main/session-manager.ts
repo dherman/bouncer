@@ -334,6 +334,9 @@ export class SessionManager {
           // Best effort cleanup
         }
       }
+      if (sandboxConfig) {
+        await cleanupPolicy(sandboxConfig.policyOutputPath);
+      }
       session.status = "error";
       this.emit("session-update", {
         sessionId: id,
