@@ -149,132 +149,28 @@ The log stream approach is primary because it catches violations from all child 
 
 Generates SBPL profile strings from a structured policy specification. This is the core new module for Milestone 2.
 
-```typescript
-export interface SandboxPolicy {
-  /** Paths the sandboxed process can read and write */
-  writablePaths: string[];
-  /** Paths the sandboxed process can read (but not write) */
-  readOnlyPaths: string[];
-  /** Whether to allow outbound network access */
-  allowNetwork: boolean;
-}
+The full interface and default policy are implemented in `src/main/sandbox-profile.ts`. Key aspects of the default policy, informed by [agent-safehouse](https://agent-safehouse.dev) profiles:
 
-export function generateProfile(policy: SandboxPolicy): string;
+**Writable paths** include the worktree, temp directories (`/tmp`, `/var/folders`), Claude Code state (`~/.claude`, `~/.cache/claude`), Node.js package manager caches (`~/.npm`, `~/.pnpm-store`, etc.), and — critically — the **git common dir** for linked worktrees (the parent repo's `.git` directory, without which git operations fail from a worktree).
 
-export function defaultPolicy(params: {
-  worktreePath: string;
-  homedir: string;
-  tmpdir: string;
-}): SandboxPolicy;
+**Read-only paths** include system binaries/libraries, Homebrew paths, scoped `/private/etc` entries (not a broad `/private/etc` subpath), shell init files, git config, SSH config, and XDG directories.
 
-export function writePolicyToDisk(
-  sessionId: string,
-  profile: string
-): Promise<string>; // returns path to .sb file
-```
+**Network** is denied (Milestone 6 adds proxy-based allowlisting).
 
-**`defaultPolicy()`** returns the starting policy for Milestone 2:
+**`generateProfile()`** converts the policy to SBPL. The generated profile includes, beyond the path rules:
 
-```typescript
-function defaultPolicy({ worktreePath, homedir, tmpdir }) {
-  return {
-    writablePaths: [
-      worktreePath,                        // Session worktree (read-write)
-      `${tmpdir}/glitterball-${sessionId}`, // Session-scoped tmp directory
-    ],
-    readOnlyPaths: [
-      // System binaries and libraries
-      "/usr/bin",
-      "/usr/lib",
-      "/usr/libexec",
-      "/usr/share",
-      "/bin",
-      "/sbin",
-      "/Library/Apple",
-      "/System",
-      "/private/var/db",                    // dyld shared cache, etc.
-      "/dev",                               // /dev/null, /dev/urandom, etc.
-      "/etc",                               // System config (resolv.conf, etc.)
-      "/private/etc",                       // Real path for /etc on macOS
-      "/var",                               // Various system state
+- **Process operations**: `process-exec`, `process-fork`, `signal` and `process-info*` scoped to `same-sandbox`, `pseudo-tty` for PTY allocation, `sysctl-read`
+- **Mach IPC**: broad `mach-lookup` (tightening to specific services is a future hardening step), `system-socket`, `ipc-posix-shm-read-data` for notification center
+- **Root directory**: `(allow file-read* (literal "/"))` — processes need to read the root dir itself for path resolution; individual `(subpath "/usr")` rules don't cover it
+- **Device nodes**: read-write access to `/dev/fd`, `/dev/stdout`, `/dev/stderr`, `/dev/null`, `/dev/tty`, `/dev/ptmx`, `/dev/dtracehelper`, and dynamic tty/pty patterns; read-only access to `/dev/zero`, `/dev/urandom`, `/dev/random`, `/dev/autofs_nowait`
+- **TTY ioctl**: `file-ioctl` on tty/pty devices for terminal operations
+- **Metadata traversal**: `file-read-metadata` on `/private`, `/private/var`, `/private/var/run`, `/private/etc`, `/home` for symlink and path resolution
 
-      // Homebrew / user-installed tools
-      "/usr/local",
-      "/opt/homebrew",
+These rules are informed by [agent-safehouse](https://agent-safehouse.dev) `10-system-runtime.sb` and validated against real `sandbox-exec` execution.
 
-      // User-level dotfiles that tools commonly need
-      `${homedir}/.gitconfig`,
-      `${homedir}/.gitignore_global`,
-      `${homedir}/.ssh`,                    // SSH keys for git operations
-      `${homedir}/.claude`,                 // Claude Code config and state
-      `${homedir}/.claude.json`,            // Claude Code auth
-      `${homedir}/.config`,                 // XDG config (various tools)
-      `${homedir}/.npm`,                    // npm cache (read-only)
-      `${homedir}/.node_modules`,
-      `${homedir}/.nvm`,                    // Node version manager
-      `${homedir}/.cargo`,                  // Rust toolchain
-      `${homedir}/.rustup`,
-      `${homedir}/.zshrc`,                  // Shell config (sourced by subshells)
-      `${homedir}/.zshenv`,
-      `${homedir}/.zprofile`,
-      `${homedir}/.bashrc`,
-      `${homedir}/.bash_profile`,
-      `${homedir}/.profile`,
-    ],
-    allowNetwork: false,
-  };
-}
-```
+> **Note on Mach IPC**: The initial profile allows all `mach-lookup` operations. This is intentionally broad — many macOS system services require Mach IPC. Agent-safehouse documents the specific services needed (logd, FSEvents, trustd, configd, DNSConfiguration, etc.) which we can tighten to in a future hardening pass.
 
-**`generateProfile()`** converts the policy to SBPL:
-
-```scheme
-(version 1)
-(deny default)
-
-; Process execution — required for spawning subprocesses
-(allow process-exec*)
-(allow process-fork)
-
-; Signal handling
-(allow signal (target self))
-
-; Mach IPC — required for basic process operation on macOS
-(allow mach-lookup)
-(allow mach-register)
-
-; Sysctl — many processes read kernel parameters
-(allow sysctl-read)
-
-; IOKit — needed for some system queries
-(allow iokit-open)
-
-; Root directory — processes need to read "/" for path resolution.
-; (subpath "/foo") does NOT cover "/" itself.
-(allow file-read* (literal "/"))
-
-; /dev writes — stdout, stderr, /dev/null, dtrace
-(allow file-write* (literal "/dev/null"))
-(allow file-write* (literal "/dev/tty"))
-(allow file-write* (regex "^/dev/fd/"))
-(allow file-write* (regex "^/dev/dtracehelper"))
-
-;; ── Writable paths ──────────────────────────────────────
-(allow file-read* (subpath "${writablePaths[0]}"))
-(allow file-write* (subpath "${writablePaths[0]}"))
-; ... for each writable path
-
-;; ── Read-only paths ─────────────────────────────────────
-(allow file-read* (subpath "${readOnlyPaths[0]}"))
-; ... for each read-only path
-
-;; ── Deny all network ────────────────────────────────────
-; (network* is denied by the default deny)
-```
-
-> **Note on Mach IPC**: The initial profile allows all `mach-lookup` operations. This is intentionally broad — many macOS system services require Mach IPC (CoreFoundation, libdispatch, Security.framework, etc.), and blocking them causes opaque crashes. As we learn which services the agent actually needs, we can tighten this to specific service names. Cursor and Claude Code's own sandbox also allow broad Mach IPC.
-
-> **Note on `process-exec*`**: The profile allows executing any binary. This is safe because the filesystem rules control *which* binaries are readable — if a binary isn't on an allowed read path, it can't be loaded even if exec is allowed. Restricting `process-exec` to specific binaries is fragile (agents invoke many different tools) and would be a maintenance burden without meaningful security benefit, since the filesystem boundary is already enforced.
+> **Note on `process-exec`**: The profile allows executing any binary. This is safe because the filesystem rules control *which* binaries are readable. Agent-safehouse takes the same approach.
 
 ### 2. Sandbox Monitor (`src/main/sandbox-monitor.ts`) [NEW]
 
@@ -342,6 +238,8 @@ async createSession(projectDir: string, agentType: AgentType = "claude-code") {
     worktreePath: worktree.path,
     homedir: os.homedir(),
     tmpdir: os.tmpdir(),
+    sessionId: id,
+    gitCommonDir: worktree.gitCommonDir,  // parent repo's .git dir
   });
   const profileContent = generateProfile(policy);
   const profilePath = await writePolicyToDisk(id, profileContent);
@@ -489,17 +387,8 @@ Based on prior art from Claude Code's sandbox, Cursor's sandbox, and the roadmap
 | macOS dyld cache | Dynamic linker shared cache at `/private/var/db/dyld/` | Read-only access (already in default policy) |
 | Temp files | Various tools write to `/tmp` or `$TMPDIR` | Session-scoped tmp directory with write access |
 | CoreFoundation | Mach IPC lookups for system services | Broad `mach-lookup` allow (already in profile) |
-| Claude Code state | Writes to `~/.claude/` (session data, todos, etc.) | Needs investigation — may need write access to specific subdirs |
-
-### Claude Code state directory: a special case
-
-Claude Code writes to `~/.claude/` during operation (session transcripts, file history, todos, debug logs). The default policy grants read-only access. This means Claude Code **cannot persist its own session state** when running under our sandbox.
-
-This may be acceptable for Milestone 2 (our session manager handles session state via ACP), but it could cause errors if Claude Code assumes write access to `~/.claude/`. We'll discover this empirically and decide:
-
-- **Option A**: Allow write access to `~/.claude/` — simple, but broadens the boundary
-- **Option B**: Allow write access to specific subdirs (`~/.claude/projects/`, `~/.claude/debug/`) — more precise
-- **Option C**: Accept that Claude Code can't persist state — evaluate if this causes functional issues
+| Claude Code state | Writes to `~/.claude/` (session data, todos, etc.) | **Resolved**: write access to `~/.claude/`, `~/.cache/claude`, `~/.config/claude`, `~/.local/state/claude`, `~/.local/share/claude` (following agent-safehouse `60-agents/claude-code.sb`) |
+| Git worktree common dir | Linked worktrees store refs/metadata in parent repo's `.git` | **Resolved**: `defaultPolicy()` accepts `gitCommonDir` parameter; write access to parent `.git` dir (following agent-safehouse `50-integrations-core/worktree-common-dir.sb`) |
 
 ---
 

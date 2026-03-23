@@ -81,17 +81,17 @@ try {
   fail(`touch in worktree FAILED: ${err.message}`);
 }
 
-// Test 3: write outside worktree (should fail)
-const badFile = `/tmp/.sandbox-test-bad-${sessionId}`;
+// Test 3: write to home directory (should fail)
+const badFile = `${homedir()}/.sandbox-test-bad-${sessionId}`;
 try {
   await execFileAsync(
     "/usr/bin/sandbox-exec",
     ["-f", profilePath, "/usr/bin/touch", badFile],
   );
-  fail("touch in /tmp succeeded (should have been blocked)");
+  fail("touch in ~ succeeded (should have been blocked)");
   await rm(badFile, { force: true });
 } catch {
-  pass("touch in /tmp blocked (expected)");
+  pass("touch in ~ blocked (expected — home dir not broadly writable)");
 }
 
 // Test 4: read system binary (should succeed)
