@@ -58,6 +58,12 @@ export function buildSafehouseArgs(
   // Persist the policy file so we control its lifecycle
   args.push(`--output=${config.policyOutputPath}`);
 
+  // Load all agent profiles — safehouse selects profiles by command
+  // basename, but we spawn "node <agent-bin>" so it can't detect that
+  // the wrapped process is Claude Code. --enable=all-agents loads all
+  // agent-specific grants (Claude Code state dirs, etc.).
+  args.push("--enable=all-agents");
+
   // Set the working directory for git root detection
   args.push(`--workdir=${config.workdir}`);
 
