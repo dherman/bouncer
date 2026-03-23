@@ -52,6 +52,11 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send(channel, data)
   })
 
+  // Clean up orphan worktrees from previous crashes
+  sessionManager.cleanupOrphanWorktrees().catch((err) => {
+    console.warn('Failed to clean up orphan worktrees:', err)
+  })
+
   // IPC handlers for renderer → main communication
   ipcMain.handle('sessions:list', () => sessionManager.listSessions())
   ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown) => {
@@ -83,6 +88,19 @@ app.whenReady().then(() => {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+
+  // Clean up all sessions before quitting
+  app.on('before-quit', (event) => {
+    const activeSessions = sessionManager.listSessions().filter(
+      (s) => s.status !== 'closed'
+    )
+    if (activeSessions.length > 0) {
+      event.preventDefault()
+      sessionManager.closeAllSessions().finally(() => {
+        app.quit()
+      })
+    }
   })
 
   app.on('activate', () => {

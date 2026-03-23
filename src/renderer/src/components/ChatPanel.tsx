@@ -6,6 +6,7 @@ interface Props {
   messages: Message[]
   streamingText: Map<string, string>
   sessionStatus: SessionSummary['status']
+  sessionError?: string
   onSendMessage: (text: string) => void
   onCloseSession: () => void
 }
@@ -37,6 +38,7 @@ export function ChatPanel({
   messages,
   streamingText,
   sessionStatus,
+  sessionError,
   onSendMessage,
   onCloseSession,
 }: Props) {
@@ -78,7 +80,7 @@ export function ChatPanel({
         })}
         {sessionStatus === 'error' && (
           <div className="session-state-banner error">
-            Session disconnected
+            {sessionError ?? 'Session disconnected'}
             <button onClick={onCloseSession}>Close session</button>
           </div>
         )}

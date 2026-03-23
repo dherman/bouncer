@@ -27,7 +27,7 @@ export interface SessionSummary {
 }
 
 export type SessionUpdate =
-  | { sessionId: string; type: "status-change"; status: SessionSummary["status"] }
+  | { sessionId: string; type: "status-change"; status: SessionSummary["status"]; error?: string }
   | { sessionId: string; type: "message"; message: Message }
   | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
   | { sessionId: string; type: "stream-end"; messageId: string }

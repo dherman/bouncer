@@ -9,6 +9,7 @@ function App() {
   const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map())
   const [streamingText, setStreamingText] = useState<Map<string, string>>(new Map())
   const [createError, setCreateError] = useState<string | null>(null)
+  const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
 
   const handleUpdate = useCallback((update: SessionUpdate) => {
     switch (update.type) {
@@ -18,6 +19,13 @@ function App() {
             s.id === update.sessionId ? { ...s, status: update.status } : s
           )
         )
+        if (update.status === 'error' && update.error) {
+          setSessionErrors((prev) => {
+            const next = new Map(prev)
+            next.set(update.sessionId, update.error!)
+            return next
+          })
+        }
         break
 
       case 'message':
@@ -158,6 +166,7 @@ function App() {
           messages={activeMessages}
           streamingText={streamingText}
           sessionStatus={activeSession.status}
+          sessionError={sessionErrors.get(activeSession.id)}
           onSendMessage={handleSendMessage}
           onCloseSession={() => handleCloseSession(activeSession.id)}
         />

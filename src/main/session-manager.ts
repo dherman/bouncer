@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { readdir, rm } from "node:fs/promises";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { app } from "electron";
@@ -73,6 +75,7 @@ interface SessionState {
   connection: acp.ClientSideConnection;
   messages: Message[];
   status: "initializing" | "ready" | "error" | "closed";
+  errorMessage?: string;
   agentType: AgentType;
   projectDir: string;
   worktree: WorktreeInfo | null;
@@ -124,30 +127,48 @@ export class SessionManager {
       // Spawn the agent
       const { cmd, args, env, cwd } = resolveAgentCommand(agentType, workingDir);
       const agentProcess = spawn(cmd, args, {
-        stdio: ["pipe", "pipe", "inherit"],
+        stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...env },
         cwd,
       });
       session.agentProcess = agentProcess;
 
+      // Capture stderr for error reporting
+      let collectedStderr = "";
+      agentProcess.stderr?.on("data", (data: Buffer) => {
+        collectedStderr += data.toString();
+        // Also forward to the main process console for debugging
+        process.stderr.write(data);
+      });
+
       // Handle agent crashes
-      agentProcess.on("exit", () => {
+      agentProcess.on("exit", (code) => {
         if (session.status !== "closed") {
+          const errorMessage =
+            session.status === "initializing"
+              ? collectedStderr.trim() ||
+                `Agent exited with code ${code}`
+              : undefined;
           session.status = "error";
+          session.errorMessage = errorMessage;
           this.emit("session-update", {
             sessionId: id,
             type: "status-change",
             status: "error",
+            error: errorMessage,
           });
         }
       });
-      agentProcess.on("error", () => {
+      agentProcess.on("error", (err) => {
         if (session.status !== "closed") {
+          const errorMessage = err.message;
           session.status = "error";
+          session.errorMessage = errorMessage;
           this.emit("session-update", {
             sessionId: id,
             type: "status-change",
             status: "error",
+            error: errorMessage,
           });
         }
       });
@@ -362,6 +383,35 @@ export class SessionManager {
       type: "status-change",
       status: "closed",
     });
+  }
+
+  /** Close all active sessions. Called on app quit. */
+  async closeAllSessions(): Promise<void> {
+    const activeSessions = Array.from(this.sessions.values()).filter(
+      (s) => s.status !== "closed"
+    );
+    await Promise.all(
+      activeSessions.map((s) => this.closeSession(s.id).catch(() => {}))
+    );
+  }
+
+  /** Remove orphan worktree directories left behind by a previous crash. */
+  async cleanupOrphanWorktrees(): Promise<void> {
+    const worktreeDir = join(tmpdir(), "glitterball-worktrees");
+    try {
+      const entries = await readdir(worktreeDir);
+      for (const entry of entries) {
+        if (!this.sessions.has(entry)) {
+          console.log(`Cleaning up orphan worktree: ${entry}`);
+          await rm(join(worktreeDir, entry), {
+            recursive: true,
+            force: true,
+          });
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read — nothing to clean
+    }
   }
 
   private summarize(session: SessionState): SessionSummary {
