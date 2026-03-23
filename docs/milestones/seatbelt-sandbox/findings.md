@@ -32,7 +32,7 @@ The safehouse integration with `--enable=all-agents` provides a comprehensive sa
 **Electron cache friction:**
 ```
 Error: EPERM: operation not permitted, open
-  '/Users/dherman/Library/Caches/electron/.../electron-v41.0.3-darwin-arm64.zip'
+  '<home>/Library/Caches/electron/.../electron-v41.0.3-darwin-arm64.zip'
 ```
 
 This is `~/Library/Caches/electron/` — not in safehouse's default writable paths. The Electron npm package's `install.js` postinstall script tries to read/extract cached binaries here. This is specific to developing Electron apps inside the sandbox and wouldn't affect most coding workflows.
@@ -64,7 +64,7 @@ No changes were needed to `defaultSandboxConfig()`. The current configuration:
 - **Safehouse flags**: `--enable=all-agents`, `--workdir=<worktree>`, `--add-dirs=<worktree>`, `--add-dirs=<gitCommonDir>`, `--add-dirs-ro=<agentPkgDir>`
 - **Env passthrough**: `ANTHROPIC_API_KEY`, `NODE_OPTIONS`, `NODE_PATH`, `EDITOR`, `VISUAL`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`
 
-Safehouse's curated profiles handle system runtime, Node.js toolchain, Claude Code state directories, git config, SSH config, and shell init files without additional configuration.
+Safehouse's curated profiles handle system runtime, Node.js toolchain, Claude Code state directories, git config, and SSH config without additional configuration. Shell init files (`~/.zshrc`, `~/.bashrc`, etc.) require opt-in via `--enable=shell-init`.
 
 ## Known Limitations
 
