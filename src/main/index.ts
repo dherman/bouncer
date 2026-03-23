@@ -10,7 +10,7 @@ function createWindow(): void {
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    icon: join(__dirname, '../../resources/icon.icns'),
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
@@ -48,7 +48,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // Set Dock icon on macOS (works in dev mode too)
   if (process.platform === 'darwin' && app.dock) {
-    const iconPath = join(__dirname, '../../resources/icon.icns')
+    const iconPath = join(__dirname, '../../resources/icon.png')
     app.dock.setIcon(nativeImage.createFromPath(iconPath))
   }
 
