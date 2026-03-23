@@ -20,13 +20,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.6 Write `scripts/test-sandboxed-agent.ts`
   - [x] 2.7 Smoke test: agent starts, ACP handshake succeeds, reads worktree
   - [x] 2.8 Smoke test: agent writes within worktree
-- [ ] **[Phase 3: Sandbox Monitor](#phase-3-sandbox-monitor)**
-  - [ ] 3.1 Create `src/main/sandbox-monitor.ts` with types and skeleton
-  - [ ] 3.2 Implement `log stream` spawning and line parsing
-  - [ ] 3.3 Implement PID-tree filtering
-  - [ ] 3.4 Wire into session manager
-  - [ ] 3.5 Write `scripts/test-sandbox-monitor.ts`
-  - [ ] 3.6 Smoke test: trigger a violation, verify monitor captures it
+- [x] **[Phase 3: Sandbox Monitor](#phase-3-sandbox-monitor)**
+  - [x] 3.1 Create `src/main/sandbox-monitor.ts` with types and skeleton
+  - [x] 3.2 Implement `log stream` spawning and line parsing
+  - [x] 3.3 Implement PID-tree filtering
+  - [x] 3.4 Wire into session manager
+  - [x] 3.5 Write `scripts/test-sandbox-monitor.ts`
+  - [x] 3.6 Smoke test: trigger a violation, verify monitor captures it
 - [ ] **[Phase 4: UI Integration](#phase-4-ui-integration)**
   - [ ] 4.1 Add `SandboxViolationInfo` type and `sandbox-violation` SessionUpdate variant
   - [ ] 4.2 Add IPC handler for violation history
