@@ -22,7 +22,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +39,8 @@ export interface SandboxConfig {
   envPassthrough: string[];
   /** Path to write the generated policy file. */
   policyOutputPath: string;
+  /** Optional SBPL content appended to the generated profile via --append-profile. */
+  appendProfileContent?: string;
 }
 
 /**
@@ -80,6 +82,12 @@ export function buildSafehouseArgs(
   // Environment passthrough
   if (config.envPassthrough.length > 0) {
     args.push(`--env-pass=${config.envPassthrough.join(",")}`);
+  }
+
+  // Append profile overlay for policy-specific SBPL rules
+  if (config.appendProfileContent) {
+    const appendPath = config.policyOutputPath.replace(/\.sb$/, "-append.sb");
+    args.push(`--append-profile=${appendPath}`);
   }
 
   // Separator and command
@@ -159,10 +167,22 @@ export async function ensurePolicyDir(): Promise<void> {
 }
 
 /**
- * Clean up a session's policy file.
+ * Write the append profile file if the config includes custom SBPL content.
+ * Must be called before spawning safehouse.
+ */
+export async function writeAppendProfile(config: SandboxConfig): Promise<void> {
+  if (!config.appendProfileContent) return;
+  const appendPath = config.policyOutputPath.replace(/\.sb$/, "-append.sb");
+  await writeFile(appendPath, config.appendProfileContent, "utf-8");
+}
+
+/**
+ * Clean up a session's policy file(s), including any append profile.
  */
 export async function cleanupPolicy(policyPath: string): Promise<void> {
+  const appendPath = policyPath.replace(/\.sb$/, "-append.sb");
   await rm(policyPath, { force: true }).catch(() => {});
+  await rm(appendPath, { force: true }).catch(() => {});
 }
 
 /**
@@ -176,7 +196,8 @@ export async function cleanupOrphanPolicies(
     const entries = await readdir(POLICY_DIR);
     for (const entry of entries) {
       if (entry.endsWith(".sb")) {
-        const sessionId = entry.replace(".sb", "");
+        // Extract session ID from both "uuid.sb" and "uuid-append.sb"
+        const sessionId = entry.replace(/-append\.sb$/, "").replace(/\.sb$/, "");
         if (!activeSessionIds.has(sessionId)) {
           await rm(join(POLICY_DIR, entry), { force: true });
         }
