@@ -8,6 +8,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map())
   const [streamingText, setStreamingText] = useState<Map<string, string>>(new Map())
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const handleUpdate = useCallback((update: SessionUpdate) => {
     switch (update.type) {
@@ -110,10 +111,13 @@ function App() {
       const projectDir = await window.glitterball.dialog.selectDirectory()
       if (!projectDir) return // User cancelled
 
+      setCreateError(null)
       const session = await window.glitterball.sessions.create(projectDir)
       setSessions((prev) => [...prev, session])
       setActiveSessionId(session.id)
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setCreateError(message)
       console.error('Failed to create session:', err)
     }
   }
@@ -159,7 +163,16 @@ function App() {
         />
       ) : (
         <div className="chat-panel">
-          <div className="empty-state">Create a new session to get started</div>
+          <div className="empty-state">
+            {createError ? (
+              <div className="create-error">
+                <p>{createError}</p>
+                <button onClick={() => setCreateError(null)}>Dismiss</button>
+              </div>
+            ) : (
+              'Create a new session to get started'
+            )}
+          </div>
         </div>
       )}
     </div>
