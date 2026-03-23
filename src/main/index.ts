@@ -1,8 +1,6 @@
-import { app, shell, ipcMain, BrowserWindow } from 'electron'
+import { app, shell, ipcMain, dialog, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
-
-const isDev = !app.isPackaged
 
 let mainWindow: BrowserWindow | null = null
 
@@ -38,6 +36,7 @@ function createWindow(): void {
   })
 
   // HMR for renderer in dev, load from file in production
+  const isDev = !app.isPackaged
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -55,7 +54,13 @@ app.whenReady().then(() => {
 
   // IPC handlers for renderer → main communication
   ipcMain.handle('sessions:list', () => sessionManager.listSessions())
-  ipcMain.handle('sessions:create', () => sessionManager.createSession())
+  ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown) => {
+    if (typeof projectDir !== 'string') {
+      throw new Error('Invalid argument: projectDir must be a string')
+    }
+    const validAgentType = agentType === 'echo' ? 'echo' as const : 'claude-code' as const
+    return sessionManager.createSession(projectDir, validAgentType)
+  })
   ipcMain.handle('sessions:sendMessage', (_e, sessionId: unknown, text: unknown) => {
     if (typeof sessionId !== 'string' || typeof text !== 'string') {
       throw new Error('Invalid arguments: sessionId and text must be strings')
@@ -67,6 +72,15 @@ app.whenReady().then(() => {
       throw new Error('Invalid argument: sessionId must be a string')
     }
     return sessionManager.closeSession(sessionId)
+  })
+
+  ipcMain.handle('dialog:selectDirectory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+      title: 'Select project directory'
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
   })
 
   app.on('activate', () => {

@@ -277,3 +277,81 @@ body {
 .session-state-banner button:hover {
   background-color: #555;
 }
+
+/* Agent type badge */
+.agent-type-badge {
+  font-size: 10px;
+  color: #888;
+  font-style: italic;
+}
+
+/* Tool call blocks */
+.tool-calls {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-call-block {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.tool-status-icon {
+  flex-shrink: 0;
+}
+
+.tool-status-completed .tool-status-icon {
+  color: #5cb85c;
+}
+
+.tool-status-failed .tool-status-icon {
+  color: #d9534f;
+}
+
+.tool-status-in_progress .tool-status-icon,
+.tool-status-pending .tool-status-icon {
+  color: #f0ad4e;
+}
+
+.tool-name {
+  font-weight: 600;
+}
+
+.tool-title {
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-output {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.tool-output summary {
+  cursor: pointer;
+  color: #888;
+  font-size: 11px;
+}
+
+.tool-output pre {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}

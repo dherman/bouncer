@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Message, SessionSummary, SessionUpdate } from '../../main/types'
+import type { Message, SessionSummary, SessionUpdate, ToolCallInfo } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 
@@ -67,6 +67,30 @@ function App() {
         })
         break
       }
+
+      case 'tool-call':
+        setMessagesBySession((prev) => {
+          const next = new Map(prev)
+          const msgs = next.get(update.sessionId)
+          if (msgs) {
+            next.set(
+              update.sessionId,
+              msgs.map((m) => {
+                if (m.id !== update.messageId) return m
+                const toolCalls = m.toolCalls ? [...m.toolCalls] : []
+                const existing = toolCalls.findIndex((tc) => tc.id === update.toolCall.id)
+                if (existing >= 0) {
+                  toolCalls[existing] = update.toolCall
+                } else {
+                  toolCalls.push(update.toolCall)
+                }
+                return { ...m, toolCalls }
+              })
+            )
+          }
+          return next
+        })
+        break
     }
   }, [])
 
@@ -83,7 +107,10 @@ function App() {
 
   async function handleCreateSession() {
     try {
-      const session = await window.glitterball.sessions.create()
+      const projectDir = await window.glitterball.dialog.selectDirectory()
+      if (!projectDir) return // User cancelled
+
+      const session = await window.glitterball.sessions.create(projectDir)
       setSessions((prev) => [...prev, session])
       setActiveSessionId(session.id)
     } catch (err) {

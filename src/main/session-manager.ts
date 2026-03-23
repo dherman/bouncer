@@ -5,11 +5,23 @@ import { join } from "node:path";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { app } from "electron";
-import type { Message, SessionSummary, SessionUpdate } from "./types.js";
+import { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
+import type {
+  AgentType,
+  Message,
+  SessionSummary,
+  SessionUpdate,
+  ToolCallInfo,
+} from "./types.js";
 
-function resolveAgentCommand(): { cmd: string; args: string[]; env?: Record<string, string> } {
-  // In dev, run the TypeScript source via tsx
-  // In production, run the compiled JS as plain Node (not Electron)
+interface SpawnConfig {
+  cmd: string;
+  args: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+}
+
+function resolveEchoAgentCommand(): SpawnConfig {
   const isDev = !app.isPackaged;
   if (isDev) {
     const require = createRequire(app.getAppPath() + "/");
@@ -30,6 +42,26 @@ function resolveAgentCommand(): { cmd: string; args: string[]; env?: Record<stri
   }
 }
 
+function resolveClaudeCodeCommand(cwd: string): SpawnConfig {
+  const require = createRequire(app.getAppPath() + "/");
+  const binPath = require.resolve(
+    "@zed-industries/claude-agent-acp/dist/index.js"
+  );
+  return {
+    cmd: process.execPath,
+    args: [binPath],
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+    cwd,
+  };
+}
+
+function resolveAgentCommand(agentType: AgentType, cwd: string): SpawnConfig {
+  if (agentType === "echo") {
+    return resolveEchoAgentCommand();
+  }
+  return resolveClaudeCodeCommand(cwd);
+}
+
 interface SessionState {
   id: string;
   acpSessionId: string;
@@ -37,15 +69,34 @@ interface SessionState {
   connection: acp.ClientSideConnection;
   messages: Message[];
   status: "initializing" | "ready" | "error" | "closed";
+  agentType: AgentType;
+  projectDir: string;
+  worktree: WorktreeInfo | null;
 }
 
 export class SessionManager {
   private sessions = new Map<string, SessionState>();
+  private worktreeManager = new WorktreeManager();
 
   constructor(private emit: (channel: string, data: SessionUpdate) => void) {}
 
-  async createSession(): Promise<SessionSummary> {
+  async createSession(
+    projectDir: string,
+    agentType: AgentType = "claude-code"
+  ): Promise<SessionSummary> {
     const id = randomUUID();
+    let worktree: WorktreeInfo | null = null;
+
+    // Create worktree for Claude Code sessions
+    if (agentType === "claude-code") {
+      const isGitRepo = await this.worktreeManager.validateGitRepo(projectDir);
+      if (!isGitRepo) {
+        throw new Error(`Not a git repository: ${projectDir}`);
+      }
+      worktree = await this.worktreeManager.create(id, projectDir);
+    }
+
+    const workingDir = worktree?.path ?? projectDir;
 
     const session: SessionState = {
       id,
@@ -54,16 +105,24 @@ export class SessionManager {
       connection: null!,
       messages: [],
       status: "initializing",
+      agentType,
+      projectDir,
+      worktree,
     };
     this.sessions.set(id, session);
-    this.emit("session-update", { sessionId: id, type: "status-change", status: "initializing" });
+    this.emit("session-update", {
+      sessionId: id,
+      type: "status-change",
+      status: "initializing",
+    });
 
     try {
-      // Spawn the echo agent
-      const { cmd, args, env } = resolveAgentCommand();
+      // Spawn the agent
+      const { cmd, args, env, cwd } = resolveAgentCommand(agentType, workingDir);
       const agentProcess = spawn(cmd, args, {
         stdio: ["pipe", "pipe", "inherit"],
         env: { ...process.env, ...env },
+        cwd,
       });
       session.agentProcess = agentProcess;
 
@@ -71,13 +130,21 @@ export class SessionManager {
       agentProcess.on("exit", () => {
         if (session.status !== "closed") {
           session.status = "error";
-          this.emit("session-update", { sessionId: id, type: "status-change", status: "error" });
+          this.emit("session-update", {
+            sessionId: id,
+            type: "status-change",
+            status: "error",
+          });
         }
       });
       agentProcess.on("error", () => {
         if (session.status !== "closed") {
           session.status = "error";
-          this.emit("session-update", { sessionId: id, type: "status-change", status: "error" });
+          this.emit("session-update", {
+            sessionId: id,
+            type: "status-change",
+            status: "error",
+          });
         }
       });
 
@@ -91,8 +158,10 @@ export class SessionManager {
         (_agent) => ({
           async sessionUpdate(params) {
             const update = params.update;
-            if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-              // Find the streaming agent message and append text
+            if (
+              update.sessionUpdate === "agent_message_chunk" &&
+              update.content.type === "text"
+            ) {
               const agentMsg = session.messages.findLast(
                 (m) => m.role === "agent" && m.streaming
               );
@@ -105,10 +174,68 @@ export class SessionManager {
                   text: update.content.text,
                 });
               }
+            } else if (
+              update.sessionUpdate === "tool_call" ||
+              update.sessionUpdate === "tool_call_update"
+            ) {
+              const agentMsg = session.messages.findLast(
+                (m) => m.role === "agent"
+              );
+              if (agentMsg) {
+                const meta = update._meta as
+                  | { claudeCode?: { toolName?: string; toolResponse?: unknown } }
+                  | undefined;
+                const toolCall: ToolCallInfo = {
+                  id: update.toolCallId,
+                  name: meta?.claudeCode?.toolName ?? "Tool",
+                  status:
+                    "status" in update
+                      ? (update.status as ToolCallInfo["status"])
+                      : "in_progress",
+                  title: "title" in update ? (update.title as string) : undefined,
+                  output:
+                    "rawOutput" in update
+                      ? (update.rawOutput as string)
+                      : undefined,
+                };
+                agentMsg.toolCalls = agentMsg.toolCalls ?? [];
+                const existing = agentMsg.toolCalls.find(
+                  (tc) => tc.id === toolCall.id
+                );
+                if (existing) {
+                  Object.assign(existing, toolCall);
+                } else {
+                  agentMsg.toolCalls.push(toolCall);
+                }
+                emitUpdate("session-update", {
+                  sessionId: id,
+                  type: "tool-call",
+                  messageId: agentMsg.id,
+                  toolCall,
+                });
+              }
             }
           },
-          async requestPermission(_params) {
-            return { outcome: { outcome: "cancelled" as const } };
+          async requestPermission(params) {
+            // Auto-approve: select the first allow_once option
+            const allowOption = params.options.find(
+              (o) => o.kind === "allow_once"
+            );
+            if (allowOption) {
+              return {
+                outcome: {
+                  outcome: "selected" as const,
+                  optionId: allowOption.optionId,
+                },
+              };
+            }
+            // Fallback: select first option
+            return {
+              outcome: {
+                outcome: "selected" as const,
+                optionId: params.options[0].optionId,
+              },
+            };
           },
         }),
         stream
@@ -118,22 +245,40 @@ export class SessionManager {
       // ACP handshake
       await connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
-        clientCapabilities: {},
+        clientCapabilities: {
+          terminal: true,
+          fs: { readTextFile: true, writeTextFile: true },
+        },
       });
 
       const sessionResp = await connection.newSession({
-        cwd: process.cwd(),
+        cwd: workingDir,
         mcpServers: [],
       });
       session.acpSessionId = sessionResp.sessionId;
 
       session.status = "ready";
-      this.emit("session-update", { sessionId: id, type: "status-change", status: "ready" });
+      this.emit("session-update", {
+        sessionId: id,
+        type: "status-change",
+        status: "ready",
+      });
     } catch (err) {
       console.error(`Failed to create session ${id}:`, err);
       session.agentProcess?.kill();
+      if (worktree) {
+        try {
+          await this.worktreeManager.remove(worktree);
+        } catch {
+          // Best effort cleanup
+        }
+      }
       session.status = "error";
-      this.emit("session-update", { sessionId: id, type: "status-change", status: "error" });
+      this.emit("session-update", {
+        sessionId: id,
+        type: "status-change",
+        status: "error",
+      });
     }
 
     return this.summarize(session);
@@ -142,7 +287,8 @@ export class SessionManager {
   async sendMessage(sessionId: string, text: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
-    if (session.status !== "ready") throw new Error(`Session not ready: ${session.status}`);
+    if (session.status !== "ready")
+      throw new Error(`Session not ready: ${session.status}`);
 
     // Create user message
     const userMsg: Message = {
@@ -177,7 +323,11 @@ export class SessionManager {
 
     // Finalize the agent message
     agentMsg.streaming = false;
-    this.emit("session-update", { sessionId, type: "stream-end", messageId: agentMsg.id });
+    this.emit("session-update", {
+      sessionId,
+      type: "stream-end",
+      messageId: agentMsg.id,
+    });
   }
 
   listSessions(): SessionSummary[] {
@@ -190,7 +340,24 @@ export class SessionManager {
 
     session.status = "closed";
     session.agentProcess?.kill();
-    this.emit("session-update", { sessionId, type: "status-change", status: "closed" });
+
+    // Tear down worktree
+    if (session.worktree) {
+      try {
+        await this.worktreeManager.remove(session.worktree);
+      } catch (err) {
+        console.warn(
+          `Failed to remove worktree for session ${sessionId}:`,
+          err
+        );
+      }
+    }
+
+    this.emit("session-update", {
+      sessionId,
+      type: "status-change",
+      status: "closed",
+    });
   }
 
   private summarize(session: SessionState): SessionSummary {
@@ -198,6 +365,8 @@ export class SessionManager {
       id: session.id,
       status: session.status,
       messageCount: session.messages.length,
+      agentType: session.agentType,
+      projectDir: session.projectDir,
     };
   }
 }

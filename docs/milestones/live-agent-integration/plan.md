@@ -18,33 +18,21 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.4 Write `scripts/test-claude-agent.ts` standalone test
   - [x] 2.5 Smoke test: ACP handshake + simple prompt with Claude Code
   - [x] 2.6 Document deviations in `sdk-deviations.md`
-- [ ] **[Phase 3: Terminal Management](#phase-3-terminal-management)**
-  - [ ] 3.1 Define `TerminalState` type
-  - [ ] 3.2 Implement `createTerminal()` — spawn shell in worktree
-  - [ ] 3.3 Implement `terminalOutput()` — return accumulated output
-  - [ ] 3.4 Implement `killTerminal()` — send SIGTERM
-  - [ ] 3.5 Implement `waitForTerminalExit()` — wait for process exit
-  - [ ] 3.6 Implement `releaseTerminal()` — cleanup tracking state
-  - [ ] 3.7 Verify terminals work via the Claude Code test script
-- [ ] **[Phase 4: Session Manager Integration](#phase-4-session-manager-integration)**
-  - [ ] 4.1 Extend `SessionState` with new fields
-  - [ ] 4.2 Update `createSession()` — agent type selection + worktree creation
-  - [ ] 4.3 Implement `resolveClaudeCodeCommand()`
-  - [ ] 4.4 Implement `readTextFile()` and `writeTextFile()` in Client
-  - [ ] 4.5 Switch `requestPermission()` from `cancelled` to `approved`
-  - [ ] 4.6 Expand `sessionUpdate()` handler for tool calls and plans
-  - [ ] 4.7 Update `closeSession()` — terminal cleanup + worktree teardown
-  - [ ] 4.8 Verify from main process: create Claude Code session, send prompt, see response
-- [ ] **[Phase 5: IPC and UI Updates](#phase-5-ipc-and-ui-updates)**
-  - [ ] 5.1 Add `dialog:selectDirectory` IPC handler
-  - [ ] 5.2 Update `sessions:create` to accept `projectDir` and `agentType`
-  - [ ] 5.3 Update preload bridge with new signatures
-  - [ ] 5.4 Update renderer type declarations
-  - [ ] 5.5 Update `<SessionList />` — project name labels, agent type indicator
-  - [ ] 5.6 Update `<App />` — directory picker flow on "New Session"
-  - [ ] 5.7 Add `<ToolCallBlock />` component for tool call display
-  - [ ] 5.8 Wire new `SessionUpdate` variants (`tool-call`, `plan-update`) into `handleUpdate`
-  - [ ] 5.9 Full flow test: select project → create session → chat with Claude Code
+- [x] **Phase 3+4+5: Session Manager Integration + IPC + UI** *(collapsed — Phase 2 revealed Claude Code handles tools internally, making Phase 3 terminal management unnecessary)*
+  - [x] Extend `SessionState` with agentType, projectDir, worktree
+  - [x] Update `createSession()` — agent type selection + worktree creation
+  - [x] Implement `resolveClaudeCodeCommand()`
+  - [x] Update `requestPermission()` to options-based API (allow_once)
+  - [x] Expand `sessionUpdate()` handler for tool_call and tool_call_update
+  - [x] Update `closeSession()` — worktree teardown
+  - [x] Add `dialog:selectDirectory` IPC handler
+  - [x] Update `sessions:create` to accept `projectDir` and `agentType`
+  - [x] Update preload bridge and renderer type declarations
+  - [x] Update `<SessionList />` — project name labels, agent type badge
+  - [x] Update `<App />` — directory picker flow on "New Session"
+  - [x] Add `<ToolCallBlock />` component for tool call display
+  - [x] Wire `tool-call` SessionUpdate variant into `handleUpdate`
+  - [ ] Full flow test: select project → create session → chat with Claude Code
 - [ ] **[Phase 6: Edge Cases and Polish](#phase-6-edge-cases-and-polish)**
   - [ ] 6.1 Agent startup failure handling (missing API key, Claude Code not installed)
   - [ ] 6.2 Worktree creation failure handling (not a git repo, git not found)
