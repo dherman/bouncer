@@ -133,11 +133,20 @@ export class SessionManager {
     let sandboxConfig: SandboxConfig | null = null;
     if (agentType === "claude-code" && (await isSafehouseAvailable())) {
       await ensurePolicyDir();
+      // Resolve the agent binary directory for read-only sandbox access.
+      // The worktree is in /tmp, so the app's node_modules (where the
+      // agent binary lives) must be explicitly granted.
+      const agentRequire = createRequire(app.getAppPath() + "/");
+      const agentPkgDir = join(
+        agentRequire.resolve("@zed-industries/claude-agent-acp/package.json"),
+        ".."
+      );
+
       sandboxConfig = defaultSandboxConfig({
         sessionId: id,
         worktreePath: workingDir,
         gitCommonDir: worktree?.gitCommonDir,
-        appDir: app.getAppPath(),
+        readOnlyDirs: [agentPkgDir],
       });
     }
 
@@ -488,6 +497,7 @@ export class SessionManager {
       messageCount: session.messages.length,
       agentType: session.agentType,
       projectDir: session.projectDir,
+      sandboxed: session.sandboxConfig !== null,
     };
   }
 }

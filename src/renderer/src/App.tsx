@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Message, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
@@ -167,10 +167,13 @@ function App() {
     ? violationsBySession.get(activeSessionId) ?? []
     : []
 
-  const violationCounts = new Map<string, number>()
-  for (const [id, vs] of violationsBySession) {
-    violationCounts.set(id, vs.length)
-  }
+  const violationCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const [id, vs] of violationsBySession) {
+      counts.set(id, vs.length)
+    }
+    return counts
+  }, [violationsBySession])
 
   return (
     <div className="app">

@@ -42,7 +42,7 @@ export function SessionList({ sessions, activeSessionId, violationCounts, onSele
           <span className="session-label">
             {projectLabel(s)}
             {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-            {s.agentType === 'claude-code' && <span className="sandbox-badge">&#x1F6E1;</span>}
+            {s.sandboxed && <span className="sandbox-badge">&#x1F6E1;</span>}
             {(violationCounts.get(s.id) ?? 0) > 0 && (
               <span className="violation-count">{violationCounts.get(s.id)}</span>
             )}

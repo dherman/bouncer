@@ -24,6 +24,7 @@ export interface SessionSummary {
   messageCount: number;
   agentType: AgentType;
   projectDir: string;
+  sandboxed: boolean;
 }
 
 export interface SandboxViolationInfo {
