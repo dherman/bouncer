@@ -21,7 +21,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 3.3 Add `policyId` and `policyName` to `SessionState` and `SessionSummary`
   - [x] 3.4 Update cleanup paths for append-profile files
   - [x] 3.5 Deprecate `defaultSandboxConfig()` with forwarding wrapper
-  - [ ] 3.6 Smoke test: sessions create with each policy, sandbox args differ
+  - [x] 3.6 Smoke test: sessions create with each policy, sandbox args differ
 - [ ] **[Phase 4: IPC and Preload Updates](#phase-4-ipc-and-preload-updates)**
   - [ ] 4.1 Add `policies:list` IPC handler
   - [ ] 4.2 Update `sessions:create` handler to accept `policyId`
