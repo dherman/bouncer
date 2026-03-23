@@ -98,6 +98,8 @@ Can be spawned directly with Node — no need for `ELECTRON_RUN_AS_NODE` since i
 
 Claude Code uses its existing auth from `~/.claude.json` (OAuth) or `ANTHROPIC_API_KEY` env var. No ACP-level authentication exchange is needed — the `authMethods: []` in the initialize response confirms this.
 
+Clearing `ANTHROPIC_API_KEY` has no effect if OAuth tokens exist in `~/.claude.json` — Claude Code falls back silently. Auth failure would only surface if both are missing, which is not a realistic scenario on a developer machine with Claude Code installed.
+
 ## No need for ELECTRON_RUN_AS_NODE
 
 **Plan assumed:** Set `ELECTRON_RUN_AS_NODE: "1"` when spawning the agent.
