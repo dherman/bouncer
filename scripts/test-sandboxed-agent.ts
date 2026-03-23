@@ -15,6 +15,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import {
@@ -119,14 +120,42 @@ try {
   });
   console.log(`✓ New session: ${sessionResp.sessionId}`);
 
-  const prompt = "List the files in the current directory. Be brief.";
-  console.log(`\nPrompt: "${prompt}"\n--- Response ---`);
-  const resp = await connection.prompt({
+  // Test 1: Read (list files)
+  const readPrompt = "List the files in the current directory. Be brief.";
+  console.log(`\nPrompt 1 (read): "${readPrompt}"\n--- Response ---`);
+  const readResp = await connection.prompt({
     sessionId: sessionResp.sessionId,
-    prompt: [{ type: "text", text: prompt }],
+    prompt: [{ type: "text", text: readPrompt }],
   });
-  console.log(`\n--- End (stop: ${resp.stopReason}) ---`);
-  console.log("\n✓ Sandboxed agent completed successfully");
+  console.log(`\n--- End (stop: ${readResp.stopReason}) ---`);
+  console.log("✓ Read test passed");
+
+  // Test 2: Write (create a file in the worktree)
+  const testFileName = `.sandbox-write-test-${sessionId}`;
+  const writePrompt = `Create a file called ${testFileName} containing 'hello from sandbox'. Do not explain, just create it.`;
+  console.log(`\nPrompt 2 (write): "${writePrompt}"\n--- Response ---`);
+  const writeResp = await connection.prompt({
+    sessionId: sessionResp.sessionId,
+    prompt: [{ type: "text", text: writePrompt }],
+  });
+  console.log(`\n--- End (stop: ${writeResp.stopReason}) ---`);
+
+  // Verify the file was created
+  const { readFile: readFileAsync, rm: rmAsync } = await import("node:fs/promises");
+  const testFilePath = join(worktreePath, testFileName);
+  try {
+    const content = await readFileAsync(testFilePath, "utf-8");
+    if (content.includes("hello from sandbox")) {
+      console.log("✓ Write test passed — file created with expected content");
+    } else {
+      console.log(`✗ Write test: file exists but content unexpected: "${content.trim()}"`);
+      process.exitCode = 1;
+    }
+    await rmAsync(testFilePath, { force: true });
+  } catch {
+    console.log("✗ Write test failed — file was not created");
+    process.exitCode = 1;
+  }
 } catch (err) {
   console.error("\n✗ Error:", err);
   process.exitCode = 1;

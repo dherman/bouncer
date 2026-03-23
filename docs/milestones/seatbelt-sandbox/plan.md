@@ -19,7 +19,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.5 Add `gitCommonDir` to `WorktreeInfo`
   - [x] 2.6 Write `scripts/test-sandboxed-agent.ts`
   - [x] 2.7 Smoke test: agent starts, ACP handshake succeeds, reads worktree
-  - [ ] 2.8 Smoke test: agent writes within worktree
+  - [x] 2.8 Smoke test: agent writes within worktree
 - [ ] **[Phase 3: Sandbox Monitor](#phase-3-sandbox-monitor)**
   - [ ] 3.1 Create `src/main/sandbox-monitor.ts` with types and skeleton
   - [ ] 3.2 Implement `log stream` spawning and line parsing
