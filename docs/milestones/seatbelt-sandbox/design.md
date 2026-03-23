@@ -249,6 +249,16 @@ function defaultPolicy({ worktreePath, homedir, tmpdir }) {
 ; IOKit — needed for some system queries
 (allow iokit-open)
 
+; Root directory — processes need to read "/" for path resolution.
+; (subpath "/foo") does NOT cover "/" itself.
+(allow file-read* (literal "/"))
+
+; /dev writes — stdout, stderr, /dev/null, dtrace
+(allow file-write* (literal "/dev/null"))
+(allow file-write* (literal "/dev/tty"))
+(allow file-write* (regex "^/dev/fd/"))
+(allow file-write* (regex "^/dev/dtracehelper"))
+
 ;; ── Writable paths ──────────────────────────────────────
 (allow file-read* (subpath "${writablePaths[0]}"))
 (allow file-write* (subpath "${writablePaths[0]}"))

@@ -4,13 +4,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ## Progress
 
-- [ ] **[Phase 1: Sandbox Profile Generator](#phase-1-sandbox-profile-generator)**
-  - [ ] 1.1 Create `src/main/sandbox-profile.ts` with types and skeleton
-  - [ ] 1.2 Implement `defaultPolicy()`
-  - [ ] 1.3 Implement `generateProfile()` — policy to SBPL conversion
-  - [ ] 1.4 Implement `writePolicyToDisk()`
-  - [ ] 1.5 Write `scripts/test-sandbox-profile.ts`
-  - [ ] 1.6 Smoke test: generated profile allows/denies expected operations
+- [x] **[Phase 1: Sandbox Profile Generator](#phase-1-sandbox-profile-generator)**
+  - [x] 1.1 Create `src/main/sandbox-profile.ts` with types and skeleton
+  - [x] 1.2 Implement `defaultPolicy()`
+  - [x] 1.3 Implement `generateProfile()` — policy to SBPL conversion
+  - [x] 1.4 Implement `writePolicyToDisk()`
+  - [x] 1.5 Write `scripts/test-sandbox-profile.ts`
+  - [x] 1.6 Smoke test: generated profile allows/denies expected operations
 - [ ] **[Phase 2: Sandboxed Agent Spawning](#phase-2-sandboxed-agent-spawning)**
   - [ ] 2.1 Update `resolveClaudeCodeCommand()` to wrap in `sandbox-exec`
   - [ ] 2.2 Update `createSession()` to generate profile before spawning

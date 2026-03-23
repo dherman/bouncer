@@ -17,7 +17,8 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test:echo-agent": "tsx scripts/test-echo-agent.ts",
     "test:worktree": "tsx scripts/test-worktree.ts",
-    "test:claude-agent": "tsx scripts/test-claude-agent.ts"
+    "test:claude-agent": "tsx scripts/test-claude-agent.ts",
+    "test:sandbox-profile": "tsx scripts/test-sandbox-profile.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
