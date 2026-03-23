@@ -64,10 +64,17 @@ function resolveClaudeCodeCommand(
     "@zed-industries/claude-agent-acp/dist/index.js"
   );
 
+  // The agent runs with cwd in a /tmp worktree, so Node's module
+  // resolution can't find hoisted peer dependencies (e.g.
+  // @agentclientprotocol/sdk) from the app's node_modules. Set
+  // NODE_PATH so the agent process can resolve them.
+  const appNodeModules = join(app.getAppPath(), "node_modules");
+  const env: Record<string, string> = { NODE_PATH: appNodeModules };
+
   // When safehouse is available, wrap in sandbox
   if (sandboxConfig) {
     const args = buildSafehouseArgs(sandboxConfig, ["node", binPath]);
-    return { cmd: "safehouse", args, cwd };
+    return { cmd: "safehouse", args, cwd, env };
   }
 
   // Unsandboxed fallback — use node binary rather than process.execPath
@@ -77,6 +84,7 @@ function resolveClaudeCodeCommand(
     cmd: "node",
     args: [binPath],
     cwd,
+    env,
   };
 }
 
