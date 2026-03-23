@@ -25,6 +25,43 @@ export interface SessionSummary {
   agentType: AgentType;
   projectDir: string;
   sandboxed: boolean;
+  policyId: string | null;
+  policyName: string | null;
+}
+
+// --- Policy Template Types ---
+
+export interface PolicyTemplate {
+  id: string;
+  name: string;
+  description: string;
+  filesystem: FilesystemPolicy;
+  network: NetworkPolicy;
+  env: EnvPolicy;
+  safehouseIntegrations: string[];
+  appendProfile?: string;
+}
+
+export interface FilesystemPolicy {
+  worktreeAccess: "read-write" | "read-only";
+  additionalWritableDirs: string[];
+  additionalReadOnlyDirs: string[];
+}
+
+export interface NetworkPolicy {
+  access: "full" | "none" | "filtered";
+  allowedDomains?: string[];
+}
+
+export interface EnvPolicy {
+  additional: string[];
+  exclude: string[];
+}
+
+export interface PolicyTemplateSummary {
+  id: string;
+  name: string;
+  description: string;
 }
 
 export interface SandboxViolationInfo {

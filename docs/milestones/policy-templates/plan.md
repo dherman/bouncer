@@ -4,11 +4,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ## Progress
 
-- [ ] **[Phase 1: Policy Types and Template Definitions](#phase-1-policy-types-and-template-definitions)**
-  - [ ] 1.1 Add policy types to `src/main/types.ts`
-  - [ ] 1.2 Create `src/main/policy-templates.ts` with the three built-in templates
-  - [ ] 1.3 Create `src/main/policy-registry.ts` with the registry class
-  - [ ] 1.4 Verify: types compile, registry returns all three templates
+- [x] **[Phase 1: Policy Types and Template Definitions](#phase-1-policy-types-and-template-definitions)**
+  - [x] 1.1 Add policy types to `src/main/types.ts`
+  - [x] 1.2 Create `src/main/policy-templates.ts` with the three built-in templates
+  - [x] 1.3 Create `src/main/policy-registry.ts` with the registry class
+  - [x] 1.4 Verify: types compile, registry returns all three templates
 - [ ] **[Phase 2: Policy-to-Sandbox Mapping](#phase-2-policy-to-sandbox-mapping)**
   - [ ] 2.1 Create `src/main/policy-sandbox.ts` with `policyToSandboxConfig()`
   - [ ] 2.2 Add `appendProfileContent` support to `SandboxConfig` and `buildSafehouseArgs()`
