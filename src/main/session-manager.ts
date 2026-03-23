@@ -49,6 +49,9 @@ function resolveClaudeCodeCommand(cwd: string): SpawnConfig {
   );
   // Use the node binary rather than process.execPath (Electron) to avoid
   // spawning a second Electron instance with its own Dock icon on macOS.
+  // This assumes node is on PATH, which is true for development. For a
+  // packaged app, we'd need to bundle a Node runtime or find another way
+  // to suppress the Dock icon when using process.execPath.
   return {
     cmd: "node",
     args: [binPath],

@@ -9,14 +9,12 @@ interface Props {
 export function MessageInput({ onSend, disabled, placeholder }: Props) {
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const wasDisabled = useRef(disabled)
 
-  // Focus on mount and refocus when transitioning from disabled to enabled
+  // Focus whenever the input becomes enabled (including initial mount)
   useEffect(() => {
     if (!disabled) {
       inputRef.current?.focus()
     }
-    wasDisabled.current = disabled
   }, [disabled])
 
   function handleSubmit() {

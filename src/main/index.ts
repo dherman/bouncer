@@ -74,8 +74,10 @@ app.whenReady().then(() => {
     return sessionManager.closeSession(sessionId)
   })
 
-  ipcMain.handle('dialog:selectDirectory', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+  ipcMain.handle('dialog:selectDirectory', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return null
+    const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory'],
       title: 'Select project directory'
     })

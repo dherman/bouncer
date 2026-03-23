@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Message, SessionSummary, SessionUpdate, ToolCallInfo } from '../../main/types'
+import type { Message, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 
