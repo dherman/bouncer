@@ -27,7 +27,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 4.2 Update `sessions:create` handler to accept `policyId`
   - [x] 4.3 Update preload bridge with `policies` namespace and updated `create` signature
   - [x] 4.4 Update `env.d.ts` type declarations
-  - [ ] 4.5 Verify: `policies:list` returns three templates from renderer
+  - [x] 4.5 Verify: `policies:list` returns three templates from renderer
 - [ ] **[Phase 5: UI — New Session Dialog](#phase-5-ui--new-session-dialog)**
   - [ ] 5.1 Create `NewSessionDialog.tsx` component
   - [ ] 5.2 Wire dialog into `App.tsx` (replace inline `handleCreateSession`)
