@@ -15,6 +15,13 @@ interface Props {
   onClose: (id: string) => void
 }
 
+function projectLabel(session: SessionSummary): string {
+  if (session.projectDir) {
+    return session.projectDir.split('/').pop() ?? session.id.slice(0, 8)
+  }
+  return session.id.slice(0, 8)
+}
+
 export function SessionList({ sessions, activeSessionId, onSelect, onCreate, onClose }: Props) {
   return (
     <div className="session-list">
@@ -32,7 +39,8 @@ export function SessionList({ sessions, activeSessionId, onSelect, onCreate, onC
             style={{ backgroundColor: STATUS_INDICATOR[s.status] }}
           />
           <span className="session-label">
-            {s.id.slice(0, 8)}
+            {projectLabel(s)}
+            {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
           </span>
           <span className="session-status">{s.status}</span>
           {s.status !== 'closed' && (

@@ -1,19 +1,34 @@
+export type AgentType = "echo" | "claude-code";
+
 export interface Message {
   id: string;
   role: "user" | "agent";
   text: string;
   timestamp: number;
   streaming?: boolean;
+  toolCalls?: ToolCallInfo[];
+}
+
+export interface ToolCallInfo {
+  id: string;
+  name: string;
+  status: "pending" | "in_progress" | "completed" | "failed";
+  title?: string;
+  input?: Record<string, unknown>;
+  output?: string;
 }
 
 export interface SessionSummary {
   id: string;
   status: "initializing" | "ready" | "error" | "closed";
   messageCount: number;
+  agentType: AgentType;
+  projectDir: string;
 }
 
 export type SessionUpdate =
   | { sessionId: string; type: "status-change"; status: SessionSummary["status"] }
   | { sessionId: string; type: "message"; message: Message }
   | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { sessionId: string; type: "stream-end"; messageId: string };
+  | { sessionId: string; type: "stream-end"; messageId: string }
+  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo };

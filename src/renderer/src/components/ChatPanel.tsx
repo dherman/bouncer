@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { Message, SessionSummary } from '../../../main/types'
+import type { Message, SessionSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
 
 interface Props {
@@ -8,6 +8,29 @@ interface Props {
   sessionStatus: SessionSummary['status']
   onSendMessage: (text: string) => void
   onCloseSession: () => void
+}
+
+function ToolCallBlock({ toolCall }: { toolCall: ToolCallInfo }) {
+  const statusIcon =
+    toolCall.status === 'completed' ? '\u2713' :
+    toolCall.status === 'failed' ? '\u2717' :
+    toolCall.status === 'in_progress' ? '\u22EF' : '\u25CB'
+
+  return (
+    <div className={`tool-call-block tool-status-${toolCall.status}`}>
+      <span className="tool-status-icon">{statusIcon}</span>
+      <span className="tool-name">{toolCall.name}</span>
+      {toolCall.title && (
+        <span className="tool-title">{toolCall.title}</span>
+      )}
+      {toolCall.output && (
+        <details className="tool-output">
+          <summary>Output</summary>
+          <pre>{toolCall.output}</pre>
+        </details>
+      )}
+    </div>
+  )
 }
 
 export function ChatPanel({
@@ -37,14 +60,19 @@ export function ChatPanel({
         )}
         {messages.map((msg) => {
           const msgStreaming = msg.streaming && streamingText.has(msg.id)
-          const displayText = msgStreaming ? streamingText.get(msg.id)! : msg.text
+          const rawText = msgStreaming ? streamingText.get(msg.id)! : msg.text
+          const displayText = rawText.replace(/^\n+/, '')
 
           return (
             <div key={msg.id} className={`message ${msg.role}`}>
-              <div className="bubble">
-                {displayText}
-                {msgStreaming && <span className="cursor">|</span>}
-              </div>
+              <div className="bubble">{msgStreaming && !displayText
+                  ? <span className="thinking-indicator"><span className="dot" /><span className="dot" /><span className="dot" /></span>
+                  : <>{displayText}{msgStreaming && <span className="cursor">|</span>}</>}{msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="tool-calls">
+                    {msg.toolCalls.map((tc) => (
+                      <ToolCallBlock key={tc.id} toolCall={tc} />
+                    ))}
+                  </div>)}</div>
             </div>
           )
         })}
