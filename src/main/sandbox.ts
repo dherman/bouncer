@@ -110,7 +110,8 @@ export function buildSafehouseArgs(
 }
 
 /**
- * Build a SandboxConfig for a Claude Code agent session.
+ * @deprecated Use policyToSandboxConfig() with a PolicyTemplate instead.
+ * Retained for backward compatibility with M2 test scripts.
  */
 export function defaultSandboxConfig({
   sessionId,

@@ -15,12 +15,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.3 Add append-profile file lifecycle helpers
   - [x] 2.4 Write `scripts/test-policy-sandbox.ts`
   - [x] 2.5 Smoke test: each template produces different safehouse args
-- [ ] **[Phase 3: Session Manager Integration](#phase-3-session-manager-integration)**
-  - [ ] 3.1 Add `PolicyTemplateRegistry` to `SessionManager`
-  - [ ] 3.2 Update `createSession()` to accept `policyId` and use `policyToSandboxConfig()`
-  - [ ] 3.3 Add `policyId` and `policyName` to `SessionState` and `SessionSummary`
-  - [ ] 3.4 Update cleanup paths for append-profile files
-  - [ ] 3.5 Deprecate `defaultSandboxConfig()` with forwarding wrapper
+- [x] **[Phase 3: Session Manager Integration](#phase-3-session-manager-integration)**
+  - [x] 3.1 Add `PolicyTemplateRegistry` to `SessionManager`
+  - [x] 3.2 Update `createSession()` to accept `policyId` and use `policyToSandboxConfig()`
+  - [x] 3.3 Add `policyId` and `policyName` to `SessionState` and `SessionSummary`
+  - [x] 3.4 Update cleanup paths for append-profile files
+  - [x] 3.5 Deprecate `defaultSandboxConfig()` with forwarding wrapper
   - [ ] 3.6 Smoke test: sessions create with each policy, sandbox args differ
 - [ ] **[Phase 4: IPC and Preload Updates](#phase-4-ipc-and-preload-updates)**
   - [ ] 4.1 Add `policies:list` IPC handler

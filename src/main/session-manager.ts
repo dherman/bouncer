@@ -8,14 +8,16 @@ import { app } from "electron";
 import { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
 import {
   type SandboxConfig,
-  defaultSandboxConfig,
   buildSafehouseArgs,
   isSafehouseAvailable,
   ensurePolicyDir,
   cleanupPolicy,
   cleanupOrphanPolicies,
+  writeAppendProfile,
 } from "./sandbox.js";
 import { SandboxMonitor } from "./sandbox-monitor.js";
+import { PolicyTemplateRegistry } from "./policy-registry.js";
+import { policyToSandboxConfig } from "./policy-sandbox.js";
 import type {
   AgentType,
   Message,
@@ -103,21 +105,32 @@ interface SessionState {
   sandboxConfig: SandboxConfig | null;
   sandboxMonitor: SandboxMonitor | null;
   sandboxViolations: SandboxViolationInfo[];
+  policyId: string | null;
 }
 
 export class SessionManager {
   private sessions = new Map<string, SessionState>();
   private worktreeManager = new WorktreeManager();
   private safehouseWarningLogged = false;
+  readonly policyRegistry = new PolicyTemplateRegistry();
 
   constructor(private emit: (channel: string, data: SessionUpdate) => void) {}
 
   async createSession(
     projectDir: string,
-    agentType: AgentType = "claude-code"
+    agentType: AgentType = "claude-code",
+    policyId?: string,
   ): Promise<SessionSummary> {
     const id = randomUUID();
     let worktree: WorktreeInfo | null = null;
+
+    // Resolve policy template
+    const resolvedPolicyId = agentType === "claude-code"
+      ? (policyId ?? this.policyRegistry.defaultId)
+      : null;
+    const template = resolvedPolicyId
+      ? this.policyRegistry.get(resolvedPolicyId)
+      : null;
 
     // Create worktree for Claude Code sessions
     if (agentType === "claude-code") {
@@ -130,7 +143,7 @@ export class SessionManager {
 
     const workingDir = worktree?.path ?? projectDir;
 
-    // Build sandbox config (safehouse wraps the agent in a Seatbelt sandbox)
+    // Build sandbox config from policy template
     let sandboxConfig: SandboxConfig | null = null;
     const safehouseAvailable = await isSafehouseAvailable();
     if (agentType === "claude-code" && !safehouseAvailable) {
@@ -141,23 +154,23 @@ export class SessionManager {
         this.safehouseWarningLogged = true;
       }
     }
-    if (agentType === "claude-code" && safehouseAvailable) {
+    if (template && safehouseAvailable) {
       await ensurePolicyDir();
-      // Resolve the agent binary directory for read-only sandbox access.
-      // The worktree is in /tmp, so the app's node_modules (where the
-      // agent binary lives) must be explicitly granted.
       const agentRequire = createRequire(app.getAppPath() + "/");
       const agentPkgDir = join(
         agentRequire.resolve("@zed-industries/claude-agent-acp/package.json"),
         ".."
       );
 
-      sandboxConfig = defaultSandboxConfig({
+      sandboxConfig = policyToSandboxConfig(template, {
         sessionId: id,
         worktreePath: workingDir,
         gitCommonDir: worktree?.gitCommonDir,
         readOnlyDirs: [agentPkgDir],
       });
+
+      // Write append profile file before spawning (if needed)
+      await writeAppendProfile(sandboxConfig);
     }
 
     const session: SessionState = {
@@ -173,6 +186,7 @@ export class SessionManager {
       sandboxConfig,
       sandboxMonitor: null,
       sandboxViolations: [],
+      policyId: resolvedPolicyId,
     };
     this.sessions.set(id, session);
     this.emit("session-update", {
@@ -501,6 +515,14 @@ export class SessionManager {
   }
 
   private summarize(session: SessionState): SessionSummary {
+    let policyName: string | null = null;
+    if (session.policyId) {
+      try {
+        policyName = this.policyRegistry.get(session.policyId).name;
+      } catch {
+        policyName = session.policyId;
+      }
+    }
     return {
       id: session.id,
       status: session.status,
@@ -508,8 +530,8 @@ export class SessionManager {
       agentType: session.agentType,
       projectDir: session.projectDir,
       sandboxed: session.sandboxConfig !== null,
-      policyId: null,
-      policyName: null,
+      policyId: session.policyId,
+      policyName,
     };
   }
 }
