@@ -96,11 +96,14 @@ export function defaultSandboxConfig({
   sessionId,
   worktreePath,
   gitCommonDir,
+  appDir,
 }: {
   sessionId: string;
   worktreePath: string;
   /** The git common dir for linked worktrees (parent repo's .git). */
   gitCommonDir?: string;
+  /** The Glitter Ball app directory (where node_modules lives). */
+  appDir?: string;
 }): SandboxConfig {
   const writableDirs = [worktreePath];
 
@@ -111,10 +114,19 @@ export function defaultSandboxConfig({
     writableDirs.push(gitCommonDir);
   }
 
+  // The app directory contains the agent binary (node_modules/
+  // @zed-industries/claude-agent-acp) which the sandboxed node
+  // process needs to read. The worktree is in a temp directory,
+  // so the app dir is not automatically readable.
+  const readOnlyDirs: string[] = [];
+  if (appDir) {
+    readOnlyDirs.push(appDir);
+  }
+
   return {
     workdir: worktreePath,
     writableDirs,
-    readOnlyDirs: [],
+    readOnlyDirs,
     envPassthrough: [
       // Claude Code auth
       "ANTHROPIC_API_KEY",

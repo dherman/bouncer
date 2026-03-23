@@ -137,6 +137,7 @@ export class SessionManager {
         sessionId: id,
         worktreePath: workingDir,
         gitCommonDir: worktree?.gitCommonDir,
+        appDir: app.getAppPath(),
       });
     }
 
