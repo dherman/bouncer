@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentType, SessionSummary, SessionUpdate } from '../../main/types'
+import type { AgentType, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 
 interface GlitterballAPI {
   sessions: {
@@ -8,6 +8,7 @@ interface GlitterballAPI {
     create(projectDir: string, agentType?: AgentType): Promise<SessionSummary>
     sendMessage(sessionId: string, text: string): Promise<void>
     closeSession(sessionId: string): Promise<void>
+    getSandboxViolations(sessionId: string): Promise<SandboxViolationInfo[]>
     onUpdate(callback: (update: SessionUpdate) => void): () => void
   }
   dialog: {

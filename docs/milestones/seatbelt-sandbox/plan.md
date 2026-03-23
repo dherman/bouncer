@@ -27,13 +27,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 3.4 Wire into session manager
   - [x] 3.5 Write `scripts/test-sandbox-monitor.ts`
   - [x] 3.6 Smoke test: trigger a violation, verify monitor captures it
-- [ ] **[Phase 4: UI Integration](#phase-4-ui-integration)**
-  - [ ] 4.1 Add `SandboxViolationInfo` type and `sandbox-violation` SessionUpdate variant
-  - [ ] 4.2 Add IPC handler for violation history
-  - [ ] 4.3 Update preload bridge
-  - [ ] 4.4 Build `<SandboxLog />` component
-  - [ ] 4.5 Add sandbox badge to `<SessionList />`
-  - [ ] 4.6 Wire violations into `<ChatPanel />`
+- [x] **[Phase 4: UI Integration](#phase-4-ui-integration)**
+  - [x] 4.1 Add `SandboxViolationInfo` type and `sandbox-violation` SessionUpdate variant *(done in Phase 3)*
+  - [x] 4.2 Add IPC handler for violation history
+  - [x] 4.3 Update preload bridge
+  - [x] 4.4 Build `<SandboxLog />` component
+  - [x] 4.5 Add sandbox badge to `<SessionList />`
+  - [x] 4.6 Wire violations into `<ChatPanel />`
   - [ ] 4.7 Full flow test: coding task with visible violations in UI
 - [ ] **[Phase 5: Empirical Iteration](#phase-5-empirical-iteration)**
   - [ ] 5.1 Test: read-only task

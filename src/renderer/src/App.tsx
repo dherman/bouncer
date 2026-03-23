@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Message, SessionSummary, SessionUpdate } from '../../main/types'
+import type { Message, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 
@@ -10,6 +10,7 @@ function App() {
   const [streamingText, setStreamingText] = useState<Map<string, string>>(new Map())
   const [createError, setCreateError] = useState<string | null>(null)
   const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
+  const [violationsBySession, setViolationsBySession] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
 
   const handleUpdate = useCallback((update: SessionUpdate) => {
     switch (update.type) {
@@ -100,6 +101,17 @@ function App() {
           return next
         })
         break
+
+      case 'sandbox-violation':
+        setViolationsBySession((prev) => {
+          const next = new Map(prev)
+          const existing = next.get(update.sessionId) ?? []
+          // Cap at 200 entries to avoid memory bloat
+          const updated = [...existing, update.violation].slice(-200)
+          next.set(update.sessionId, updated)
+          return next
+        })
+        break
     }
   }, [])
 
@@ -151,12 +163,21 @@ function App() {
   const activeMessages = activeSessionId
     ? messagesBySession.get(activeSessionId) ?? []
     : []
+  const activeViolations = activeSessionId
+    ? violationsBySession.get(activeSessionId) ?? []
+    : []
+
+  const violationCounts = new Map<string, number>()
+  for (const [id, vs] of violationsBySession) {
+    violationCounts.set(id, vs.length)
+  }
 
   return (
     <div className="app">
       <SessionList
         sessions={sessions}
         activeSessionId={activeSessionId}
+        violationCounts={violationCounts}
         onSelect={setActiveSessionId}
         onCreate={handleCreateSession}
         onClose={handleCloseSession}
@@ -167,6 +188,7 @@ function App() {
           streamingText={streamingText}
           sessionStatus={activeSession.status}
           sessionError={sessionErrors.get(activeSession.id)}
+          violations={activeViolations}
           onSendMessage={handleSendMessage}
           onCloseSession={() => handleCloseSession(activeSession.id)}
         />

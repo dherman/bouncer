@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('glitterball', {
       ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
     closeSession: (sessionId: string) =>
       ipcRenderer.invoke('sessions:close', sessionId),
+    getSandboxViolations: (sessionId: string) =>
+      ipcRenderer.invoke('sessions:getSandboxViolations', sessionId),
     onUpdate: (callback: (update: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, update: unknown): void =>
         callback(update)
