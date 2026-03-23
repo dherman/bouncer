@@ -10,6 +10,7 @@ function createWindow(): void {
     height: 670,
     show: false,
     autoHideMenuBar: true,
+    icon: join(__dirname, '../../resources/icon.icns'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
