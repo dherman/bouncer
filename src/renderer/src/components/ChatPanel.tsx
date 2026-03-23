@@ -64,21 +64,14 @@ export function ChatPanel({
 
           return (
             <div key={msg.id} className={`message ${msg.role}`}>
-              <div className="bubble">{msgStreaming && !displayText ? (
-                  <span className="thinking-indicator">
-                    <span className="dot" />
-                    <span className="dot" />
-                    <span className="dot" />
-                  </span>
-                ) : <>{displayText}{msgStreaming && <span className="cursor">|</span>}</>}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
+              <div className="bubble">{msgStreaming && !displayText
+                  ? <span className="thinking-indicator"><span className="dot" /><span className="dot" /><span className="dot" /></span>
+                  : <>{displayText}{msgStreaming && <span className="cursor">|</span>}</>}{msg.toolCalls && msg.toolCalls.length > 0 && (
                   <div className="tool-calls">
                     {msg.toolCalls.map((tc) => (
                       <ToolCallBlock key={tc.id} toolCall={tc} />
                     ))}
-                  </div>
-                )}
-              </div>
+                  </div>)}</div>
             </div>
           )
         })}
