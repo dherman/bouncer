@@ -60,7 +60,8 @@ export function ChatPanel({
         )}
         {messages.map((msg) => {
           const msgStreaming = msg.streaming && streamingText.has(msg.id)
-          const displayText = msgStreaming ? streamingText.get(msg.id)! : msg.text
+          const rawText = msgStreaming ? streamingText.get(msg.id)! : msg.text
+          const displayText = rawText.replace(/^\n+/, '')
 
           return (
             <div key={msg.id} className={`message ${msg.role}`}>
