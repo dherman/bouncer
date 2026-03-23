@@ -73,6 +73,7 @@ interface SessionState {
   connection: acp.ClientSideConnection;
   messages: Message[];
   status: "initializing" | "ready" | "error" | "closed";
+  errorMessage?: string;
   agentType: AgentType;
   projectDir: string;
   worktree: WorktreeInfo | null;
@@ -124,30 +125,48 @@ export class SessionManager {
       // Spawn the agent
       const { cmd, args, env, cwd } = resolveAgentCommand(agentType, workingDir);
       const agentProcess = spawn(cmd, args, {
-        stdio: ["pipe", "pipe", "inherit"],
+        stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...env },
         cwd,
       });
       session.agentProcess = agentProcess;
 
+      // Capture stderr for error reporting
+      let collectedStderr = "";
+      agentProcess.stderr?.on("data", (data: Buffer) => {
+        collectedStderr += data.toString();
+        // Also forward to the main process console for debugging
+        process.stderr.write(data);
+      });
+
       // Handle agent crashes
-      agentProcess.on("exit", () => {
+      agentProcess.on("exit", (code) => {
         if (session.status !== "closed") {
+          const errorMessage =
+            session.status === "initializing"
+              ? collectedStderr.trim() ||
+                `Agent exited with code ${code}`
+              : undefined;
           session.status = "error";
+          session.errorMessage = errorMessage;
           this.emit("session-update", {
             sessionId: id,
             type: "status-change",
             status: "error",
+            error: errorMessage,
           });
         }
       });
-      agentProcess.on("error", () => {
+      agentProcess.on("error", (err) => {
         if (session.status !== "closed") {
+          const errorMessage = err.message;
           session.status = "error";
+          session.errorMessage = errorMessage;
           this.emit("session-update", {
             sessionId: id,
             type: "status-change",
             status: "error",
+            error: errorMessage,
           });
         }
       });
@@ -362,6 +381,22 @@ export class SessionManager {
       type: "status-change",
       status: "closed",
     });
+  }
+
+  /** Close all active sessions. Called on app quit. */
+  async closeAllSessions(): Promise<void> {
+    const activeSessions = Array.from(this.sessions.values()).filter(
+      (s) => s.status !== "closed"
+    );
+    await Promise.all(
+      activeSessions.map((s) => this.closeSession(s.id).catch(() => {}))
+    );
+  }
+
+  /** Remove orphan worktree directories left behind by a previous crash. */
+  async cleanupOrphanWorktrees(): Promise<void> {
+    const activeIds = new Set(this.sessions.keys());
+    await this.worktreeManager.cleanupOrphans(activeIds);
   }
 
   private summarize(session: SessionState): SessionSummary {

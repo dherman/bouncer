@@ -1,4 +1,4 @@
-import { app, shell, ipcMain, dialog, BrowserWindow } from 'electron'
+import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
 
@@ -10,6 +10,7 @@ function createWindow(): void {
     height: 670,
     show: false,
     autoHideMenuBar: true,
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
@@ -45,11 +46,22 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Set Dock icon on macOS (works in dev mode too)
+  if (process.platform === 'darwin' && app.dock) {
+    const iconPath = join(__dirname, '../../resources/icon.png')
+    app.dock.setIcon(nativeImage.createFromPath(iconPath))
+  }
+
   createWindow()
 
   // SessionManager forwards events to the renderer via IPC
   const sessionManager = new SessionManager((channel, data) => {
     mainWindow?.webContents.send(channel, data)
+  })
+
+  // Clean up orphan worktrees from previous crashes
+  sessionManager.cleanupOrphanWorktrees().catch((err) => {
+    console.warn('Failed to clean up orphan worktrees:', err)
   })
 
   // IPC handlers for renderer → main communication
@@ -83,6 +95,19 @@ app.whenReady().then(() => {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+
+  // Clean up all sessions before quitting
+  app.on('before-quit', (event) => {
+    const activeSessions = sessionManager.listSessions().filter(
+      (s) => s.status !== 'closed'
+    )
+    if (activeSessions.length > 0) {
+      event.preventDefault()
+      sessionManager.closeAllSessions().finally(() => {
+        app.quit()
+      })
+    }
   })
 
   app.on('activate', () => {
