@@ -47,10 +47,11 @@ function resolveClaudeCodeCommand(cwd: string): SpawnConfig {
   const binPath = require.resolve(
     "@zed-industries/claude-agent-acp/dist/index.js"
   );
+  // Use the node binary rather than process.execPath (Electron) to avoid
+  // spawning a second Electron instance with its own Dock icon on macOS.
   return {
-    cmd: process.execPath,
+    cmd: "node",
     args: [binPath],
-    env: { ELECTRON_RUN_AS_NODE: "1" },
     cwd,
   };
 }
