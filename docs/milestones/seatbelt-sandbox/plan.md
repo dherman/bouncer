@@ -34,7 +34,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 4.4 Build `<SandboxLog />` component
   - [x] 4.5 Add sandbox badge to `<SessionList />`
   - [x] 4.6 Wire violations into `<ChatPanel />`
-  - [ ] 4.7 Full flow test: coding task with visible violations in UI
+  - [x] 4.7 Full flow test: coding task with visible violations in UI
 - [ ] **[Phase 5: Empirical Iteration](#phase-5-empirical-iteration)**
   - [ ] 5.1 Test: read-only task
   - [ ] 5.2 Test: file creation and editing
