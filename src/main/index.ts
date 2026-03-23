@@ -1,4 +1,4 @@
-import { app, shell, ipcMain, dialog, BrowserWindow } from 'electron'
+import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
 
@@ -46,6 +46,12 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Set Dock icon on macOS (works in dev mode too)
+  if (process.platform === 'darwin' && app.dock) {
+    const iconPath = join(__dirname, '../../resources/icon.icns')
+    app.dock.setIcon(nativeImage.createFromPath(iconPath))
+  }
+
   createWindow()
 
   // SessionManager forwards events to the renderer via IPC
