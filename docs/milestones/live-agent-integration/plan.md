@@ -32,7 +32,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] Update `<App />` — directory picker flow on "New Session"
   - [x] Add `<ToolCallBlock />` component for tool call display
   - [x] Wire `tool-call` SessionUpdate variant into `handleUpdate`
-  - [ ] Full flow test: select project → create session → chat with Claude Code
+  - [x] Full flow test: select project → create session → chat with Claude Code
 - [ ] **[Phase 6: Edge Cases and Polish](#phase-6-edge-cases-and-polish)**
   - [ ] 6.1 Agent startup failure handling (missing API key, Claude Code not installed)
   - [ ] 6.2 Worktree creation failure handling (not a git repo, git not found)
