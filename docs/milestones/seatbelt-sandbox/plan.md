@@ -43,13 +43,13 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 5.5 Test: network-dependent task
   - [x] 5.6 Iterate on safehouse flags / `--append-profile` overrides based on findings
   - [x] 5.7 Write `docs/milestones/seatbelt-sandbox/findings.md`
-- [ ] **[Phase 6: Cleanup and Polish](#phase-6-cleanup-and-polish)**
-  - [ ] 6.1 Graceful degradation when `safehouse` unavailable
-  - [ ] 6.2 Echo agent bypass (no sandbox)
-  - [ ] 6.3 Monitor crash resilience
-  - [ ] 6.4 Policy file cleanup on app quit
-  - [ ] 6.5 Add npm scripts for test harnesses
-- [ ] **[Verification](#verification-checklist)** — all manual checks pass
+- [x] **[Phase 6: Cleanup and Polish](#phase-6-cleanup-and-polish)**
+  - [x] 6.1 Graceful degradation when `safehouse` unavailable
+  - [x] 6.2 Echo agent bypass (no sandbox)
+  - [x] 6.3 Monitor crash resilience
+  - [x] 6.4 Policy file cleanup on app quit
+  - [x] 6.5 Add npm scripts for test harnesses
+- [x] **[Verification](#verification-checklist)** — all manual checks pass
 
 ---
 

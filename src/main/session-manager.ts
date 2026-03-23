@@ -131,6 +131,11 @@ export class SessionManager {
 
     // Build sandbox config (safehouse wraps the agent in a Seatbelt sandbox)
     let sandboxConfig: SandboxConfig | null = null;
+    if (agentType === "claude-code" && !(await isSafehouseAvailable())) {
+      console.warn(
+        "safehouse not available — agent will run without OS-level sandboxing"
+      );
+    }
     if (agentType === "claude-code" && (await isSafehouseAvailable())) {
       await ensurePolicyDir();
       // Resolve the agent binary directory for read-only sandbox access.
