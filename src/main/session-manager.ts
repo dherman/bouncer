@@ -508,6 +508,8 @@ export class SessionManager {
       agentType: session.agentType,
       projectDir: session.projectDir,
       sandboxed: session.sandboxConfig !== null,
+      policyId: null,
+      policyName: null,
     };
   }
 }
