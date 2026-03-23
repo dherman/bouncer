@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
@@ -16,9 +16,11 @@ export interface WorktreeInfo {
 
 export class WorktreeManager {
   private basePath: string;
+  private metadataPath: string;
 
   constructor(basePath?: string) {
     this.basePath = resolve(basePath ?? join(tmpdir(), "glitterball-worktrees"));
+    this.metadataPath = join(homedir(), ".cache", "glitterball", "worktrees");
   }
 
   /** Validate that a directory is a git repository. */
@@ -49,8 +51,9 @@ export class WorktreeManager {
     );
 
     // Store project dir breadcrumb so orphan cleanup can find the parent repo
+    await mkdir(this.metadataPath, { recursive: true });
     await writeFile(
-      join(worktreePath, ".glitterball-project"),
+      join(this.metadataPath, sessionId),
       projectDir,
       "utf-8"
     );
@@ -77,6 +80,12 @@ export class WorktreeManager {
     } catch {
       // Branch may already be gone or may have been merged
     }
+
+    // Clean up metadata breadcrumb
+    const sessionId = info.path.split("/").pop();
+    if (sessionId) {
+      await rm(join(this.metadataPath, sessionId), { force: true });
+    }
   }
 
   /**
@@ -86,30 +95,35 @@ export class WorktreeManager {
   async cleanupOrphans(activeSessionIds: Set<string>): Promise<void> {
     let entries: string[];
     try {
-      entries = await readdir(this.basePath);
+      entries = await readdir(this.metadataPath);
     } catch {
-      return; // Directory doesn't exist — nothing to clean
+      return; // No metadata directory — nothing to clean
     }
 
     for (const entry of entries) {
       if (activeSessionIds.has(entry)) continue;
-      if (!UUID_RE.test(entry)) continue; // Skip non-session directories
+      if (!UUID_RE.test(entry)) continue;
 
       const worktreePath = join(this.basePath, entry);
       const branch = `bouncer/${entry}`;
 
-      // Try to read the project dir breadcrumb
+      // Read the project dir from the metadata breadcrumb
       let projectDir: string | null = null;
       try {
         projectDir = (
-          await readFile(join(worktreePath, ".glitterball-project"), "utf-8")
+          await readFile(join(this.metadataPath, entry), "utf-8")
         ).trim();
       } catch {
         // No breadcrumb — just rm the directory
       }
 
       console.log(`Cleaning up orphan worktree: ${entry}`);
+
+      // Remove the worktree directory
       await rm(worktreePath, { recursive: true, force: true });
+
+      // Remove the metadata file
+      await rm(join(this.metadataPath, entry), { force: true });
 
       if (projectDir) {
         // Prune stale worktree entries from git
