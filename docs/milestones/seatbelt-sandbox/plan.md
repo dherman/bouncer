@@ -521,11 +521,12 @@ Run representative coding tasks under the sandbox, document what breaks, iterate
 - [ ] Expected: should succeed — git common dir has write access
 - [ ] Record: any violations, verify commit exists
 
-### 5.5 Test: network-dependent task (expect failure)
+### 5.5 Test: network-dependent task
 
 - [ ] Prompt: "Install the `lodash` package using npm"
-- [ ] Expected: fails — network is denied by default in safehouse
-- [ ] Record: error message, whether agent handles failure gracefully
+- [ ] Expected: succeeds — safehouse allows network by default (see design doc network policy section)
+- [ ] Record: whether npm install works end-to-end under the sandbox, any filesystem violations from cache writes
+- [ ] Note: Milestone 6 will add network restrictions via `--append-profile` overlay or container networking
 
 ### 5.6 Iterate on safehouse configuration
 

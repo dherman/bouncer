@@ -9,7 +9,7 @@
 //
 // Defaults to the current directory as the "worktree" path.
 
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
