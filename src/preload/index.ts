@@ -3,8 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('glitterball', {
   sessions: {
     list: () => ipcRenderer.invoke('sessions:list'),
-    create: (projectDir: string, agentType?: string) =>
-      ipcRenderer.invoke('sessions:create', projectDir, agentType),
+    create: (projectDir: string, agentType?: string, policyId?: string) =>
+      ipcRenderer.invoke('sessions:create', projectDir, agentType, policyId),
     sendMessage: (sessionId: string, text: string) =>
       ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
     closeSession: (sessionId: string) =>
@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('glitterball', {
       ipcRenderer.on('session-update', handler)
       return () => ipcRenderer.removeListener('session-update', handler)
     },
+  },
+  policies: {
+    list: () => ipcRenderer.invoke('policies:list'),
   },
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
