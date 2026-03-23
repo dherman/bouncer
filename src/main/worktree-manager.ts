@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
 
@@ -48,6 +48,13 @@ export class WorktreeManager {
       { cwd: projectDir }
     );
 
+    // Store project dir breadcrumb so orphan cleanup can find the parent repo
+    await writeFile(
+      join(worktreePath, ".glitterball-project"),
+      projectDir,
+      "utf-8"
+    );
+
     return { path: worktreePath, branch, projectDir };
   }
 
@@ -69,6 +76,60 @@ export class WorktreeManager {
       });
     } catch {
       // Branch may already be gone or may have been merged
+    }
+  }
+
+  /**
+   * Remove orphan worktree directories left behind by a previous crash.
+   * @param activeSessionIds - IDs of sessions currently active (skip these)
+   */
+  async cleanupOrphans(activeSessionIds: Set<string>): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await readdir(this.basePath);
+    } catch {
+      return; // Directory doesn't exist — nothing to clean
+    }
+
+    for (const entry of entries) {
+      if (activeSessionIds.has(entry)) continue;
+      if (!UUID_RE.test(entry)) continue; // Skip non-session directories
+
+      const worktreePath = join(this.basePath, entry);
+      const branch = `bouncer/${entry}`;
+
+      // Try to read the project dir breadcrumb
+      let projectDir: string | null = null;
+      try {
+        projectDir = (
+          await readFile(join(worktreePath, ".glitterball-project"), "utf-8")
+        ).trim();
+      } catch {
+        // No breadcrumb — just rm the directory
+      }
+
+      console.log(`Cleaning up orphan worktree: ${entry}`);
+      await rm(worktreePath, { recursive: true, force: true });
+
+      if (projectDir) {
+        // Prune stale worktree entries from git
+        try {
+          await execFileAsync("git", ["worktree", "prune"], {
+            cwd: projectDir,
+          });
+        } catch {
+          // Best effort
+        }
+
+        // Delete the orphan branch
+        try {
+          await execFileAsync("git", ["branch", "-D", "--", branch], {
+            cwd: projectDir,
+          });
+        } catch {
+          // Branch may already be gone
+        }
+      }
     }
   }
 }

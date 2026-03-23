@@ -2,8 +2,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { readdir, rm } from "node:fs/promises";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { app } from "electron";
@@ -397,21 +395,8 @@ export class SessionManager {
 
   /** Remove orphan worktree directories left behind by a previous crash. */
   async cleanupOrphanWorktrees(): Promise<void> {
-    const worktreeDir = join(tmpdir(), "glitterball-worktrees");
-    try {
-      const entries = await readdir(worktreeDir);
-      for (const entry of entries) {
-        if (!this.sessions.has(entry)) {
-          console.log(`Cleaning up orphan worktree: ${entry}`);
-          await rm(join(worktreeDir, entry), {
-            recursive: true,
-            force: true,
-          });
-        }
-      }
-    } catch {
-      // Directory doesn't exist or can't be read — nothing to clean
-    }
+    const activeIds = new Set(this.sessions.keys());
+    await this.worktreeManager.cleanupOrphans(activeIds);
   }
 
   private summarize(session: SessionState): SessionSummary {
