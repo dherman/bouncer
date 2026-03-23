@@ -15,7 +15,13 @@ export class PolicyTemplateRegistry {
   private templates: Map<string, PolicyTemplate>;
 
   constructor() {
-    this.templates = new Map(BUILT_IN_TEMPLATES.map((t) => [t.id, t]));
+    this.templates = new Map();
+    for (const template of BUILT_IN_TEMPLATES) {
+      if (this.templates.has(template.id)) {
+        throw new Error(`Duplicate policy template id: ${template.id}`);
+      }
+      this.templates.set(template.id, template);
+    }
   }
 
   get(id: string): PolicyTemplate {
@@ -33,6 +39,6 @@ export class PolicyTemplateRegistry {
   }
 
   get defaultId(): string {
-    return "standard-pr";
+    return standardPrTemplate.id;
   }
 }

@@ -48,10 +48,10 @@ export interface FilesystemPolicy {
   additionalReadOnlyDirs: string[];
 }
 
-export interface NetworkPolicy {
-  access: "full" | "none" | "filtered";
-  allowedDomains?: string[];
-}
+export type NetworkPolicy =
+  | { access: "full" }
+  | { access: "none" }
+  | { access: "filtered"; allowedDomains: string[] };
 
 export interface EnvPolicy {
   additional: string[];
