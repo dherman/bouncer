@@ -26,9 +26,17 @@ export interface SessionSummary {
   projectDir: string;
 }
 
+export interface SandboxViolationInfo {
+  timestamp: number;
+  operation: string;
+  path?: string;
+  processName: string;
+}
+
 export type SessionUpdate =
   | { sessionId: string; type: "status-change"; status: SessionSummary["status"]; error?: string }
   | { sessionId: string; type: "message"; message: Message }
   | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
   | { sessionId: string; type: "stream-end"; messageId: string }
-  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo };
+  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
+  | { sessionId: string; type: "sandbox-violation"; violation: SandboxViolationInfo };

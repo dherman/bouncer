@@ -15,9 +15,11 @@ import {
   cleanupPolicy,
   cleanupOrphanPolicies,
 } from "./sandbox.js";
+import { SandboxMonitor } from "./sandbox-monitor.js";
 import type {
   AgentType,
   Message,
+  SandboxViolationInfo,
   SessionSummary,
   SessionUpdate,
   ToolCallInfo,
@@ -99,6 +101,8 @@ interface SessionState {
   projectDir: string;
   worktree: WorktreeInfo | null;
   sandboxConfig: SandboxConfig | null;
+  sandboxMonitor: SandboxMonitor | null;
+  sandboxViolations: SandboxViolationInfo[];
 }
 
 export class SessionManager {
@@ -147,6 +151,8 @@ export class SessionManager {
       projectDir,
       worktree,
       sandboxConfig,
+      sandboxMonitor: null,
+      sandboxViolations: [],
     };
     this.sessions.set(id, session);
     this.emit("session-update", {
@@ -318,6 +324,27 @@ export class SessionManager {
       });
       session.acpSessionId = sessionResp.sessionId;
 
+      // Start sandbox monitor if sandboxed
+      if (sandboxConfig && agentProcess.pid) {
+        const monitor = new SandboxMonitor();
+        monitor.on("violation", (violation) => {
+          const info: SandboxViolationInfo = {
+            timestamp: violation.timestamp.getTime(),
+            operation: violation.operation,
+            path: violation.path,
+            processName: violation.processName,
+          };
+          session.sandboxViolations.push(info);
+          this.emit("session-update", {
+            sessionId: id,
+            type: "sandbox-violation",
+            violation: info,
+          });
+        });
+        monitor.start(agentProcess.pid);
+        session.sandboxMonitor = monitor;
+      }
+
       session.status = "ready";
       this.emit("session-update", {
         sessionId: id,
@@ -403,6 +430,7 @@ export class SessionManager {
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
     session.status = "closed";
+    session.sandboxMonitor?.stop();
     session.agentProcess?.kill();
 
     // Tear down worktree
@@ -444,6 +472,12 @@ export class SessionManager {
     const activeIds = new Set(this.sessions.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
     await cleanupOrphanPolicies(activeIds);
+  }
+
+  getSandboxViolations(sessionId: string): SandboxViolationInfo[] {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+    return session.sandboxViolations.slice();
   }
 
   private summarize(session: SessionState): SessionSummary {
