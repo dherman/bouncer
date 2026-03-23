@@ -35,14 +35,14 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 4.5 Add sandbox badge to `<SessionList />`
   - [x] 4.6 Wire violations into `<ChatPanel />`
   - [x] 4.7 Full flow test: coding task with visible violations in UI
-- [ ] **[Phase 5: Empirical Iteration](#phase-5-empirical-iteration)**
-  - [ ] 5.1 Test: read-only task
-  - [ ] 5.2 Test: file creation and editing
-  - [ ] 5.3 Test: running tests / spawning subprocesses
-  - [ ] 5.4 Test: git operations (add, commit)
-  - [ ] 5.5 Test: network-dependent task (expect failure, document)
-  - [ ] 5.6 Iterate on safehouse flags / `--append-profile` overrides based on findings
-  - [ ] 5.7 Write `docs/milestones/seatbelt-sandbox/findings.md`
+- [x] **[Phase 5: Empirical Iteration](#phase-5-empirical-iteration)**
+  - [x] 5.1 Test: read-only task
+  - [x] 5.2 Test: file creation and editing
+  - [x] 5.3 Test: running tests / spawning subprocesses
+  - [x] 5.4 Test: git operations (add, commit)
+  - [x] 5.5 Test: network-dependent task
+  - [x] 5.6 Iterate on safehouse flags / `--append-profile` overrides based on findings
+  - [x] 5.7 Write `docs/milestones/seatbelt-sandbox/findings.md`
 - [ ] **[Phase 6: Cleanup and Polish](#phase-6-cleanup-and-polish)**
   - [ ] 6.1 Graceful degradation when `safehouse` unavailable
   - [ ] 6.2 Echo agent bypass (no sandbox)
