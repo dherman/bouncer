@@ -108,6 +108,7 @@ interface SessionState {
 export class SessionManager {
   private sessions = new Map<string, SessionState>();
   private worktreeManager = new WorktreeManager();
+  private safehouseWarningLogged = false;
 
   constructor(private emit: (channel: string, data: SessionUpdate) => void) {}
 
@@ -131,12 +132,16 @@ export class SessionManager {
 
     // Build sandbox config (safehouse wraps the agent in a Seatbelt sandbox)
     let sandboxConfig: SandboxConfig | null = null;
-    if (agentType === "claude-code" && !(await isSafehouseAvailable())) {
-      console.warn(
-        "safehouse not available — agent will run without OS-level sandboxing"
-      );
+    const safehouseAvailable = await isSafehouseAvailable();
+    if (agentType === "claude-code" && !safehouseAvailable) {
+      if (!this.safehouseWarningLogged) {
+        console.warn(
+          "safehouse not available — agent will run without OS-level sandboxing"
+        );
+        this.safehouseWarningLogged = true;
+      }
     }
-    if (agentType === "claude-code" && (await isSafehouseAvailable())) {
+    if (agentType === "claude-code" && safehouseAvailable) {
       await ensurePolicyDir();
       // Resolve the agent binary directory for read-only sandbox access.
       // The worktree is in /tmp, so the app's node_modules (where the
