@@ -11,14 +11,14 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 1.4 Implement `isSafehouseAvailable()` and cleanup helpers
   - [x] 1.5 Write `scripts/test-sandbox-profile.ts`
   - [x] 1.6 Smoke test: safehouse runs commands, enforces boundaries, stdio pipes work
-- [ ] **[Phase 2: Sandboxed Agent Spawning](#phase-2-sandboxed-agent-spawning)**
-  - [ ] 2.1 Update `resolveClaudeCodeCommand()` to wrap in `safehouse`
-  - [ ] 2.2 Update `createSession()` to build sandbox config before spawning
-  - [ ] 2.3 Update `SessionState` with sandbox fields
-  - [ ] 2.4 Update `closeSession()` to clean up policy files
-  - [ ] 2.5 Add `gitCommonDir` to `WorktreeInfo`
-  - [ ] 2.6 Write `scripts/test-sandboxed-agent.ts`
-  - [ ] 2.7 Smoke test: agent starts, ACP handshake succeeds, reads worktree
+- [x] **[Phase 2: Sandboxed Agent Spawning](#phase-2-sandboxed-agent-spawning)**
+  - [x] 2.1 Update `resolveClaudeCodeCommand()` to wrap in `safehouse`
+  - [x] 2.2 Update `createSession()` to build sandbox config before spawning
+  - [x] 2.3 Update `SessionState` with sandbox fields
+  - [x] 2.4 Update `closeSession()` to clean up policy files
+  - [x] 2.5 Add `gitCommonDir` to `WorktreeInfo`
+  - [x] 2.6 Write `scripts/test-sandboxed-agent.ts`
+  - [x] 2.7 Smoke test: agent starts, ACP handshake succeeds, reads worktree
   - [ ] 2.8 Smoke test: agent writes within worktree
 - [ ] **[Phase 3: Sandbox Monitor](#phase-3-sandbox-monitor)**
   - [ ] 3.1 Create `src/main/sandbox-monitor.ts` with types and skeleton
@@ -89,6 +89,8 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 ## Phase 2: Sandboxed Agent Spawning
 
 Wire the sandbox module into the session manager so that Claude Code sessions launch via safehouse. This is the highest-risk phase — we're discovering whether the agent can actually operate under the sandbox's constraints.
+
+**Key discovery during implementation:** Safehouse selects agent-specific profiles by command basename (e.g., `claude` or `claude-code`), but we spawn `node <agent-bin>` so it doesn't detect Claude Code. The fix is `--enable=all-agents` which loads all agent profiles including Claude Code's state directory grants. Without this, `fs.watch('~/.claude')` fails with EPERM because the Claude Code profile (which grants `~/.claude` read-write) isn't loaded.
 
 ### 2.1 Update `resolveClaudeCodeCommand()`
 

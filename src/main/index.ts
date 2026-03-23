@@ -59,9 +59,9 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send(channel, data)
   })
 
-  // Clean up orphan worktrees from previous crashes
-  sessionManager.cleanupOrphanWorktrees().catch((err) => {
-    console.warn('Failed to clean up orphan worktrees:', err)
+  // Clean up orphan worktrees and sandbox policies from previous crashes
+  sessionManager.cleanupOrphans().catch((err) => {
+    console.warn('Failed to clean up orphans:', err)
   })
 
   // IPC handlers for renderer → main communication

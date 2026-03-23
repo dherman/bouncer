@@ -6,6 +6,15 @@ import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { app } from "electron";
 import { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
+import {
+  type SandboxConfig,
+  defaultSandboxConfig,
+  buildSafehouseArgs,
+  isSafehouseAvailable,
+  ensurePolicyDir,
+  cleanupPolicy,
+  cleanupOrphanPolicies,
+} from "./sandbox.js";
 import type {
   AgentType,
   Message,
@@ -42,16 +51,24 @@ function resolveEchoAgentCommand(): SpawnConfig {
   }
 }
 
-function resolveClaudeCodeCommand(cwd: string): SpawnConfig {
+function resolveClaudeCodeCommand(
+  cwd: string,
+  sandboxConfig: SandboxConfig | null,
+): SpawnConfig {
   const require = createRequire(app.getAppPath() + "/");
   const binPath = require.resolve(
     "@zed-industries/claude-agent-acp/dist/index.js"
   );
-  // Use the node binary rather than process.execPath (Electron) to avoid
-  // spawning a second Electron instance with its own Dock icon on macOS.
-  // This assumes node is on PATH, which is true for development. For a
-  // packaged app, we'd need to bundle a Node runtime or find another way
-  // to suppress the Dock icon when using process.execPath.
+
+  // When safehouse is available, wrap in sandbox
+  if (sandboxConfig) {
+    const args = buildSafehouseArgs(sandboxConfig, ["node", binPath]);
+    return { cmd: "safehouse", args, cwd };
+  }
+
+  // Unsandboxed fallback — use node binary rather than process.execPath
+  // (Electron) to avoid spawning a second Electron instance with its own
+  // Dock icon on macOS.
   return {
     cmd: "node",
     args: [binPath],
@@ -59,11 +76,15 @@ function resolveClaudeCodeCommand(cwd: string): SpawnConfig {
   };
 }
 
-function resolveAgentCommand(agentType: AgentType, cwd: string): SpawnConfig {
+function resolveAgentCommand(
+  agentType: AgentType,
+  cwd: string,
+  sandboxConfig: SandboxConfig | null,
+): SpawnConfig {
   if (agentType === "echo") {
-    return resolveEchoAgentCommand();
+    return resolveEchoAgentCommand(); // no sandbox for echo agent
   }
-  return resolveClaudeCodeCommand(cwd);
+  return resolveClaudeCodeCommand(cwd, sandboxConfig);
 }
 
 interface SessionState {
@@ -77,6 +98,7 @@ interface SessionState {
   agentType: AgentType;
   projectDir: string;
   worktree: WorktreeInfo | null;
+  sandboxConfig: SandboxConfig | null;
 }
 
 export class SessionManager {
@@ -103,6 +125,17 @@ export class SessionManager {
 
     const workingDir = worktree?.path ?? projectDir;
 
+    // Build sandbox config (safehouse wraps the agent in a Seatbelt sandbox)
+    let sandboxConfig: SandboxConfig | null = null;
+    if (agentType === "claude-code" && (await isSafehouseAvailable())) {
+      await ensurePolicyDir();
+      sandboxConfig = defaultSandboxConfig({
+        sessionId: id,
+        worktreePath: workingDir,
+        gitCommonDir: worktree?.gitCommonDir,
+      });
+    }
+
     const session: SessionState = {
       id,
       acpSessionId: "",
@@ -113,6 +146,7 @@ export class SessionManager {
       agentType,
       projectDir,
       worktree,
+      sandboxConfig,
     };
     this.sessions.set(id, session);
     this.emit("session-update", {
@@ -122,8 +156,12 @@ export class SessionManager {
     });
 
     try {
-      // Spawn the agent
-      const { cmd, args, env, cwd } = resolveAgentCommand(agentType, workingDir);
+      // Spawn the agent (sandboxed via safehouse if config present)
+      const { cmd, args, env, cwd } = resolveAgentCommand(
+        agentType,
+        workingDir,
+        sandboxConfig,
+      );
       const agentProcess = spawn(cmd, args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...env },
@@ -376,6 +414,11 @@ export class SessionManager {
       }
     }
 
+    // Clean up sandbox policy file
+    if (session.sandboxConfig) {
+      await cleanupPolicy(session.sandboxConfig.policyOutputPath);
+    }
+
     this.emit("session-update", {
       sessionId,
       type: "status-change",
@@ -393,10 +436,11 @@ export class SessionManager {
     );
   }
 
-  /** Remove orphan worktree directories left behind by a previous crash. */
-  async cleanupOrphanWorktrees(): Promise<void> {
+  /** Remove orphan worktree directories and sandbox policies left behind by a previous crash. */
+  async cleanupOrphans(): Promise<void> {
     const activeIds = new Set(this.sessions.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
+    await cleanupOrphanPolicies(activeIds);
   }
 
   private summarize(session: SessionState): SessionSummary {

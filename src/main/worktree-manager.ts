@@ -12,6 +12,7 @@ export interface WorktreeInfo {
   path: string; // Absolute path to the worktree directory
   branch: string; // Branch name: bouncer/<session-id>
   projectDir: string; // Original project directory
+  gitCommonDir: string; // Git common dir (parent repo's .git for linked worktrees)
 }
 
 export class WorktreeManager {
@@ -50,6 +51,16 @@ export class WorktreeManager {
       { cwd: projectDir }
     );
 
+    // Resolve the git common dir — linked worktrees store refs/metadata
+    // in the parent repo's .git directory. Without write access to this
+    // path, git operations (commit, branch, etc.) fail from the worktree.
+    const { stdout: commonDirRaw } = await execFileAsync(
+      "git",
+      ["rev-parse", "--git-common-dir"],
+      { cwd: worktreePath }
+    );
+    const gitCommonDir = resolve(worktreePath, commonDirRaw.trim());
+
     // Store project dir breadcrumb so orphan cleanup can find the parent repo
     await mkdir(this.metadataPath, { recursive: true });
     await writeFile(
@@ -58,7 +69,7 @@ export class WorktreeManager {
       "utf-8"
     );
 
-    return { path: worktreePath, branch, projectDir };
+    return { path: worktreePath, branch, projectDir, gitCommonDir };
   }
 
   /** Remove a worktree and delete its session branch. */
