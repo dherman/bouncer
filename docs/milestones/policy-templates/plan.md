@@ -9,12 +9,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 1.2 Create `src/main/policy-templates.ts` with the three built-in templates
   - [x] 1.3 Create `src/main/policy-registry.ts` with the registry class
   - [x] 1.4 Verify: types compile, registry returns all three templates
-- [ ] **[Phase 2: Policy-to-Sandbox Mapping](#phase-2-policy-to-sandbox-mapping)**
-  - [ ] 2.1 Create `src/main/policy-sandbox.ts` with `policyToSandboxConfig()`
-  - [ ] 2.2 Add `appendProfileContent` support to `SandboxConfig` and `buildSafehouseArgs()`
-  - [ ] 2.3 Add append-profile file lifecycle helpers
-  - [ ] 2.4 Write `scripts/test-policy-sandbox.ts`
-  - [ ] 2.5 Smoke test: each template produces different safehouse args
+- [x] **[Phase 2: Policy-to-Sandbox Mapping](#phase-2-policy-to-sandbox-mapping)**
+  - [x] 2.1 Create `src/main/policy-sandbox.ts` with `policyToSandboxConfig()`
+  - [x] 2.2 Add `appendProfileContent` support to `SandboxConfig` and `buildSafehouseArgs()`
+  - [x] 2.3 Add append-profile file lifecycle helpers
+  - [x] 2.4 Write `scripts/test-policy-sandbox.ts`
+  - [x] 2.5 Smoke test: each template produces different safehouse args
 - [ ] **[Phase 3: Session Manager Integration](#phase-3-session-manager-integration)**
   - [ ] 3.1 Add `PolicyTemplateRegistry` to `SessionManager`
   - [ ] 3.2 Update `createSession()` to accept `policyId` and use `policyToSandboxConfig()`
