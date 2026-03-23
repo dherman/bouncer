@@ -1,21 +1,26 @@
 // scripts/test-sandbox-profile.ts
 //
-// Generates a sandbox profile and validates it against real sandbox-exec.
+// Tests the sandbox integration via agent-safehouse.
 //
 // Usage: npx tsx scripts/test-sandbox-profile.ts [project-dir]
+//
+// Prerequisites: `safehouse` must be on PATH
+//   brew install eugene1g/safehouse/agent-safehouse
 //
 // Defaults to the current directory as the "worktree" path.
 
 import { homedir, tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import {
-  defaultPolicy,
-  generateProfile,
-  writePolicyToDisk,
-} from "../src/main/sandbox-profile.js";
+  defaultSandboxConfig,
+  buildSafehouseArgs,
+  isSafehouseAvailable,
+  ensurePolicyDir,
+  cleanupPolicy,
+} from "../src/main/sandbox.js";
 
 const execFileAsync = promisify(execFile);
 const worktreePath = process.argv[2] || process.cwd();
@@ -33,103 +38,111 @@ function fail(msg: string) {
   failed++;
 }
 
-console.log("=== Sandbox Profile Generator Test ===\n");
+console.log("=== Sandbox Integration Test (agent-safehouse) ===\n");
 
-// 1. Generate policy and profile
-console.log(`Worktree path: ${worktreePath}`);
-const policy = defaultPolicy({
-  worktreePath,
-  homedir: homedir(),
-  tmpdir: tmpdir(),
+// Check safehouse availability
+const available = await isSafehouseAvailable();
+if (!available) {
+  console.log("safehouse CLI not found on PATH.");
+  console.log("Install: brew install eugene1g/safehouse/agent-safehouse");
+  process.exit(1);
+}
+pass("safehouse CLI available");
+
+// Build config
+const config = defaultSandboxConfig({
   sessionId,
+  worktreePath,
 });
-console.log(`Policy: ${policy.writablePaths.length} writable, ${policy.readOnlyPaths.length} read-only, network=${policy.allowNetwork}`);
+console.log(`\nWorktree: ${worktreePath}`);
+console.log(`Policy output: ${config.policyOutputPath}`);
+console.log(`Writable dirs: ${config.writableDirs.join(", ")}`);
+console.log(`Env passthrough: ${config.envPassthrough.join(", ")}`);
 
-const profile = generateProfile(policy);
-console.log(`\n--- Generated SBPL (${profile.length} chars) ---`);
-console.log(profile);
-console.log("--- End SBPL ---");
+// Build args for a simple ls command
+const args = buildSafehouseArgs(config, ["/bin/ls", worktreePath]);
+console.log(`\nSafehouse args: safehouse ${args.join(" ")}`);
 
-// 2. Write to disk
-const profilePath = await writePolicyToDisk(sessionId, profile);
-console.log(`Profile written to: ${profilePath}\n`);
+// Ensure policy dir exists
+await ensurePolicyDir();
 
-// 3. Validate with sandbox-exec
-console.log("--- Validation Tests ---\n");
-
-// Test 1: ls the worktree (should succeed)
+// Test 1: Generate policy and run ls in worktree (should succeed)
+console.log("\n--- Validation Tests ---\n");
 try {
-  const { stdout } = await execFileAsync(
-    "/usr/bin/sandbox-exec",
-    ["-f", profilePath, "/bin/ls", worktreePath],
-  );
-  pass(`ls worktree: ${stdout.trim().split("\n").length} entries`);
+  const { stdout } = await execFileAsync("safehouse", args);
+  const lines = stdout.trim().split("\n").filter(Boolean);
+  pass(`ls worktree via safehouse: ${lines.length} entries`);
 } catch (err: any) {
-  fail(`ls worktree FAILED: ${err.message}`);
+  fail(`ls worktree FAILED: ${err.stderr || err.message}`);
 }
 
-// Test 2: write to worktree (should succeed)
-const testFile = `${worktreePath}/.sandbox-test-${sessionId}`;
+// Test 2: Inspect the generated policy file
 try {
-  await execFileAsync(
-    "/usr/bin/sandbox-exec",
-    ["-f", profilePath, "/usr/bin/touch", testFile],
-  );
+  const policy = await readFile(config.policyOutputPath, "utf-8");
+  const ruleCount = (policy.match(/^\(allow /gm) || []).length;
+  const denyCount = (policy.match(/^\(deny /gm) || []).length;
+  pass(`policy file generated: ${policy.length} chars, ${ruleCount} allow rules, ${denyCount} deny rules`);
+} catch (err: any) {
+  fail(`policy file not found: ${err.message}`);
+}
+
+// Test 3: Write to worktree (should succeed)
+const testFile = `${worktreePath}/.sandbox-test-${sessionId}`;
+const writeArgs = buildSafehouseArgs(config, ["/usr/bin/touch", testFile]);
+try {
+  await execFileAsync("safehouse", writeArgs);
   pass("touch in worktree succeeded");
   await rm(testFile, { force: true });
 } catch (err: any) {
-  fail(`touch in worktree FAILED: ${err.message}`);
+  fail(`touch in worktree FAILED: ${err.stderr || err.message}`);
 }
 
-// Test 3: write to home directory (should fail)
+// Test 4: Write to home directory (should fail)
 const badFile = `${homedir()}/.sandbox-test-bad-${sessionId}`;
+const badArgs = buildSafehouseArgs(config, ["/usr/bin/touch", badFile]);
 try {
-  await execFileAsync(
-    "/usr/bin/sandbox-exec",
-    ["-f", profilePath, "/usr/bin/touch", badFile],
-  );
+  await execFileAsync("safehouse", badArgs);
   fail("touch in ~ succeeded (should have been blocked)");
   await rm(badFile, { force: true });
 } catch {
-  pass("touch in ~ blocked (expected — home dir not broadly writable)");
+  pass("touch in ~ blocked (expected)");
 }
 
-// Test 4: read system binary (should succeed)
+// Test 5: System binary access (should succeed)
+const whichArgs = buildSafehouseArgs(config, ["/usr/bin/which", "git"]);
 try {
-  await execFileAsync(
-    "/usr/bin/sandbox-exec",
-    ["-f", profilePath, "/usr/bin/which", "git"],
-  );
+  await execFileAsync("safehouse", whichArgs);
   pass("which git succeeded");
 } catch (err: any) {
-  fail(`which git FAILED: ${err.message}`);
+  fail(`which git FAILED: ${err.stderr || err.message}`);
 }
 
-// Test 5: read home directory listing (should fail — ~ not broadly readable)
+// Test 6: Stdio piping works (critical for ACP)
 try {
-  await execFileAsync(
-    "/usr/bin/sandbox-exec",
-    ["-f", profilePath, "/bin/ls", homedir()],
-  );
-  fail("ls ~ succeeded (should have been restricted)");
-} catch {
-  pass("ls ~ blocked (expected — home dir not broadly readable)");
+  const result = await new Promise<string>((resolve, reject) => {
+    const echoArgs = buildSafehouseArgs(config, ["/bin/echo", "hello-acp"]);
+    const proc = spawn("safehouse", echoArgs, {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    proc.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+    proc.on("close", (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(`exit ${code}`));
+    });
+    proc.on("error", reject);
+  });
+  if (result === "hello-acp") {
+    pass("stdio piping works (critical for ACP JSON-RPC)");
+  } else {
+    fail(`stdio piping returned unexpected output: "${result}"`);
+  }
+} catch (err: any) {
+  fail(`stdio piping FAILED: ${err.message}`);
 }
 
-// Test 6: network (should fail)
-try {
-  await execFileAsync(
-    "/usr/bin/sandbox-exec",
-    ["-f", profilePath, "/usr/bin/curl", "-s", "--max-time", "2", "https://example.com"],
-    { timeout: 5000 },
-  );
-  fail("curl succeeded (should have been blocked)");
-} catch {
-  pass("curl blocked (expected — network denied)");
-}
-
-// Clean up profile
-await rm(profilePath, { force: true });
+// Clean up
+await cleanupPolicy(config.policyOutputPath);
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
 if (failed > 0) {

@@ -1,0 +1,180 @@
+/**
+ * Sandbox integration via agent-safehouse.
+ *
+ * Instead of generating SBPL profiles directly, we delegate to the
+ * `safehouse` CLI (https://agent-safehouse.dev) which maintains curated,
+ * community-tested macOS Seatbelt profiles for agent sandboxing.
+ *
+ * Safehouse handles:
+ *   - System runtime permissions (binaries, libraries, Mach IPC, devices)
+ *   - Toolchain-specific paths (Node.js, Rust, Python, etc.)
+ *   - Agent-specific state directories (Claude Code, Cursor, etc.)
+ *   - Git worktree detection and cross-worktree read access
+ *   - Shell init files, SSH config, XDG directories
+ *
+ * We provide:
+ *   - Session-specific writable paths (worktree, git common dir)
+ *   - Environment variable passthrough for ACP
+ *   - Policy file lifecycle management
+ */
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdir, access, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+
+const execFileAsync = promisify(execFile);
+
+const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
+
+export interface SandboxConfig {
+  /** Working directory for the sandboxed process (and git root detection). */
+  workdir: string;
+  /** Additional directories to grant read-write access. */
+  writableDirs: string[];
+  /** Additional directories to grant read-only access. */
+  readOnlyDirs: string[];
+  /** Environment variables to pass through to the sandboxed process. */
+  envPassthrough: string[];
+  /** Path to write the generated policy file. */
+  policyOutputPath: string;
+}
+
+/**
+ * Build the safehouse CLI arguments for spawning a sandboxed process.
+ *
+ * When safehouse is available, the session manager spawns:
+ *   safehouse [flags] -- node <agent-bin>
+ *
+ * When safehouse is unavailable, falls back to unsandboxed execution.
+ */
+export function buildSafehouseArgs(
+  config: SandboxConfig,
+  command: string[]
+): string[] {
+  const args: string[] = [];
+
+  // Persist the policy file so we control its lifecycle
+  args.push(`--output=${config.policyOutputPath}`);
+
+  // Set the working directory for git root detection
+  args.push(`--workdir=${config.workdir}`);
+
+  // Writable directories
+  if (config.writableDirs.length > 0) {
+    args.push(`--add-dirs=${config.writableDirs.join(":")}`);
+  }
+
+  // Read-only directories
+  if (config.readOnlyDirs.length > 0) {
+    args.push(`--add-dirs-ro=${config.readOnlyDirs.join(":")}`);
+  }
+
+  // Environment passthrough
+  if (config.envPassthrough.length > 0) {
+    args.push(`--env-pass=${config.envPassthrough.join(",")}`);
+  }
+
+  // Separator and command
+  args.push("--");
+  args.push(...command);
+
+  return args;
+}
+
+/**
+ * Build a SandboxConfig for a Claude Code agent session.
+ */
+export function defaultSandboxConfig({
+  sessionId,
+  worktreePath,
+  gitCommonDir,
+}: {
+  sessionId: string;
+  worktreePath: string;
+  /** The git common dir for linked worktrees (parent repo's .git). */
+  gitCommonDir?: string;
+}): SandboxConfig {
+  const writableDirs = [worktreePath];
+
+  // Git worktree common dir: linked worktrees store refs/metadata in
+  // the parent repo's .git directory. Without write access, git
+  // operations (commit, branch, etc.) fail from within the worktree.
+  if (gitCommonDir) {
+    writableDirs.push(gitCommonDir);
+  }
+
+  return {
+    workdir: worktreePath,
+    writableDirs,
+    readOnlyDirs: [],
+    envPassthrough: [
+      // Claude Code auth
+      "ANTHROPIC_API_KEY",
+      // Node.js runtime
+      "NODE_OPTIONS",
+      "NODE_PATH",
+      // Common dev env vars
+      "EDITOR",
+      "VISUAL",
+      "GIT_AUTHOR_NAME",
+      "GIT_AUTHOR_EMAIL",
+      "GIT_COMMITTER_NAME",
+      "GIT_COMMITTER_EMAIL",
+    ],
+    policyOutputPath: join(POLICY_DIR, `${sessionId}.sb`),
+  };
+}
+
+/**
+ * Check whether the `safehouse` CLI is available on PATH.
+ */
+let _safehouseAvailable: boolean | null = null;
+export async function isSafehouseAvailable(): Promise<boolean> {
+  if (_safehouseAvailable !== null) return _safehouseAvailable;
+  try {
+    await execFileAsync("safehouse", ["--version"]);
+    _safehouseAvailable = true;
+  } catch {
+    _safehouseAvailable = false;
+  }
+  return _safehouseAvailable;
+}
+
+/**
+ * Ensure the policy output directory exists.
+ */
+export async function ensurePolicyDir(): Promise<void> {
+  await mkdir(POLICY_DIR, { recursive: true });
+}
+
+/**
+ * Clean up a session's policy file.
+ */
+export async function cleanupPolicy(policyPath: string): Promise<void> {
+  await rm(policyPath, { force: true }).catch(() => {});
+}
+
+/**
+ * Clean up orphan policy files from previous sessions.
+ */
+export async function cleanupOrphanPolicies(
+  activeSessionIds: Set<string>
+): Promise<void> {
+  const { readdir } = await import("node:fs/promises");
+  try {
+    const entries = await readdir(POLICY_DIR);
+    for (const entry of entries) {
+      if (entry.endsWith(".sb")) {
+        const sessionId = entry.replace(".sb", "");
+        if (!activeSessionIds.has(sessionId)) {
+          await rm(join(POLICY_DIR, entry), { force: true });
+        }
+      }
+    }
+  } catch {
+    // Directory may not exist
+  }
+}

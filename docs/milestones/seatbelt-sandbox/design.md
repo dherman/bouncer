@@ -76,7 +76,7 @@ Milestone 1 established the pipeline: `SessionManager → spawn(agent) → ACP o
 
 | Component | M1 | M2 |
 |-----------|----|----|
-| Agent spawning | `spawn("node", [agentBin], { cwd: worktree })` | `spawn("sandbox-exec", ["-D", "WORKTREE=...", "-f", "profile.sb", "node", agentBin], { cwd: worktree })` |
+| Agent spawning | `spawn("node", [agentBin], { cwd: worktree })` | `spawn("safehouse", [...sandboxArgs, "--", "node", agentBin], { cwd: worktree })` via agent-safehouse |
 | Filesystem enforcement | None (agent has full access) | Seatbelt profile: deny-default, allow worktree read/write, allow system read-only |
 | Network enforcement | None | Deny all network (as a starting constraint; Milestone 6 adds proxy-based allowlisting) |
 | Violation detection | None | `SandboxMonitor` tails macOS unified log for `Sandbox` events |
@@ -145,32 +145,56 @@ The log stream approach is primary because it catches violations from all child 
 
 ## Components
 
-### 1. Sandbox Profile Generator (`src/main/sandbox-profile.ts`) [NEW]
+### 1. Sandbox Integration (`src/main/sandbox.ts`) [NEW]
 
-Generates SBPL profile strings from a structured policy specification. This is the core new module for Milestone 2.
+Rather than generating SBPL profiles directly, we delegate to **[agent-safehouse](https://agent-safehouse.dev)** — an open-source CLI tool that maintains curated, community-tested macOS Seatbelt profiles for agent sandboxing. This avoids duplicating the substantial work of enumerating system runtime paths, Mach IPC services, device nodes, toolchain caches, and agent-specific state directories.
 
-The full interface and default policy are implemented in `src/main/sandbox-profile.ts`. Key aspects of the default policy, informed by [agent-safehouse](https://agent-safehouse.dev) profiles:
+**What safehouse provides:**
+- System runtime permissions (binaries, libraries, Mach IPC, PTY, devices)
+- Toolchain-specific paths (Node.js, Rust, Python, etc.)
+- Agent-specific state directories (Claude Code, Cursor, etc.)
+- Git worktree detection and cross-worktree read access
+- Shell init files, SSH config, XDG directories
+- Ongoing community maintenance as macOS and agent tooling evolve
 
-**Writable paths** include the worktree, temp directories (`/tmp`, `/var/folders`), Claude Code state (`~/.claude`, `~/.cache/claude`), Node.js package manager caches (`~/.npm`, `~/.pnpm-store`, etc.), and — critically — the **git common dir** for linked worktrees (the parent repo's `.git` directory, without which git operations fail from a worktree).
+**What we provide on top:**
+- Session-specific writable paths (worktree, git common dir) via `--add-dirs`
+- Environment variable passthrough for ACP via `--env-pass`
+- Policy file lifecycle management (persist via `--output`, clean up on session close)
 
-**Read-only paths** include system binaries/libraries, Homebrew paths, scoped `/private/etc` entries (not a broad `/private/etc` subpath), shell init files, git config, SSH config, and XDG directories.
+**Integration model:** The session manager spawns `safehouse` as the command wrapper:
 
-**Network** is denied (Milestone 6 adds proxy-based allowlisting).
+```
+safehouse --output=<policy-path> --workdir=<worktree> --add-dirs=<worktree> \
+  --env-pass=ANTHROPIC_API_KEY,NODE_OPTIONS -- node <agent-bin>
+```
 
-**`generateProfile()`** converts the policy to SBPL. The generated profile includes, beyond the path rules:
+Safehouse handles `sandbox-exec` internally, and stdio passes through transparently for ACP JSON-RPC.
 
-- **Process operations**: `process-exec`, `process-fork`, `signal` and `process-info*` scoped to `same-sandbox`, `pseudo-tty` for PTY allocation, `sysctl-read`
-- **Mach IPC**: broad `mach-lookup` (tightening to specific services is a future hardening step), `system-socket`, `ipc-posix-shm-read-data` for notification center
-- **Root directory**: `(allow file-read* (literal "/"))` — processes need to read the root dir itself for path resolution; individual `(subpath "/usr")` rules don't cover it
-- **Device nodes**: read-write access to `/dev/fd`, `/dev/stdout`, `/dev/stderr`, `/dev/null`, `/dev/tty`, `/dev/ptmx`, `/dev/dtracehelper`, and dynamic tty/pty patterns; read-only access to `/dev/zero`, `/dev/urandom`, `/dev/random`, `/dev/autofs_nowait`
-- **TTY ioctl**: `file-ioctl` on tty/pty devices for terminal operations
-- **Metadata traversal**: `file-read-metadata` on `/private`, `/private/var`, `/private/var/run`, `/private/etc`, `/home` for symlink and path resolution
+**Fallback:** When `safehouse` is not installed, the session manager falls back to unsandboxed execution with a warning. This keeps the app functional on Linux or on macOS without safehouse installed.
 
-These rules are informed by [agent-safehouse](https://agent-safehouse.dev) `10-system-runtime.sb` and validated against real `sandbox-exec` execution.
+```typescript
+export interface SandboxConfig {
+  workdir: string;
+  writableDirs: string[];
+  readOnlyDirs: string[];
+  envPassthrough: string[];
+  policyOutputPath: string;
+}
 
-> **Note on Mach IPC**: The initial profile allows all `mach-lookup` operations. This is intentionally broad — many macOS system services require Mach IPC. Agent-safehouse documents the specific services needed (logd, FSEvents, trustd, configd, DNSConfiguration, etc.) which we can tighten to in a future hardening pass.
+export function defaultSandboxConfig(params: {
+  sessionId: string;
+  worktreePath: string;
+  gitCommonDir?: string;
+}): SandboxConfig;
 
-> **Note on `process-exec`**: The profile allows executing any binary. This is safe because the filesystem rules control *which* binaries are readable. Agent-safehouse takes the same approach.
+export function buildSafehouseArgs(
+  config: SandboxConfig,
+  command: string[],
+): string[];
+
+export async function isSafehouseAvailable(): Promise<boolean>;
+```
 
 ### 2. Sandbox Monitor (`src/main/sandbox-monitor.ts`) [NEW]
 
@@ -233,18 +257,14 @@ The session manager gains sandbox orchestration logic.
 async createSession(projectDir: string, agentType: AgentType = "claude-code") {
   // ... (unchanged: create worktree) ...
 
-  // NEW: Generate sandbox profile
-  const policy = defaultPolicy({
-    worktreePath: worktree.path,
-    homedir: os.homedir(),
-    tmpdir: os.tmpdir(),
+  // NEW: Build sandbox config
+  const sandboxConfig = defaultSandboxConfig({
     sessionId: id,
+    worktreePath: worktree.path,
     gitCommonDir: worktree.gitCommonDir,  // parent repo's .git dir
   });
-  const profileContent = generateProfile(policy);
-  const profilePath = await writePolicyToDisk(id, profileContent);
 
-  // ... spawn agent via sandbox-exec (see below) ...
+  // ... spawn agent via safehouse (see below) ...
 
   // NEW: Start sandbox monitor
   const monitor = new SandboxMonitor();
@@ -261,26 +281,28 @@ async createSession(projectDir: string, agentType: AgentType = "claude-code") {
 
 **Changes to agent spawning:**
 
-The `resolveClaudeCodeCommand()` function is updated to wrap the command in `sandbox-exec`:
+The `resolveClaudeCodeCommand()` function is updated to wrap the command in `safehouse`:
 
 ```typescript
 function resolveClaudeCodeCommand(
   cwd: string,
-  profilePath: string
+  sandboxConfig: SandboxConfig | null,
 ): SpawnConfig {
   const require = createRequire(app.getAppPath() + "/");
   const binPath = require.resolve(
     "@zed-industries/claude-agent-acp/dist/index.js"
   );
-  return {
-    cmd: "/usr/bin/sandbox-exec",
-    args: ["-f", profilePath, "node", binPath],
-    cwd,
-  };
+
+  if (sandboxConfig) {
+    const args = buildSafehouseArgs(sandboxConfig, ["node", binPath]);
+    return { cmd: "safehouse", args, cwd };
+  }
+
+  return { cmd: "node", args: [binPath], cwd };
 }
 ```
 
-The spawn call itself barely changes — it just delegates to a different command. The stdio piping, ACP connection setup, and error handling remain identical.
+Safehouse handles `sandbox-exec` internally, and stdio passes through transparently for ACP JSON-RPC. The spawn call barely changes — just a different command. ACP connection setup and error handling remain identical.
 
 **Changes to `SessionState`:**
 
