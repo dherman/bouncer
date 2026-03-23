@@ -11,9 +11,9 @@ export function MessageInput({ onSend, disabled, placeholder }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const wasDisabled = useRef(disabled)
 
-  // Refocus when transitioning from disabled to enabled (agent finished responding)
+  // Focus on mount and refocus when transitioning from disabled to enabled
   useEffect(() => {
-    if (wasDisabled.current && !disabled) {
+    if (!disabled) {
       inputRef.current?.focus()
     }
     wasDisabled.current = disabled
