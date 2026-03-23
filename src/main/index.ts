@@ -66,12 +66,17 @@ app.whenReady().then(() => {
 
   // IPC handlers for renderer → main communication
   ipcMain.handle('sessions:list', () => sessionManager.listSessions())
-  ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown) => {
+  ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
     if (typeof projectDir !== 'string') {
       throw new Error('Invalid argument: projectDir must be a string')
     }
     const validAgentType = agentType === 'echo' ? 'echo' as const : 'claude-code' as const
-    return sessionManager.createSession(projectDir, validAgentType)
+    const validPolicyId = typeof policyId === 'string' ? policyId : undefined
+    return sessionManager.createSession(projectDir, validAgentType, validPolicyId)
+  })
+
+  ipcMain.handle('policies:list', () => {
+    return sessionManager.policyRegistry.list()
   })
   ipcMain.handle('sessions:sendMessage', (_e, sessionId: unknown, text: unknown) => {
     if (typeof sessionId !== 'string' || typeof text !== 'string') {

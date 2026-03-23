@@ -22,12 +22,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 3.4 Update cleanup paths for append-profile files
   - [x] 3.5 Deprecate `defaultSandboxConfig()` with forwarding wrapper
   - [x] 3.6 Smoke test: sessions create with each policy, sandbox args differ
-- [ ] **[Phase 4: IPC and Preload Updates](#phase-4-ipc-and-preload-updates)**
-  - [ ] 4.1 Add `policies:list` IPC handler
-  - [ ] 4.2 Update `sessions:create` handler to accept `policyId`
-  - [ ] 4.3 Update preload bridge with `policies` namespace and updated `create` signature
-  - [ ] 4.4 Update `env.d.ts` type declarations
-  - [ ] 4.5 Verify: `policies:list` returns three templates from renderer
+- [x] **[Phase 4: IPC and Preload Updates](#phase-4-ipc-and-preload-updates)**
+  - [x] 4.1 Add `policies:list` IPC handler
+  - [x] 4.2 Update `sessions:create` handler to accept `policyId`
+  - [x] 4.3 Update preload bridge with `policies` namespace and updated `create` signature
+  - [x] 4.4 Update `env.d.ts` type declarations
+  - [x] 4.5 Verify: `policies:list` returns three templates from renderer
 - [ ] **[Phase 5: UI — New Session Dialog](#phase-5-ui--new-session-dialog)**
   - [ ] 5.1 Create `NewSessionDialog.tsx` component
   - [ ] 5.2 Wire dialog into `App.tsx` (replace inline `handleCreateSession`)
