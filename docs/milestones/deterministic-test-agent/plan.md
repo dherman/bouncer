@@ -8,12 +8,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 1.1 Add replay types to `src/main/types.ts`
   - [x] 1.2 Create `src/agents/replay-agent.ts` skeleton (ACP boilerplate only)
   - [x] 1.3 Verify: replay agent starts, completes ACP handshake, parses prompt JSON and emits `tool_call` updates
-- [ ] **[Phase 2: Agent Type Registration](#phase-2-agent-type-registration)**
-  - [ ] 2.1 Add `resolveReplayAgentCommand()` to `src/main/session-manager.ts`
-  - [ ] 2.2 Update `resolveAgentCommand()` to handle `"replay"` agent type
-  - [ ] 2.3 Update `createSession()` for replay-specific worktree and policy behavior
-  - [ ] 2.4 Update IPC handler in `src/main/index.ts` to accept `"replay"` agent type
-  - [ ] 2.5 Write `scripts/test-replay-agent.ts` — spawn replay agent, send hand-crafted tool calls, verify session updates
+- [x] **[Phase 2: Agent Type Registration](#phase-2-agent-type-registration)**
+  - [x] 2.1 Add `resolveReplayAgentCommand()` to `src/main/session-manager.ts`
+  - [x] 2.2 Update `resolveAgentCommand()` to handle `"replay"` agent type
+  - [x] 2.3 Update `createSession()` for replay-specific worktree and policy behavior
+  - [x] 2.4 Update IPC handler in `src/main/index.ts` to accept `"replay"` agent type
+  - [x] 2.5 Write `scripts/test-replay-agent.ts` — spawn replay agent, send hand-crafted tool calls, verify session updates
 - [ ] **[Phase 3: Tool Execution Engine](#phase-3-tool-execution-engine)**
   - [ ] 3.1 Add filesystem tool executors (`Read`, `Write`, `Edit`, `Grep`, `Glob`)
   - [ ] 3.2 Add `Bash` executor with timeout and EPERM detection

@@ -80,13 +80,53 @@ function resolveClaudeCodeCommand(
   };
 }
 
+function resolveReplayAgentCommand(
+  cwd: string,
+  sandboxConfig: SandboxConfig | null,
+  worktreePath: string,
+): SpawnConfig {
+  const isDev = !app.isPackaged;
+  const require = createRequire(app.getAppPath() + "/");
+
+  let cmd: string;
+  let args: string[];
+
+  if (isDev) {
+    const tsxBin = require.resolve("tsx/cli");
+    const agentScript = join(app.getAppPath(), "src", "agents", "replay-agent.ts");
+    cmd = process.execPath;
+    args = [tsxBin, agentScript];
+  } else {
+    const agentScript = join(__dirname, "..", "agents", "replay-agent.js");
+    cmd = process.execPath;
+    args = [agentScript];
+  }
+
+  const env: Record<string, string> = {
+    ELECTRON_RUN_AS_NODE: "1",
+    REPLAY_WORKTREE_PATH: worktreePath,
+  };
+
+  // Wrap in safehouse if sandbox config present
+  if (sandboxConfig) {
+    const safehouseArgs = buildSafehouseArgs(sandboxConfig, [cmd, ...args]);
+    return { cmd: "safehouse", args: safehouseArgs, cwd, env };
+  }
+
+  return { cmd, args, env, cwd };
+}
+
 function resolveAgentCommand(
   agentType: AgentType,
   cwd: string,
   sandboxConfig: SandboxConfig | null,
+  worktreePath?: string,
 ): SpawnConfig {
   if (agentType === "echo") {
     return resolveEchoAgentCommand(); // no sandbox for echo agent
+  }
+  if (agentType === "replay") {
+    return resolveReplayAgentCommand(cwd, sandboxConfig, worktreePath ?? cwd);
   }
   return resolveClaudeCodeCommand(cwd, sandboxConfig);
 }
@@ -124,16 +164,16 @@ export class SessionManager {
     const id = randomUUID();
     let worktree: WorktreeInfo | null = null;
 
-    // Resolve policy template
-    const resolvedPolicyId = agentType === "claude-code"
+    // Resolve policy template — replay agents also get sandboxed
+    const resolvedPolicyId = (agentType === "claude-code" || agentType === "replay")
       ? (policyId ?? this.policyRegistry.defaultId)
       : null;
     const template = resolvedPolicyId
       ? this.policyRegistry.get(resolvedPolicyId)
       : null;
 
-    // Create worktree for Claude Code sessions
-    if (agentType === "claude-code") {
+    // Create worktree for Claude Code and replay sessions
+    if (agentType === "claude-code" || agentType === "replay") {
       const isGitRepo = await this.worktreeManager.validateGitRepo(projectDir);
       if (!isGitRepo) {
         throw new Error(`Not a git repository: ${projectDir}`);
@@ -170,7 +210,7 @@ export class SessionManager {
     try {
       // Build sandbox config from policy template
       const safehouseAvailable = await isSafehouseAvailable();
-      if (agentType === "claude-code" && !safehouseAvailable) {
+      if ((agentType === "claude-code" || agentType === "replay") && !safehouseAvailable) {
         if (!this.safehouseWarningLogged) {
           console.warn(
             "safehouse not available — agent will run without OS-level sandboxing"
@@ -204,6 +244,7 @@ export class SessionManager {
         agentType,
         workingDir,
         sandboxConfig,
+        worktree?.path,
       );
       const agentProcess = spawn(cmd, args, {
         stdio: ["pipe", "pipe", "pipe"],
