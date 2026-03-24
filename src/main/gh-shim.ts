@@ -549,8 +549,10 @@ async function main(): Promise<void> {
   const isGraphQL = parsed.command === "api" && parsed.positionalArgs[0] === "graphql";
   const unauditedTag = isGraphQL ? " [unaudited]" : "";
   if (decision.action === "deny") {
-    process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`);
-    process.exit(1);
+    process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`, () => {
+      process.exit(1);
+    });
+    return;
   } else {
     process.stderr.write(`[bouncer:gh] ALLOW ${op}${unauditedTag}\n`);
   }

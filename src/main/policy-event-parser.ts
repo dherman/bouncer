@@ -25,7 +25,7 @@ const REASON_SEPARATOR = " — ";
  * Returns null if the line is not a policy event.
  */
 export function parsePolicyEvent(line: string): PolicyEvent | null {
-  const match = line.match(POLICY_LINE_RE);
+  const match = line.trimEnd().match(POLICY_LINE_RE);
   if (!match) return null;
 
   const tool = match[1] as "gh" | "git";
@@ -35,7 +35,7 @@ export function parsePolicyEvent(line: string): PolicyEvent | null {
   let operation: string;
   let reason: string | undefined;
 
-  const separatorIndex = rest.indexOf(REASON_SEPARATOR);
+  const separatorIndex = rest.lastIndexOf(REASON_SEPARATOR);
   if (decision === "deny" && separatorIndex !== -1) {
     operation = rest.substring(0, separatorIndex);
     reason = rest.substring(separatorIndex + REASON_SEPARATOR.length);
