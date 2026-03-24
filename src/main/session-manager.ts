@@ -100,19 +100,21 @@ function resolveReplayAgentCommand(
   let cmd: string;
   let args: string[];
 
+  // Use "node" rather than process.execPath (Electron binary) to avoid
+  // spawning a second Electron instance. Electron's native IOKit/GPU
+  // initialization crashes under safehouse sandbox restrictions.
   if (isDev) {
     const tsxBin = require.resolve("tsx/cli");
     const agentScript = join(app.getAppPath(), "src", "agents", "replay-agent.ts");
-    cmd = process.execPath;
+    cmd = "node";
     args = [tsxBin, agentScript];
   } else {
     const agentScript = join(__dirname, "..", "agents", "replay-agent.js");
-    cmd = process.execPath;
+    cmd = "node";
     args = [agentScript];
   }
 
   const env: Record<string, string> = {
-    ELECTRON_RUN_AS_NODE: "1",
     REPLAY_WORKTREE_PATH: worktreePath,
   };
 
