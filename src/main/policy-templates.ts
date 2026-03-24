@@ -1,14 +1,13 @@
 import type { PolicyTemplate } from "./types.js";
 
 /**
- * Standard PR implementation: read-write worktree, network deny intended.
- * The tightest practical boundary for coding tasks.
- * Network deny is declared but not yet enforced — requires app-layer proxy (M6).
+ * Standard PR implementation: read-write worktree, no network.
+ * The tightest practical boundary for offline coding tasks.
  */
 export const standardPrTemplate: PolicyTemplate = {
   id: "standard-pr",
   name: "Standard PR",
-  description: "Read-write worktree, standard toolchains (network deny planned)",
+  description: "Read-write worktree, standard toolchains, no network",
   filesystem: {
     worktreeAccess: "read-write",
     additionalWritableDirs: [],
@@ -25,17 +24,15 @@ export const standardPrTemplate: PolicyTemplate = {
 };
 
 /**
- * Research only: read-write worktree, full network.
+ * Research only: read-only filesystem, full network.
  * For code review, analysis, and web research tasks.
- * Sandbox blocks writes to user home and system paths; temp dirs are writable
- * due to safehouse agent profiles. See findings.md for details.
  */
 export const researchOnlyTemplate: PolicyTemplate = {
   id: "research-only",
   name: "Research Only",
-  description: "Read-write worktree, full network, no access outside sandbox",
+  description: "Read-only filesystem, full network access",
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: "read-only",
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },

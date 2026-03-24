@@ -44,12 +44,12 @@ for (const summary of registry.list()) {
   if (summary.id === "standard-pr") {
     assert(hasWorktreeWritable, "standard-pr: worktree should be writable");
     assert(!hasWorktreeReadOnly, "standard-pr: worktree should not be read-only");
-    // Network deny is intentionally skipped — SBPL deny blocks agent API traffic.
-    // See docs/milestones/policy-templates/findings.md
-    assert(!hasAppendProfile, "standard-pr: should not have append profile (network deny deferred to M6)");
+    assert(hasAppendProfile, "standard-pr: should have append profile (network deny)");
+    assert(config.appendProfileContent!.includes("deny network-outbound"),
+      "standard-pr: append profile should deny network");
   } else if (summary.id === "research-only") {
-    assert(hasWorktreeWritable, "research-only: worktree should be writable (scoped to worktree)");
-    assert(!hasWorktreeReadOnly, "research-only: worktree should not be read-only");
+    assert(!hasWorktreeWritable, "research-only: worktree should not be writable");
+    assert(hasWorktreeReadOnly, "research-only: worktree should be read-only");
     assert(!hasAppendProfile, "research-only: should not have append profile");
   } else if (summary.id === "permissive") {
     assert(hasWorktreeWritable, "permissive: worktree should be writable");
