@@ -40,12 +40,12 @@ export function generatePrePushHook(allowedRefsFile: string): string {
 ALLOWED_REFS_FILE="${allowedRefsFile}"
 
 if [ ! -f "$ALLOWED_REFS_FILE" ]; then
-  echo "[bouncer:git] policy file not found, denying push" >&2
+  echo "[bouncer:git] allowed-refs file not found, denying push" >&2
   exit 1
 fi
 
 # pre-push receives lines on stdin: <local-ref> <local-sha> <remote-ref> <remote-sha>
-while read local_ref local_sha remote_ref remote_sha; do
+while read -r local_ref local_sha remote_ref remote_sha; do
   # Extract the branch name from the remote ref
   remote_branch="\${remote_ref#refs/heads/}"
 
@@ -58,8 +58,16 @@ while read local_ref local_sha remote_ref remote_sha; do
   done < "$ALLOWED_REFS_FILE"
 
   if [ "$allowed" = false ]; then
+    allowed_list=""
+    while IFS= read -r ref; do
+      if [ -z "$allowed_list" ]; then
+        allowed_list="$ref"
+      else
+        allowed_list="$allowed_list, $ref"
+      fi
+    done < "$ALLOWED_REFS_FILE"
     echo "[bouncer:git] push to '$remote_branch' denied by session policy" >&2
-    echo "[bouncer:git] allowed refs: $(cat "$ALLOWED_REFS_FILE" | tr '\\n' ', ')" >&2
+    echo "[bouncer:git] allowed refs: $allowed_list" >&2
     exit 1
   fi
 done
