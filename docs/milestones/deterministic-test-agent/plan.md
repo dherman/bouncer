@@ -45,11 +45,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 8.3 Add aggregate summary statistics and per-tool breakdown
   - [x] 8.4 Add `--output` flag for JSON report file
   - [x] 8.5 Run full corpus against `standard-pr` — first real validation run
-- [ ] **[Phase 9: Batch Validation and Findings](#phase-9-batch-validation-and-findings)**
-  - [ ] 9.1 Run full corpus against all three policies
-  - [ ] 9.2 Analyze results: allowed rates, false-block rates, per-tool breakdowns
-  - [ ] 9.3 Categorize blocks: sandbox enforcement vs. missing-file noise vs. network gap
-  - [ ] 9.4 Document findings in `findings.md`
+- [x] **[Phase 9: Batch Validation and Findings](#phase-9-batch-validation-and-findings)**
+  - [x] 9.1 Run full corpus against all three policies
+  - [x] 9.2 Analyze results: allowed rates, false-block rates, per-tool breakdowns
+  - [x] 9.3 Categorize blocks: sandbox enforcement vs. missing-file noise vs. network gap
+  - [x] 9.4 Document findings in `findings.md`
 - [ ] **[Phase 10: UI Integration](#phase-10-ui-integration)**
   - [ ] 10.1 Update `NewSessionDialog.tsx` — add agent type selector with "Replay" option
   - [ ] 10.2 Add session ID text input (shown when Replay is selected)
