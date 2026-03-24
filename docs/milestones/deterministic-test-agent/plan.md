@@ -25,11 +25,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 4.2 Implement `deanonymizeCommand()` for Bash command strings
   - [x] 4.3 Add skip detection for un-resolvable paths (`{project-name}`, `.claude/` internal state)
   - [x] 4.4 Verify: a real dataset record de-anonymizes to valid paths within a worktree
-- [ ] **[Phase 5: Worktree Scaffolding](#phase-5-worktree-scaffolding)**
-  - [ ] 5.1 Create `src/main/replay-scaffold.ts` with `buildScaffoldPlan()`
-  - [ ] 5.2 Implement `applyScaffold()` to create stub files and directories
-  - [ ] 5.3 Handle `Edit` inputs: seed files with `old_string` content
-  - [ ] 5.4 Write `scripts/test-scaffold.ts` — scaffold a real dataset session, verify file tree
+- [x] **[Phase 5: Worktree Scaffolding](#phase-5-worktree-scaffolding)**
+  - [x] 5.1 Create `src/main/replay-scaffold.ts` with `buildScaffoldPlan()`
+  - [x] 5.2 Implement `applyScaffold()` to create stub files and directories
+  - [x] 5.3 Handle `Edit` inputs: seed files with `old_string` content
+  - [x] 5.4 Write `scripts/test-scaffold.ts` — scaffold a real dataset session, verify file tree
 - [ ] **[Phase 6: Dataset Loader](#phase-6-dataset-loader)**
   - [ ] 6.1 Create `src/main/dataset-loader.ts` — parse JSONL, group by session, sort by timestamp
   - [ ] 6.2 Add session listing and summary statistics
