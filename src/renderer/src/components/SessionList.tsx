@@ -16,6 +16,17 @@ interface Props {
   onClose: (id: string) => void
 }
 
+const POLICY_TOOLTIPS: Record<string, string> = {
+  'standard-pr': 'Filesystem: read-write | Network: blocked',
+  'research-only': 'Filesystem: read-only | Network: full',
+  'permissive': 'Filesystem: read-write | Network: full',
+}
+
+function policyTooltip(policyId: string | null): string {
+  if (!policyId) return ''
+  return POLICY_TOOLTIPS[policyId] ?? policyId
+}
+
 function projectLabel(session: SessionSummary): string {
   if (session.projectDir) {
     return session.projectDir.split('/').pop() ?? session.id.slice(0, 8)
@@ -42,7 +53,14 @@ export function SessionList({ sessions, activeSessionId, violationCounts, onSele
           <span className="session-label">
             {projectLabel(s)}
             {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-            {s.sandboxed && <span className="sandbox-badge">&#x1F6E1;</span>}
+            {s.policyName && (
+              <span
+                className={`policy-badge policy-${s.policyId ?? 'default'}`}
+                title={policyTooltip(s.policyId)}
+              >
+                {s.policyName}
+              </span>
+            )}
             {(violationCounts.get(s.id) ?? 0) > 0 && (
               <span className="violation-count">{violationCounts.get(s.id)}</span>
             )}

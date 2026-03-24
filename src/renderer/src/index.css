@@ -336,10 +336,30 @@ body {
   font-style: italic;
 }
 
-/* Sandbox badge in session list */
-.sandbox-badge {
-  font-size: 11px;
-  margin-left: 2px;
+/* Policy badge in session list */
+.policy-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-weight: 500;
+  background-color: #444;
+  color: #ccc;
+}
+
+.policy-standard-pr {
+  background-color: rgba(0, 120, 212, 0.25);
+  color: #6cb6ff;
+}
+
+.policy-research-only {
+  background-color: rgba(92, 184, 92, 0.2);
+  color: #7ee787;
+}
+
+.policy-permissive {
+  background-color: rgba(240, 173, 78, 0.2);
+  color: #f0ad4e;
 }
 
 .violation-count {
