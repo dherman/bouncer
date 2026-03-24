@@ -85,7 +85,7 @@ const toolCalls = [
   // De-anonymization: {project} placeholder → testDir
   { id: 9,  tool: "Read",     input: { file_path: "{project}/test.txt" },               original_outcome: "approved" },
   { id: 10, tool: "Bash",     input: { command: "ls {project}" },                       original_outcome: "approved" },
-  // Un-resolvable paths → skipped
+  // Non-replayable internal paths → skipped
   { id: 11, tool: "Read",     input: { file_path: "{project}/.claude/projects/-Users-{user}-Code-{project-name}/session.jsonl" }, original_outcome: "approved" },
   { id: 12, tool: "Read",     input: { file_path: "{home}/.claude/settings.json" },     original_outcome: "approved" },
   // {host} in Bash → skipped
@@ -104,8 +104,8 @@ const expectedOutcomes: Record<number, string> = {
   8: "error",     // Read nonexistent file
   9: "allowed",   // Read via {project} de-anonymization
   10: "allowed",  // Bash via {project} de-anonymization
-  11: "skipped",  // Un-resolvable: {project-name}
-  12: "skipped",  // Un-resolvable: .claude/
+  11: "skipped",  // Non-replayable: {project-name} placeholder
+  12: "skipped",  // Non-replayable: .claude/ internal state
   13: "skipped",  // {host} in Bash
 };
 

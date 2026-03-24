@@ -19,10 +19,18 @@ interface ReplayContext {
   username: string;
 }
 
+function getSafeUsername(): string {
+  try {
+    return userInfo().username;
+  } catch {
+    return process.env.USER || process.env.USERNAME || "unknown";
+  }
+}
+
 const replayCtx: ReplayContext = {
   worktreePath: WORKTREE_PATH,
   homePath: homedir(),
-  username: userInfo().username,
+  username: getSafeUsername(),
 };
 
 function deanonymizePath(path: string, ctx: ReplayContext): string {
@@ -39,10 +47,15 @@ function deanonymizeCommand(command: string, ctx: ReplayContext): string {
     .replace(/\{user\}/g, ctx.username);
 }
 
+const PATH_FIELDS = ["file_path", "path", "command", "url", "cwd"] as const;
+
 function hasUnresolvablePath(input: Record<string, unknown>): boolean {
-  const json = JSON.stringify(input);
-  if (json.includes("{project-name}")) return true;
-  if (json.includes(".claude/")) return true;
+  for (const key of PATH_FIELDS) {
+    const val = input[key];
+    if (typeof val !== "string") continue;
+    if (val.includes("{project-name}")) return true;
+    if (val.includes(".claude/")) return true;
+  }
   return false;
 }
 
