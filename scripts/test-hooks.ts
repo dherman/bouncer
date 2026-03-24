@@ -54,17 +54,18 @@ async function createTestRepo(): Promise<TestRepo> {
   const worktreeDir = join(baseDir, "worktree");
   const worktreeBranch = "bouncer/test-branch";
 
-  // Create a bare remote repo
-  await execFileAsync("git", ["init", "--bare", bareDir]);
+  // Create a bare remote repo with explicit default branch
+  await execFileAsync("git", ["init", "--bare", "--initial-branch=main", bareDir]);
 
   // Clone it to create a main working copy
   await execFileAsync("git", ["clone", bareDir, mainDir]);
   await execFileAsync("git", ["-C", mainDir, "config", "user.email", "test@test.com"]);
   await execFileAsync("git", ["-C", mainDir, "config", "user.name", "Test"]);
 
-  // Create an initial commit so we can branch
+  // Create an initial commit and push to establish the main branch
+  await execFileAsync("git", ["-C", mainDir, "checkout", "-b", "main"]);
   await execFileAsync("git", ["-C", mainDir, "commit", "--allow-empty", "-m", "init"]);
-  await execFileAsync("git", ["-C", mainDir, "push", "origin", "main"]);
+  await execFileAsync("git", ["-C", mainDir, "push", "-u", "origin", "main"]);
 
   // Create a worktree on the test branch
   await execFileAsync("git", ["-C", mainDir, "worktree", "add", "-b", worktreeBranch, worktreeDir]);
