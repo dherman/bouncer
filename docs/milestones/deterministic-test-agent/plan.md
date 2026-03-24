@@ -30,10 +30,10 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 5.2 Implement `applyScaffold()` to create stub files and directories
   - [x] 5.3 Handle `Edit` inputs: seed files with `old_string` content
   - [x] 5.4 Write `scripts/test-scaffold.ts` — scaffold a real dataset session, verify file tree
-- [ ] **[Phase 6: Dataset Loader](#phase-6-dataset-loader)**
-  - [ ] 6.1 Create `src/main/dataset-loader.ts` — parse JSONL, group by session, sort by timestamp
-  - [ ] 6.2 Add session listing and summary statistics
-  - [ ] 6.3 Verify: loader parses all 11,491 records, groups into 296 sessions
+- [x] **[Phase 6: Dataset Loader](#phase-6-dataset-loader)**
+  - [x] 6.1 Create `src/main/dataset-loader.ts` — parse JSONL, group by session, sort by timestamp
+  - [x] 6.2 Add session listing and summary statistics
+  - [x] 6.3 Verify: loader parses all 11,491 records, groups into 296 sessions
 - [ ] **[Phase 7: Test Harness — Single Session](#phase-7-test-harness--single-session)**
   - [ ] 7.1 Create `scripts/replay-test.ts` with CLI arg parsing
   - [ ] 7.2 Implement single-session orchestration: load → scaffold → spawn → prompt → collect → teardown
