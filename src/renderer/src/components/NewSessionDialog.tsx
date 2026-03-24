@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { PolicyTemplateSummary, SessionSummary } from '../../../main/types'
 
 interface Props {
@@ -14,12 +14,20 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.glitterball.policies.list().then((list) => {
-      setPolicies(list)
-      if (list.length > 0) {
-        setSelectedPolicyId(list[0].id)
-      }
-    })
+    let cancelled = false
+    window.glitterball.policies.list()
+      .then((list) => {
+        if (cancelled) return
+        setPolicies(list)
+        if (list.length > 0) {
+          setSelectedPolicyId((prev) => prev ?? list[0].id)
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : String(err))
+      })
+    return () => { cancelled = true }
   }, [])
 
   async function handleBrowse() {
@@ -43,6 +51,7 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
       onCreated(session)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
       setCreating(false)
     }
   }
@@ -74,7 +83,6 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
                   ...policyItemStyle,
                   ...(p.id === selectedPolicyId ? policyItemSelectedStyle : {}),
                 }}
-                onClick={() => setSelectedPolicyId(p.id)}
               >
                 <input
                   type="radio"
@@ -101,10 +109,10 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
           <button
             style={{
               ...createButtonStyle,
-              ...((!projectDir || creating) ? disabledButtonStyle : {}),
+              ...((!projectDir || !selectedPolicyId || creating) ? disabledButtonStyle : {}),
             }}
             onClick={handleCreate}
-            disabled={!projectDir || creating}
+            disabled={!projectDir || !selectedPolicyId || creating}
           >
             {creating ? 'Creating...' : 'Create Session'}
           </button>
@@ -114,7 +122,7 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
   )
 }
 
-const overlayStyle: React.CSSProperties = {
+const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
   backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -124,7 +132,7 @@ const overlayStyle: React.CSSProperties = {
   zIndex: 100,
 }
 
-const panelStyle: React.CSSProperties = {
+const panelStyle: CSSProperties = {
   backgroundColor: '#2d2d2d',
   borderRadius: 8,
   padding: 24,
@@ -134,30 +142,30 @@ const panelStyle: React.CSSProperties = {
   color: '#fff',
 }
 
-const titleStyle: React.CSSProperties = {
+const titleStyle: CSSProperties = {
   fontSize: 18,
   fontWeight: 600,
   marginBottom: 20,
 }
 
-const sectionStyle: React.CSSProperties = {
+const sectionStyle: CSSProperties = {
   marginBottom: 16,
 }
 
-const labelStyle: React.CSSProperties = {
+const labelStyle: CSSProperties = {
   fontSize: 13,
   color: '#aaa',
   marginBottom: 6,
   display: 'block',
 }
 
-const browseRowStyle: React.CSSProperties = {
+const browseRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
 }
 
-const dirDisplayStyle: React.CSSProperties = {
+const dirDisplayStyle: CSSProperties = {
   flex: 1,
   fontSize: 13,
   fontFamily: 'monospace',
@@ -167,7 +175,7 @@ const dirDisplayStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-const browseButtonStyle: React.CSSProperties = {
+const browseButtonStyle: CSSProperties = {
   padding: '4px 12px',
   backgroundColor: '#444',
   color: '#fff',
@@ -178,7 +186,7 @@ const browseButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 }
 
-const policyListStyle: React.CSSProperties = {
+const policyListStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 2,
@@ -187,7 +195,7 @@ const policyListStyle: React.CSSProperties = {
   border: '1px solid #444',
 }
 
-const policyItemStyle: React.CSSProperties = {
+const policyItemStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
   padding: '10px 12px',
@@ -196,35 +204,35 @@ const policyItemStyle: React.CSSProperties = {
   borderBottom: '1px solid #444',
 }
 
-const policyItemSelectedStyle: React.CSSProperties = {
+const policyItemSelectedStyle: CSSProperties = {
   backgroundColor: '#3a3d41',
 }
 
-const policyNameStyle: React.CSSProperties = {
+const policyNameStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 500,
 }
 
-const policyDescStyle: React.CSSProperties = {
+const policyDescStyle: CSSProperties = {
   fontSize: 12,
   color: '#999',
   marginTop: 2,
 }
 
-const errorStyle: React.CSSProperties = {
+const errorStyle: CSSProperties = {
   fontSize: 13,
   color: '#d9534f',
   marginBottom: 12,
 }
 
-const buttonRowStyle: React.CSSProperties = {
+const buttonRowStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'flex-end',
   gap: 8,
   marginTop: 8,
 }
 
-const cancelButtonStyle: React.CSSProperties = {
+const cancelButtonStyle: CSSProperties = {
   padding: '6px 16px',
   backgroundColor: '#444',
   color: '#fff',
@@ -234,7 +242,7 @@ const cancelButtonStyle: React.CSSProperties = {
   fontSize: 14,
 }
 
-const createButtonStyle: React.CSSProperties = {
+const createButtonStyle: CSSProperties = {
   padding: '6px 16px',
   backgroundColor: '#0078d4',
   color: '#fff',
@@ -244,7 +252,7 @@ const createButtonStyle: React.CSSProperties = {
   fontSize: 14,
 }
 
-const disabledButtonStyle: React.CSSProperties = {
+const disabledButtonStyle: CSSProperties = {
   opacity: 0.5,
   cursor: 'not-allowed',
 }
