@@ -618,10 +618,13 @@ function deriveSessionId(policyPath: string): string | null {
 }
 
 // Run main if this is the entry point.
-// Check both argv[1] and the BOUNCER env vars to avoid triggering when imported as a library.
+// Check env vars to avoid triggering when imported as a library.
+// Use top-level await so Node keeps the event loop alive until main() completes.
 if (process.env.BOUNCER_GITHUB_POLICY && process.env.BOUNCER_REAL_GH) {
-  main().catch((err) => {
+  try {
+    await main();
+  } catch (err) {
     process.stderr.write(`[bouncer:gh] fatal: ${err}\n`);
     process.exit(1);
-  });
+  }
 }
