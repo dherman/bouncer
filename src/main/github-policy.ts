@@ -144,12 +144,18 @@ export async function cleanupGhShim(sessionId: string): Promise<void> {
 
 /**
  * Find the real gh binary. Caches the result.
+ * Returns null if gh is not installed.
  */
-let cachedRealGh: string | null = null;
-export async function findRealGh(): Promise<string> {
-  if (cachedRealGh) return cachedRealGh;
-  const { stdout } = await execFileAsync("which", ["gh"]);
-  cachedRealGh = stdout.trim();
+let cachedRealGh: string | null | undefined = undefined;
+export async function findRealGh(): Promise<string | null> {
+  if (cachedRealGh !== undefined) return cachedRealGh;
+  try {
+    const { stdout } = await execFileAsync("which", ["gh"]);
+    const path = stdout.trim();
+    cachedRealGh = path || null;
+  } catch {
+    cachedRealGh = null;
+  }
   return cachedRealGh;
 }
 

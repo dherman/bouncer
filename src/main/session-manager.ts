@@ -22,6 +22,7 @@ import {
   detectGitHubRepo,
   buildSessionPolicy,
   writePolicyState,
+  readPolicyState,
   policyStatePath,
   cleanupPolicyState,
   installGhShim,
@@ -273,20 +274,27 @@ export class SessionManager {
         const repo = await detectGitHubRepo(workingDir);
         if (repo) {
           const githubPolicy = buildSessionPolicy(repo, worktree.branch);
+          // Set on session before side effects so error cleanup can find it
+          session.githubPolicy = githubPolicy;
           await writePolicyState(id, githubPolicy);
           await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
-          session.githubPolicy = githubPolicy;
 
-          // Install gh shim and set up environment
-          const ghShimTsPath = join(app.getAppPath(), "src", "main", "gh-shim.ts");
-          const shimDir = await installGhShim(id, ghShimTsPath, process.execPath);
+          // Install gh shim and set up environment (only if gh is available)
           const realGhPath = await findRealGh();
-          shimEnv = {
-            BOUNCER_GITHUB_POLICY: policyStatePath(id),
-            BOUNCER_REAL_GH: realGhPath,
-            PATH: `${shimDir}:${process.env.PATH ?? ""}`,
-            ELECTRON_RUN_AS_NODE: "1",
-          };
+          if (realGhPath) {
+            const ghShimPath = app.isPackaged
+              ? join(app.getAppPath(), "dist", "main", "gh-shim.js")
+              : join(app.getAppPath(), "src", "main", "gh-shim.ts");
+            const shimDir = await installGhShim(id, ghShimPath, process.execPath);
+            shimEnv = {
+              BOUNCER_GITHUB_POLICY: policyStatePath(id),
+              BOUNCER_REAL_GH: realGhPath,
+              PATH: `${shimDir}:${process.env.PATH ?? ""}`,
+              ELECTRON_RUN_AS_NODE: "1",
+            };
+          } else {
+            console.warn("gh CLI not found — gh shim will not be installed");
+          }
         } else {
           console.warn("No GitHub remote detected — skipping application-layer policy");
         }
@@ -495,12 +503,11 @@ export class SessionManager {
       if (sandboxConfig) {
         await cleanupPolicy(sandboxConfig.policyOutputPath);
       }
-      if (session.githubPolicy) {
-        await cleanupPolicyState(id).catch(() => {});
-        await cleanupGhShim(id).catch(() => {});
-        if (worktree) {
-          await cleanupHooks(id, worktree.path).catch(() => {});
-        }
+      // Best-effort cleanup of GitHub artifacts (may have been partially created)
+      await cleanupPolicyState(id).catch(() => {});
+      await cleanupGhShim(id).catch(() => {});
+      if (worktree) {
+        await cleanupHooks(id, worktree.path).catch(() => {});
       }
       session.status = "error";
       this.emit("session-update", {
@@ -510,7 +517,7 @@ export class SessionManager {
       });
     }
 
-    return this.summarize(session);
+    return await this.summarize(session);
   }
 
   async sendMessage(sessionId: string, text: string): Promise<void> {
@@ -559,8 +566,10 @@ export class SessionManager {
     });
   }
 
-  listSessions(): SessionSummary[] {
-    return Array.from(this.sessions.values()).map((s) => this.summarize(s));
+  async listSessions(): Promise<SessionSummary[]> {
+    return await Promise.all(
+      Array.from(this.sessions.values()).map((s) => this.summarize(s))
+    );
   }
 
   async closeSession(sessionId: string): Promise<void> {
@@ -634,7 +643,7 @@ export class SessionManager {
     return session.sandboxViolations.slice();
   }
 
-  private summarize(session: SessionState): SessionSummary {
+  private async summarize(session: SessionState): Promise<SessionSummary> {
     let policyName: string | null = null;
     if (session.policyId) {
       try {
@@ -643,6 +652,23 @@ export class SessionManager {
         policyName = session.policyId;
       }
     }
+
+    // Read live policy state from disk (the gh shim may have updated it)
+    let githubRepo = session.githubPolicy?.repo ?? null;
+    let ownedPrNumber = session.githubPolicy?.ownedPrNumber ?? null;
+    if (session.githubPolicy) {
+      try {
+        const livePolicy = await readPolicyState(policyStatePath(session.id));
+        githubRepo = livePolicy.repo;
+        ownedPrNumber = livePolicy.ownedPrNumber;
+        // Sync in-memory state
+        session.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
+        session.githubPolicy.canCreatePr = livePolicy.canCreatePr;
+      } catch {
+        // Policy file may have been cleaned up — use in-memory state
+      }
+    }
+
     return {
       id: session.id,
       status: session.status,
@@ -652,8 +678,8 @@ export class SessionManager {
       sandboxed: session.sandboxConfig !== null,
       policyId: session.policyId,
       policyName,
-      githubRepo: session.githubPolicy?.repo ?? null,
-      ownedPrNumber: session.githubPolicy?.ownedPrNumber ?? null,
+      githubRepo,
+      ownedPrNumber,
     };
   }
 }

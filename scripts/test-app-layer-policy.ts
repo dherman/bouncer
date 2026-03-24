@@ -243,15 +243,13 @@ await test("orphan artifacts are cleaned up", async () => {
 
 console.log("\ngh detection:");
 
-await test("findRealGh returns a path", async () => {
-  try {
-    const ghPath = await findRealGh();
+await test("findRealGh returns a path or null", async () => {
+  const ghPath = await findRealGh();
+  if (ghPath === null) {
+    console.log("    (gh not installed — returned null as expected)");
+  } else {
     assert.ok(ghPath.length > 0);
     assert.ok(ghPath.includes("gh"));
-  } catch {
-    // gh may not be installed in CI — skip gracefully
-    console.log("    (skipped — gh not installed)");
-    passed--; // don't count as passed
   }
 });
 
