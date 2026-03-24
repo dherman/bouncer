@@ -11,20 +11,10 @@ interface Props {
   sessions: SessionSummary[]
   activeSessionId: string | null
   violationCounts: Map<string, number>
+  policyDescriptions: Map<string, string>
   onSelect: (id: string) => void
   onCreate: () => void
   onClose: (id: string) => void
-}
-
-const POLICY_TOOLTIPS: Record<string, string> = {
-  'standard-pr': 'Filesystem: read-write | Network: blocked',
-  'research-only': 'Filesystem: read-only | Network: full',
-  'permissive': 'Filesystem: read-write | Network: full',
-}
-
-function policyTooltip(policyId: string | null): string {
-  if (!policyId) return ''
-  return POLICY_TOOLTIPS[policyId] ?? policyId
 }
 
 function projectLabel(session: SessionSummary): string {
@@ -34,7 +24,7 @@ function projectLabel(session: SessionSummary): string {
   return session.id.slice(0, 8)
 }
 
-export function SessionList({ sessions, activeSessionId, violationCounts, onSelect, onCreate, onClose }: Props) {
+export function SessionList({ sessions, activeSessionId, violationCounts, policyDescriptions, onSelect, onCreate, onClose }: Props) {
   return (
     <div className="session-list">
       <button className="new-session-btn" onClick={onCreate}>
@@ -56,7 +46,7 @@ export function SessionList({ sessions, activeSessionId, violationCounts, onSele
             {s.policyName && (
               <span
                 className={`policy-badge policy-${s.policyId ?? 'default'}`}
-                title={policyTooltip(s.policyId)}
+                title={s.policyId ? (policyDescriptions.get(s.policyId) ?? s.policyId) : ''}
               >
                 {s.policyName}
               </span>
