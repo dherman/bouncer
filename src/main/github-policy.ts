@@ -8,7 +8,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { POLICY_DIR } from "./sandbox.js";
 import type { GitHubPolicy } from "./types.js";
@@ -78,6 +78,7 @@ export function policyStatePath(sessionId: string): string {
  * updated by the gh shim after PR creation.
  */
 export async function writePolicyState(sessionId: string, policy: GitHubPolicy): Promise<void> {
+  await mkdir(POLICY_DIR, { recursive: true });
   await writeFile(policyStatePath(sessionId), JSON.stringify(policy, null, 2), "utf-8");
 }
 

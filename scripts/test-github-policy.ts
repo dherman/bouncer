@@ -6,7 +6,6 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import { POLICY_DIR } from "../src/main/sandbox.js";
 import {
   detectGitHubRepo,
@@ -110,12 +109,7 @@ console.log("\nState file I/O:");
 
 const testSessionId = `test-github-policy-${Date.now()}`;
 
-// Ensure policy dir exists
-if (!existsSync(POLICY_DIR)) {
-  await mkdir(POLICY_DIR, { recursive: true });
-}
-
-await test("write and read round-trip", async () => {
+await test("write and read round-trip (also ensures POLICY_DIR exists)", async () => {
   const policy = buildSessionPolicy("dherman/bouncer", "my-branch");
   await writePolicyState(testSessionId, policy);
 
