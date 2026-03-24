@@ -61,6 +61,37 @@ export async function loadDataset(
   return result;
 }
 
+/**
+ * Load a single session's tool calls from the dataset.
+ * Streams the file and only keeps matching records — avoids loading
+ * the entire dataset into memory.
+ */
+export async function loadSession(
+  datasetPath: string,
+  sessionId: string,
+): Promise<ReplayToolCall[]> {
+  const calls: ReplayToolCall[] = [];
+  const timestamps: number[] = [];
+
+  const rl = createInterface({
+    input: createReadStream(datasetPath, "utf-8"),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    const record = JSON.parse(line) as DatasetRecord;
+    if (record.session !== sessionId) continue;
+    calls.push(toReplayToolCall(record));
+    timestamps.push(record.timestamp_relative);
+  }
+
+  // Sort by timestamp_relative
+  const indices = calls.map((_, i) => i);
+  indices.sort((a, b) => timestamps[a] - timestamps[b]);
+  return indices.map((i) => calls[i]);
+}
+
 export interface SessionInfo {
   sessionId: string;
   project: string;
