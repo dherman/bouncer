@@ -31,3 +31,4 @@ jobs:
       - run: npm ci
       - run: npm run test:github-policy
       - run: npm run test:policy-sandbox
+      - run: npm run test:gh-shim
