@@ -127,15 +127,17 @@ app.whenReady().then(() => {
 
   // Clean up all sessions before quitting
   app.on('before-quit', (event) => {
-    const activeSessions = sessionManager.listSessions().filter(
-      (s) => s.status !== 'closed'
-    )
-    if (activeSessions.length > 0) {
-      event.preventDefault()
-      sessionManager.closeAllSessions().finally(() => {
-        app.quit()
-      })
-    }
+    event.preventDefault()
+    sessionManager.listSessions().then((sessions) => {
+      const activeSessions = sessions.filter((s) => s.status !== 'closed')
+      if (activeSessions.length > 0) {
+        sessionManager.closeAllSessions().finally(() => {
+          app.quit()
+        })
+      } else {
+        app.exit()
+      }
+    })
   })
 
   app.on('activate', () => {

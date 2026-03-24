@@ -20,16 +20,16 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
 - [x] **[Phase 3: Git Hooks](#phase-3-git-hooks)**
   - [x] 3.1 Create `hooks.ts`
   - [x] 3.2 Write hook tests
-- [ ] **[Phase 4: Session Manager Integration](#phase-4-session-manager-integration)**
-  - [ ] 4.1 Update `SessionState`
-  - [ ] 4.2 Integrate into `createSession`
-  - [ ] 4.3 Set up shim PATH and environment
-  - [ ] 4.4 Update `resolveAgentCommand` for PATH
-  - [ ] 4.5 Update `closeSession` for cleanup
-  - [ ] 4.6 Update `summarize` for new `SessionSummary` fields
-  - [ ] 4.7 Update `cleanupOrphans`
-  - [ ] 4.8 Update IPC and preload
-  - [ ] 4.9 Integration test
+- [x] **[Phase 4: Session Manager Integration](#phase-4-session-manager-integration)**
+  - [x] 4.1 Update `SessionState`
+  - [x] 4.2 Integrate into `createSession`
+  - [x] 4.3 Set up shim PATH and environment
+  - [x] 4.4 Update `resolveAgentCommand` for PATH
+  - [x] 4.5 Update `closeSession` for cleanup
+  - [x] 4.6 Update `summarize` for new `SessionSummary` fields
+  - [x] 4.7 Update `cleanupOrphans`
+  - [x] 4.8 Update IPC and preload
+  - [x] 4.9 Integration test
 - [ ] **[Phase 5: Observability — Stderr Parsing and Policy Events](#phase-5-observability--stderr-parsing-and-policy-events)**
   - [ ] 5.1 Add stderr log parser
   - [ ] 5.2 Integrate into stderr capture
