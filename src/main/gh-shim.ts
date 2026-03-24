@@ -11,7 +11,7 @@
  * then either execs real gh or exits with a policy error.
  */
 
-import { execFileSync, execFile } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readPolicyState, writePolicyState } from "./github-policy.js";
 import type { GitHubPolicy } from "./types.js";
 
@@ -46,6 +46,27 @@ const BODY_PARAM_FLAGS = new Set([
 ]);
 
 /**
+ * Try to extract a flag value from a single argument using = or short-flag syntax.
+ * Returns the value if matched, or null otherwise.
+ * Handles: --repo=value, -Rvalue, --method=POST, -XPOST
+ */
+function tryExtractInlineFlag(arg: string): { flag: string; value: string } | null {
+  // --long-flag=value
+  const eqMatch = arg.match(/^(--[a-z-]+)=(.+)$/);
+  if (eqMatch && FLAGS_WITH_VALUES.has(eqMatch[1])) {
+    return { flag: eqMatch[1], value: eqMatch[2] };
+  }
+  // -Rvalue, -Xvalue (short flags with value concatenated)
+  if (arg.length > 2 && arg[0] === "-" && arg[1] !== "-") {
+    const shortFlag = arg.substring(0, 2);
+    if (FLAGS_WITH_VALUES.has(shortFlag)) {
+      return { flag: shortFlag, value: arg.substring(2) };
+    }
+  }
+  return null;
+}
+
+/**
  * Parse gh CLI arguments into a structured command.
  * Only extracts policy-relevant information; all other flags pass through.
  */
@@ -63,17 +84,23 @@ export function parseGhArgs(args: string[]): ParsedGhCommand {
   // Skip global flags before the command
   while (i < args.length && args[i].startsWith("-")) {
     const flag = args[i];
-    if (flag === "-R" || flag === "--repo") {
-      if (i + 1 < args.length) {
-        result.flags.repo = args[i + 1];
-        i += 2;
-        continue;
-      }
-    }
     // Global flags like --help, --version become the "command"
     if (flag === "--help" || flag === "--version") {
       result.command = flag;
       return result;
+    }
+    // -R / --repo with separate value
+    if ((flag === "-R" || flag === "--repo") && i + 1 < args.length) {
+      result.flags.repo = args[i + 1];
+      i += 2;
+      continue;
+    }
+    // --repo=value, -Rvalue
+    const inline = tryExtractInlineFlag(flag);
+    if (inline) {
+      extractFlag(result, inline.flag, inline.value);
+      i++;
+      continue;
     }
     i++;
   }
@@ -101,8 +128,14 @@ export function parseGhArgs(args: string[]): ParsedGhCommand {
         extractFlag(result, flag, args[i + 1]);
         i += 2;
       } else {
-        if (BODY_PARAM_FLAGS.has(flag)) result.flags.hasBodyParams = true;
-        i++;
+        const inline = tryExtractInlineFlag(flag);
+        if (inline) {
+          extractFlag(result, inline.flag, inline.value);
+          i++;
+        } else {
+          if (BODY_PARAM_FLAGS.has(flag)) result.flags.hasBodyParams = true;
+          i++;
+        }
       }
     }
     if (result.subcommand === null && i < args.length) {
@@ -115,14 +148,18 @@ export function parseGhArgs(args: string[]): ParsedGhCommand {
   while (i < args.length) {
     const arg = args[i];
     if (arg.startsWith("-")) {
-      const flag = arg;
-      if (FLAGS_WITH_VALUES.has(flag) && i + 1 < args.length) {
-        extractFlag(result, flag, args[i + 1]);
+      if (FLAGS_WITH_VALUES.has(arg) && i + 1 < args.length) {
+        extractFlag(result, arg, args[i + 1]);
         i += 2;
       } else {
-        if (BODY_PARAM_FLAGS.has(flag)) result.flags.hasBodyParams = true;
-        // Skip flag + value for flags with = syntax
-        i++;
+        const inline = tryExtractInlineFlag(arg);
+        if (inline) {
+          extractFlag(result, inline.flag, inline.value);
+          i++;
+        } else {
+          if (BODY_PARAM_FLAGS.has(arg)) result.flags.hasBodyParams = true;
+          i++;
+        }
       }
     } else {
       result.positionalArgs.push(arg);
@@ -251,7 +288,7 @@ function evaluatePrPolicy(
 
 /**
  * Check if the target PR is the session's owned PR.
- * If no positional arg (PR number), assume current branch's PR (owned).
+ * If no positional arg, assumes current branch's PR — but only if the session owns a PR.
  */
 function checkOwnedPr(
   positionalArgs: string[],
@@ -260,7 +297,10 @@ function checkOwnedPr(
 ): PolicyDecision {
   const targetPr = extractTargetPrNumber(positionalArgs);
   if (targetPr === null) {
-    // No explicit PR number — operating on current branch's PR (owned)
+    // No explicit PR number — only allow if the session has an owned PR
+    if (policy.ownedPrNumber === null) {
+      return { action: "deny", reason: `'pr ${subcommand}' denied: no owned PR for this session` };
+    }
     return { action: "allow" };
   }
   if (policy.ownedPrNumber !== null && targetPr === policy.ownedPrNumber) {
@@ -293,8 +333,9 @@ function evaluateIssuePolicy(subcommand: string | null): PolicyDecision {
 // --- Repo Policy ---
 
 function evaluateRepoPolicy(subcommand: string | null): PolicyDecision {
-  if (subcommand === "view" || subcommand === "--help") return { action: "allow" };
-  return { action: "deny", reason: `'repo ${subcommand ?? ""}' is not allowed` };
+  if (!subcommand || subcommand === "--help") return { action: "allow" };
+  if (subcommand === "view") return { action: "allow" };
+  return { action: "deny", reason: `'repo ${subcommand}' is not allowed` };
 }
 
 // --- Release Policy ---
@@ -395,7 +436,7 @@ function evaluateApiPolicy(
 
   const match = parseApiEndpoint(endpoint, flags);
 
-  // GraphQL: allow with unaudited warning
+  // GraphQL: allow but flag as unaudited (query content not inspected)
   if (match.isGraphQL) {
     return { action: "allow" };
   }
@@ -503,7 +544,9 @@ async function main(): Promise<void> {
 
   // Log the decision to stderr
   const op = [parsed.command, parsed.subcommand].filter(Boolean).join(" ");
-  process.stderr.write(`[bouncer:gh] ${op} → ${decision.action}${decision.action === "deny" ? `: ${decision.reason}` : ""}\n`);
+  const isGraphQL = parsed.command === "api" && parsed.positionalArgs[0] === "graphql";
+  const unauditedTag = isGraphQL ? " [unaudited]" : "";
+  process.stderr.write(`[bouncer:gh] ${op} → ${decision.action}${unauditedTag}${decision.action === "deny" ? `: ${decision.reason}` : ""}\n`);
 
   if (decision.action === "deny") {
     process.stderr.write(`[bouncer:gh] DENIED: ${decision.reason}\n`);
@@ -520,16 +563,28 @@ async function main(): Promise<void> {
       const stdout = result as string;
       process.stdout.write(stdout);
 
-      const prNumber = parsePrNumberFromOutput(stdout);
-      if (prNumber !== null) {
-        // Derive sessionId from the policy file path
-        const sessionId = deriveSessionId(policyPath);
-        if (sessionId) {
+      let prNumber = parsePrNumberFromOutput(stdout);
+      if (prNumber === null) {
+        // Fallback: attempt to parse JSON output (e.g. from gh api)
+        try {
+          const parsed = JSON.parse(stdout);
+          if (parsed && typeof parsed === "object" && typeof (parsed as { number?: unknown }).number === "number") {
+            prNumber = (parsed as { number: number }).number;
+          }
+        } catch {
+          // Not JSON — ignore
+        }
+      }
+
+      const sessionId = deriveSessionId(policyPath);
+      if (sessionId) {
+        // Always prevent further PR creation after a successful PR-create command
+        policy.canCreatePr = false;
+        if (prNumber !== null) {
           policy.ownedPrNumber = prNumber;
-          policy.canCreatePr = false;
-          await writePolicyState(sessionId, policy);
           process.stderr.write(`[bouncer:gh] captured PR #${prNumber}\n`);
         }
+        await writePolicyState(sessionId, policy);
       }
     } catch (err: unknown) {
       const exitCode = (err as { status?: number }).status ?? 1;

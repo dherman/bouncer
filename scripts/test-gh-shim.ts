@@ -111,6 +111,29 @@ await test("bare args (no command)", () => {
   assert.equal(p.command, "--help");
 });
 
+await test("--repo=other/repo pr list (= syntax)", () => {
+  const p = parseGhArgs(["--repo=other/repo", "pr", "list"]);
+  assert.equal(p.flags.repo, "other/repo");
+  assert.equal(p.command, "pr");
+  assert.equal(p.subcommand, "list");
+});
+
+await test("-Rother/repo pr list (concatenated short flag)", () => {
+  const p = parseGhArgs(["-Rother/repo", "pr", "list"]);
+  assert.equal(p.flags.repo, "other/repo");
+  assert.equal(p.command, "pr");
+});
+
+await test("api endpoint --method=POST (= syntax)", () => {
+  const p = parseGhArgs(["api", "/repos/owner/repo/pulls", "--method=POST"]);
+  assert.equal(p.flags.method, "POST");
+});
+
+await test("api endpoint -XPOST (concatenated short flag)", () => {
+  const p = parseGhArgs(["api", "/repos/owner/repo/pulls", "-XPOST"]);
+  assert.equal(p.flags.method, "POST");
+});
+
 // ==========================================================
 // API Endpoint Parser Tests
 // ==========================================================
@@ -184,8 +207,13 @@ await test("pr edit 99 (ownedPrNumber: 42) → deny", () => {
   assert.equal(d.action, "deny");
 });
 
-await test("pr edit (no number, implies current branch) → allow", () => {
+await test("pr edit (no number, no owned PR) → deny", () => {
   const d = decide(["pr", "edit", "--title", "new"]);
+  assert.equal(d.action, "deny");
+});
+
+await test("pr edit (no number, has owned PR) → allow", () => {
+  const d = decide(["pr", "edit", "--title", "new"], makePolicy({ ownedPrNumber: 42 }));
   assert.equal(d.action, "allow");
 });
 
@@ -214,9 +242,14 @@ await test("pr diff → allow", () => {
   assert.equal(d.action, "allow");
 });
 
-await test("pr comment (no number, owned) → allow", () => {
-  const d = decide(["pr", "comment", "--body", "lgtm"]);
+await test("pr comment (no number, has owned PR) → allow", () => {
+  const d = decide(["pr", "comment", "--body", "lgtm"], makePolicy({ ownedPrNumber: 42 }));
   assert.equal(d.action, "allow");
+});
+
+await test("pr comment (no number, no owned PR) → deny", () => {
+  const d = decide(["pr", "comment", "--body", "lgtm"]);
+  assert.equal(d.action, "deny");
 });
 
 await test("pr comment 99 (not owned) → deny", () => {
@@ -315,6 +348,11 @@ await test("issue delete 10 → deny", () => {
 // ==========================================================
 
 console.log("\nPolicy evaluation — other commands:");
+
+await test("repo (no subcommand) → allow", () => {
+  const d = decide(["repo"]);
+  assert.equal(d.action, "allow");
+});
 
 await test("repo view → allow", () => {
   const d = decide(["repo", "view"]);
@@ -460,6 +498,11 @@ await test("-R other/repo pr list → deny", () => {
 await test("-R owner/repo pr list → allow (same repo)", () => {
   const d = decide(["-R", "owner/repo", "pr", "list"]);
   assert.equal(d.action, "allow");
+});
+
+await test("--repo=other/repo pr list → deny (= syntax)", () => {
+  const d = decide(["--repo=other/repo", "pr", "list"]);
+  assert.equal(d.action, "deny");
 });
 
 // ==========================================================
