@@ -36,10 +36,10 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
   - [x] 5.3 Update the `gh` shim to emit structured log lines
   - [x] 5.4 Update the pre-push hook to emit structured log lines
   - [x] 5.5 Test the parser
-- [ ] **[Phase 6: UI Updates](#phase-6-ui-updates)**
-  - [ ] 6.1 Handle `policy-event` in `App.tsx`
-  - [ ] 6.2 Extend `SandboxLog` component
-  - [ ] 6.3 Show GitHub session info in the session list
+- [x] **[Phase 6: UI Updates](#phase-6-ui-updates)**
+  - [x] 6.1 Handle `policy-event` in `App.tsx`
+  - [x] 6.2 Extend `SandboxLog` component
+  - [x] 6.3 Show GitHub session info in the session list
   - [ ] 6.4 Visual verification
 - [ ] **[Phase 7: End-to-End Validation](#phase-7-end-to-end-validation)**
   - [ ] 7.1 Create a test repository
