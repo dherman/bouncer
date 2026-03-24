@@ -1,4 +1,4 @@
-# Milestone 4: Batch Validation Findings
+# Milestone 4 – Deterministic Test Agent: Batch Validation Findings
 
 **Date**: 2026-03-24
 **Dataset**: 11,491 records across 296 sessions
@@ -19,7 +19,7 @@
 | Allowed rate | 100.0% |
 | False-block rate | 0.0% |
 
-**Key finding**: With no sandbox enforcement, 100% of actionable tool calls (allowed + blocked) succeed. This is the expected baseline — zero blocks confirms the replay agent correctly executes operations when unconstrained.
+**Key finding**: With no sandbox enforcement, 100% of actionable tool calls are allowed (blocked = 0). This is the expected baseline — zero blocks confirms the replay agent is unconstrained by policy, even though some calls still encounter execution errors.
 
 ## Cross-Policy Comparison
 
