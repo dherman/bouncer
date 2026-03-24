@@ -1,18 +1,22 @@
 /**
- * Replay test harness — single-session mode.
+ * Replay test harness — single-session and batch mode.
  *
- * Loads a dataset session, scaffolds a worktree, spawns the replay agent
- * (optionally sandboxed), and produces a ReplayReport JSON.
+ * Loads dataset sessions, scaffolds worktrees, spawns replay agents
+ * (optionally sandboxed), and produces ReplayReport JSON.
  *
  * Usage: npx tsx scripts/replay-test.ts [options]
  *
  * Options:
- *   --policy <id>        Policy template ID (default: standard-pr)
- *   --session <id>       Session ID to replay (default: first in dataset)
+ *   --policy <id>        Policy template ID (default: standard-pr, or "all")
+ *   --session <id>       Single session ID to replay
+ *   --sessions <ids>     Comma-separated session IDs
  *   --project-dir <dir>  Git repo for worktree creation (default: .)
  *   --dataset <path>     Dataset JSONL path (default: data/tool-use-dataset.jsonl)
  *   --output <path>      Output file for JSON report (default: stdout)
+ *   --concurrency <n>    Max concurrent sessions in batch mode (default: 4)
  *   --no-sandbox         Run without safehouse sandbox
+ *
+ * If neither --session nor --sessions is specified, all sessions are replayed (batch mode).
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -45,9 +49,11 @@ function parseArgs(argv: string[]) {
   const opts = {
     policy: "standard-pr",
     session: "",
+    sessions: "" as string,
     projectDir: process.cwd(),
     dataset: join(process.cwd(), "data", "tool-use-dataset.jsonl"),
     output: "",
+    concurrency: 4,
     noSandbox: false,
   };
 
@@ -63,9 +69,11 @@ function parseArgs(argv: string[]) {
     switch (flag) {
       case "--policy": opts.policy = next(); break;
       case "--session": opts.session = next(); break;
+      case "--sessions": opts.sessions = next(); break;
       case "--project-dir": opts.projectDir = next(); break;
       case "--dataset": opts.dataset = next(); break;
       case "--output": opts.output = next(); break;
+      case "--concurrency": opts.concurrency = parseInt(next(), 10); break;
       case "--no-sandbox": opts.noSandbox = true; break;
       default:
         console.error(`Unknown option: ${args[i]}`);
@@ -300,56 +308,153 @@ async function replaySession(
   }
 }
 
+// --- Batch orchestration ---
+
+async function replayBatch(
+  sessions: Map<string, ReplayToolCall[]>,
+  policyId: string,
+  projectDir: string,
+  concurrency: number,
+  noSandbox: boolean,
+): Promise<SessionReplayResult[]> {
+  const results: SessionReplayResult[] = [];
+  const entries = Array.from(sessions.entries());
+  let index = 0;
+
+  async function worker() {
+    while (index < entries.length) {
+      const i = index++;
+      const [sessionId, toolCalls] = entries[i];
+      process.stderr.write(`[${i + 1}/${entries.length}] ${sessionId} (${toolCalls.length} calls)...\n`);
+      try {
+        const result = await replaySession(sessionId, toolCalls, policyId, projectDir, noSandbox);
+        results.push(result);
+      } catch (err) {
+        process.stderr.write(`  FAILED: ${(err as Error).message}\n`);
+        results.push({
+          sessionId,
+          toolCallCount: toolCalls.length,
+          results: [],
+          scaffoldedFiles: 0,
+          replayDurationMs: 0,
+        });
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return results;
+}
+
+// --- Human-readable summary ---
+
+function printSummary(report: ReplayReport) {
+  const s = report.summary;
+  process.stderr.write(`\n=== ${report.metadata.policyId} ===\n`);
+  process.stderr.write(`Sessions: ${report.metadata.sessionsCompleted} completed, ${report.metadata.sessionsFailed} failed\n`);
+  process.stderr.write(`Tool calls: ${s.totalToolCalls} total\n`);
+  process.stderr.write(`  Allowed: ${s.allowed} (${pct(s.allowed, s.totalToolCalls)})\n`);
+  process.stderr.write(`  Blocked: ${s.blocked} (${pct(s.blocked, s.totalToolCalls)})\n`);
+  process.stderr.write(`  Skipped: ${s.skipped} (${pct(s.skipped, s.totalToolCalls)})\n`);
+  process.stderr.write(`  Error:   ${s.error} (${pct(s.error, s.totalToolCalls)})\n`);
+  process.stderr.write(`Allowed rate: ${(s.allowedRate * 100).toFixed(1)}%\n`);
+  process.stderr.write(`False-block rate: ${(s.falseBlockRate * 100).toFixed(1)}%\n`);
+
+  // Per-tool breakdown
+  const tools = Object.entries(report.byTool).sort((a, b) => {
+    const totalA = a[1].allowed + a[1].blocked + a[1].skipped + a[1].error;
+    const totalB = b[1].allowed + b[1].blocked + b[1].skipped + b[1].error;
+    return totalB - totalA;
+  });
+  if (tools.length > 0) {
+    process.stderr.write(`\nBy tool:\n`);
+    for (const [tool, counts] of tools) {
+      const total = counts.allowed + counts.blocked + counts.skipped + counts.error;
+      process.stderr.write(
+        `  ${tool.padEnd(12)} ${String(total).padStart(5)} total | ` +
+        `${String(counts.allowed).padStart(5)} allowed | ` +
+        `${String(counts.blocked).padStart(4)} blocked | ` +
+        `${String(counts.skipped).padStart(4)} skipped | ` +
+        `${String(counts.error).padStart(4)} error\n`,
+      );
+    }
+  }
+}
+
+function pct(n: number, total: number): string {
+  return total > 0 ? `${((n / total) * 100).toFixed(1)}%` : "0.0%";
+}
+
 // --- Main ---
 
 const opts = parseArgs(process.argv);
 
 try {
   process.stderr.write(`Loading dataset: ${opts.dataset}\n`);
-  const sessions = await loadDataset(opts.dataset);
+  const allSessions = await loadDataset(opts.dataset);
 
-  // Resolve session
-  let sessionId = opts.session;
-  if (!sessionId) {
-    sessionId = sessions.keys().next().value!;
-    process.stderr.write(`No --session specified, using first: ${sessionId}\n`);
+  // Resolve which sessions to replay
+  let targetSessions: Map<string, ReplayToolCall[]>;
+  if (opts.session) {
+    const toolCalls = allSessions.get(opts.session);
+    if (!toolCalls) {
+      console.error(`Session not found: ${opts.session}`);
+      process.exit(1);
+    }
+    targetSessions = new Map([[opts.session, toolCalls]]);
+  } else if (opts.sessions) {
+    targetSessions = new Map<string, ReplayToolCall[]>();
+    for (const id of opts.sessions.split(",")) {
+      const toolCalls = allSessions.get(id.trim());
+      if (!toolCalls) {
+        console.error(`Session not found: ${id.trim()}`);
+        process.exit(1);
+      }
+      targetSessions.set(id.trim(), toolCalls);
+    }
+  } else {
+    targetSessions = allSessions;
   }
 
-  const toolCalls = sessions.get(sessionId);
-  if (!toolCalls) {
-    console.error(`Session not found: ${sessionId}`);
-    console.error(`Available sessions: ${[...sessions.keys()].slice(0, 10).join(", ")}...`);
-    process.exit(1);
+  process.stderr.write(`Sessions to replay: ${targetSessions.size}\n`);
+
+  // Resolve which policies to run against
+  const registry = new PolicyTemplateRegistry();
+  const policyIds = opts.policy === "all"
+    ? registry.list().map((p) => p.id)
+    : [opts.policy];
+
+  // Run each policy
+  const allReports: Record<string, ReplayReport> = {};
+  for (const policyId of policyIds) {
+    process.stderr.write(`\nPolicy: ${policyId}\n`);
+
+    let sessionResults: SessionReplayResult[];
+    if (targetSessions.size === 1) {
+      const [sessionId, toolCalls] = targetSessions.entries().next().value!;
+      process.stderr.write(`Replaying ${sessionId} (${toolCalls.length} tool calls)...\n`);
+      const result = await replaySession(sessionId, toolCalls, policyId, opts.projectDir, opts.noSandbox);
+      sessionResults = [result];
+    } else {
+      sessionResults = await replayBatch(
+        targetSessions, policyId, opts.projectDir, opts.concurrency, opts.noSandbox,
+      );
+    }
+
+    const report = buildReport(policyId, sessionResults, opts.dataset);
+    allReports[policyId] = report;
+    printSummary(report);
   }
 
-  process.stderr.write(`Replaying ${sessionId} (${toolCalls.length} tool calls) with policy ${opts.policy}\n`);
-
-  const result = await replaySession(
-    sessionId,
-    toolCalls,
-    opts.policy,
-    opts.projectDir,
-    opts.noSandbox,
-  );
-
-  const report = buildReport(opts.policy, [result], opts.dataset);
-
-  // Output report
-  const reportJson = JSON.stringify(report, null, 2);
+  // Output report(s)
+  const output = policyIds.length === 1 ? allReports[policyIds[0]] : allReports;
+  const reportJson = JSON.stringify(output, null, 2);
   if (opts.output) {
     writeFileSync(opts.output, reportJson, "utf-8");
-    process.stderr.write(`Report written to ${opts.output}\n`);
+    process.stderr.write(`\nReport written to ${opts.output}\n`);
   } else {
     console.log(reportJson);
   }
-
-  // Print summary to stderr
-  process.stderr.write(`\n--- Summary ---\n`);
-  process.stderr.write(`Tool calls: ${report.summary.totalToolCalls}\n`);
-  process.stderr.write(`Allowed: ${report.summary.allowed}, Blocked: ${report.summary.blocked}, Skipped: ${report.summary.skipped}, Error: ${report.summary.error}\n`);
-  process.stderr.write(`Allowed rate: ${(report.summary.allowedRate * 100).toFixed(1)}%\n`);
-  process.stderr.write(`False block rate: ${(report.summary.falseBlockRate * 100).toFixed(1)}%\n`);
-  process.stderr.write(`Duration: ${result.replayDurationMs}ms\n`);
 } catch (err) {
   console.error("Fatal:", err);
   process.exit(1);

@@ -39,12 +39,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 7.2 Implement single-session orchestration: load → scaffold → spawn → prompt → collect → teardown
   - [x] 7.3 Implement `ReplayReport` generation with per-call outcomes
   - [x] 7.4 Run one real dataset session against `standard-pr` — verify report structure
-- [ ] **[Phase 8: Test Harness — Batch Mode](#phase-8-test-harness--batch-mode)**
-  - [ ] 8.1 Add batch orchestration with concurrency limit (4 concurrent sessions)
-  - [ ] 8.2 Add `--policy all` mode (run against every template)
-  - [ ] 8.3 Add aggregate summary statistics and per-tool breakdown
-  - [ ] 8.4 Add `--output` flag for JSON report file
-  - [ ] 8.5 Run full corpus against `standard-pr` — first real validation run
+- [x] **[Phase 8: Test Harness — Batch Mode](#phase-8-test-harness--batch-mode)**
+  - [x] 8.1 Add batch orchestration with concurrency limit (4 concurrent sessions)
+  - [x] 8.2 Add `--policy all` mode (run against every template)
+  - [x] 8.3 Add aggregate summary statistics and per-tool breakdown
+  - [x] 8.4 Add `--output` flag for JSON report file
+  - [x] 8.5 Run full corpus against `standard-pr` — first real validation run
 - [ ] **[Phase 9: Batch Validation and Findings](#phase-9-batch-validation-and-findings)**
   - [ ] 9.1 Run full corpus against all three policies
   - [ ] 9.2 Analyze results: allowed rates, false-block rates, per-tool breakdowns
