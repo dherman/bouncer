@@ -1,16 +1,7 @@
 import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
-import { appendFileSync } from 'fs'
 import { SessionManager } from './session-manager.js'
 import { loadSession } from './dataset-loader.js'
-
-// Crash-safe diagnostic logging (writes synchronously to survive crashes)
-const DIAG_LOG = join(app.getPath('temp'), 'glitterball-diag.log')
-function diag(msg: string) {
-  const line = `[${new Date().toISOString()}] ${msg}\n`
-  try { appendFileSync(DIAG_LOG, line) } catch { /* ignore */ }
-  console.log(`[diag] ${msg}`)
-}
 
 let mainWindow: BrowserWindow | null = null
 
@@ -77,7 +68,6 @@ app.whenReady().then(() => {
   // IPC handlers for renderer → main communication
   ipcMain.handle('sessions:list', () => sessionManager.listSessions())
   ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
-    diag(`sessions:create called: agentType=${agentType}, policyId=${policyId}`)
     if (typeof projectDir !== 'string') {
       throw new Error('Invalid argument: projectDir must be a string')
     }
@@ -87,17 +77,13 @@ app.whenReady().then(() => {
       ? (agentType as ValidType)
       : 'claude-code'
     const validPolicyId = typeof policyId === 'string' ? policyId : undefined
-    diag(`sessions:create calling sessionManager.createSession(${validAgentType})`)
     return sessionManager.createSession(projectDir, validAgentType, validPolicyId)
-      .then(result => { diag(`sessions:create completed: ${result.id}`); return result })
-      .catch(err => { diag(`sessions:create FAILED: ${err}`); throw err })
   })
 
   ipcMain.handle('policies:list', () => {
     return sessionManager.policyRegistry.list()
   })
   ipcMain.handle('sessions:sendMessage', (_e, sessionId: unknown, text: unknown) => {
-    diag(`sessions:sendMessage called: sessionId=${sessionId}, text length=${typeof text === 'string' ? text.length : '?'}`)
     if (typeof sessionId !== 'string' || typeof text !== 'string') {
       throw new Error('Invalid arguments: sessionId and text must be strings')
     }
@@ -118,14 +104,10 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('sessions:loadReplayData', async (_e, datasetSessionId: unknown) => {
-    diag(`loadReplayData called: ${datasetSessionId}`)
     if (typeof datasetSessionId !== 'string') {
       throw new Error('Invalid argument: datasetSessionId must be a string')
     }
-    const datasetPath = join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl')
-    diag(`loadReplayData dataset path: ${datasetPath}`)
-    const toolCalls = await loadSession(datasetPath, datasetSessionId)
-    diag(`loadReplayData got ${toolCalls.length} tool calls`)
+    const toolCalls = await loadSession(join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'), datasetSessionId)
     if (toolCalls.length === 0) {
       throw new Error(`Session not found in dataset: ${datasetSessionId}`)
     }
