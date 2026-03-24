@@ -32,7 +32,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 5.1 Create `NewSessionDialog.tsx` component
   - [x] 5.2 Wire dialog into `App.tsx` (replace inline `handleCreateSession`)
   - [x] 5.3 Update `SessionList.tsx` to open dialog instead of directly picking a directory
-  - [ ] 5.4 Full flow test: dialog opens, shows policies, creates session with selected policy
+  - [x] 5.4 Full flow test: dialog opens, shows policies, creates session with selected policy
 - [ ] **[Phase 6: UI — Session List and Policy Display](#phase-6-ui--session-list-and-policy-display)**
   - [ ] 6.1 Update `SessionList.tsx` to show policy name badge instead of shield emoji
   - [ ] 6.2 Add policy info tooltip on badge hover
