@@ -36,7 +36,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 - [x] **[Phase 6: UI — Session List and Policy Display](#phase-6-ui--session-list-and-policy-display)**
   - [x] 6.1 Update `SessionList.tsx` to show policy name badge instead of shield emoji
   - [x] 6.2 Add policy info tooltip on badge hover
-  - [ ] 6.3 Full flow test: sessions show correct policy labels, tooltip displays details
+  - [x] 6.3 Full flow test: sessions show correct policy labels, tooltip displays details
 - [ ] **[Phase 7: Empirical Validation](#phase-7-empirical-validation)**
   - [ ] 7.1 Test: `standard-pr` blocks network access
   - [ ] 7.2 Test: `research-only` blocks file writes
