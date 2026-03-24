@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Message, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
+import { NewSessionDialog } from './components/NewSessionDialog'
 
 function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map())
   const [streamingText, setStreamingText] = useState<Map<string, string>>(new Map())
-  const [createError, setCreateError] = useState<string | null>(null)
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
   const [violationsBySession, setViolationsBySession] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
 
@@ -126,20 +127,10 @@ function App() {
     return unsubscribe
   }, [handleUpdate])
 
-  async function handleCreateSession() {
-    try {
-      const projectDir = await window.glitterball.dialog.selectDirectory()
-      if (!projectDir) return // User cancelled
-
-      setCreateError(null)
-      const session = await window.glitterball.sessions.create(projectDir)
-      setSessions((prev) => [...prev, session])
-      setActiveSessionId(session.id)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setCreateError(message)
-      console.error('Failed to create session:', err)
-    }
+  function handleSessionCreated(session: SessionSummary) {
+    setSessions((prev) => [...prev, session])
+    setActiveSessionId(session.id)
+    setShowNewSessionDialog(false)
   }
 
   async function handleSendMessage(text: string) {
@@ -182,7 +173,7 @@ function App() {
         activeSessionId={activeSessionId}
         violationCounts={violationCounts}
         onSelect={setActiveSessionId}
-        onCreate={handleCreateSession}
+        onCreate={() => setShowNewSessionDialog(true)}
         onClose={handleCloseSession}
       />
       {activeSession ? (
@@ -198,16 +189,15 @@ function App() {
       ) : (
         <div className="chat-panel">
           <div className="empty-state">
-            {createError ? (
-              <div className="create-error">
-                <p>{createError}</p>
-                <button onClick={() => setCreateError(null)}>Dismiss</button>
-              </div>
-            ) : (
-              'Create a new session to get started'
-            )}
+            Create a new session to get started
           </div>
         </div>
+      )}
+      {showNewSessionDialog && (
+        <NewSessionDialog
+          onClose={() => setShowNewSessionDialog(false)}
+          onCreated={handleSessionCreated}
+        />
       )}
     </div>
   )
