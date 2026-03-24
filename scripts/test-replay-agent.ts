@@ -26,7 +26,7 @@ writeFileSync(join(testDir, "test.txt"), "hello world\n");
 
 const agent = spawn(process.execPath, [tsxBin, "src/agents/replay-agent.ts"], {
   stdio: ["pipe", "pipe", "inherit"],
-  env: { ...process.env, REPLAY_WORKTREE_PATH: cwd },
+  env: { ...process.env, REPLAY_WORKTREE_PATH: testDir },
 });
 
 const output = Writable.toWeb(agent.stdin!) as WritableStream<Uint8Array>;
@@ -71,8 +71,9 @@ const connection = new acp.ClientSideConnection(
   stream
 );
 
-// Mixed tool calls covering all executor paths
+// Mixed tool calls covering all executor paths + de-anonymization
 const toolCalls = [
+  // Direct paths (Phase 3 regression)
   { id: 1, tool: "Read",      input: { file_path: join(testDir, "test.txt") },          original_outcome: "approved" },
   { id: 2, tool: "Write",     input: { file_path: join(testDir, "new.txt"), content: "hello" }, original_outcome: "approved" },
   { id: 3, tool: "Edit",      input: { file_path: join(testDir, "test.txt"), old_string: "hello", new_string: "goodbye" }, original_outcome: "approved" },
@@ -81,11 +82,19 @@ const toolCalls = [
   { id: 6, tool: "Glob",      input: { path: testDir, pattern: "*.txt" },               original_outcome: "approved" },
   { id: 7, tool: "TodoWrite", input: { todos: [] },                                     original_outcome: "approved" },
   { id: 8, tool: "Read",      input: { file_path: "/nonexistent/path/file.txt" },       original_outcome: "approved" },
+  // De-anonymization: {project} placeholder → testDir
+  { id: 9,  tool: "Read",     input: { file_path: "{project}/test.txt" },               original_outcome: "approved" },
+  { id: 10, tool: "Bash",     input: { command: "ls {project}" },                       original_outcome: "approved" },
+  // Non-replayable internal paths → skipped
+  { id: 11, tool: "Read",     input: { file_path: "{project}/.claude/projects/-Users-{user}-Code-{project-name}/session.jsonl" }, original_outcome: "approved" },
+  { id: 12, tool: "Read",     input: { file_path: "{home}/.claude/settings.json" },     original_outcome: "approved" },
+  // {host} in Bash → skipped
+  { id: 13, tool: "Bash",     input: { command: "curl https://{host}/api" },             original_outcome: "approved" },
 ];
 
 // Expected outcomes (unsandboxed)
 const expectedOutcomes: Record<number, string> = {
-  1: "allowed",   // Read existing file
+  1: "allowed",   // Read existing file (direct path)
   2: "allowed",   // Write new file
   3: "allowed",   // Edit existing file
   4: "allowed",   // Bash ls
@@ -93,6 +102,11 @@ const expectedOutcomes: Record<number, string> = {
   6: "allowed",   // Glob — readdir
   7: "skipped",   // TodoWrite — non-replayable
   8: "error",     // Read nonexistent file
+  9: "allowed",   // Read via {project} de-anonymization
+  10: "allowed",  // Bash via {project} de-anonymization
+  11: "skipped",  // Non-replayable: {project-name} placeholder
+  12: "skipped",  // Non-replayable: .claude/ internal state
+  13: "skipped",  // {host} in Bash
 };
 
 let exitCode = 0;

@@ -20,11 +20,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 3.3 Add network tool handling (`WebFetch` attempt, `WebSearch` skip)
   - [x] 3.4 Add skip rules for non-replayable tools
   - [x] 3.5 Verify: hand-crafted sequence with mixed tools produces correct outcomes
-- [ ] **[Phase 4: Path De-anonymization](#phase-4-path-de-anonymization)**
-  - [ ] 4.1 Implement `deanonymizePath()` for `{project}`, `{home}`, `{user}` substitution
-  - [ ] 4.2 Implement `deanonymizeCommand()` for Bash command strings
-  - [ ] 4.3 Add skip detection for un-resolvable paths (`{project-name}`, `.claude/` internal state)
-  - [ ] 4.4 Verify: a real dataset record de-anonymizes to valid paths within a worktree
+- [x] **[Phase 4: Path De-anonymization](#phase-4-path-de-anonymization)**
+  - [x] 4.1 Implement `deanonymizePath()` for `{project}`, `{home}`, `{user}` substitution
+  - [x] 4.2 Implement `deanonymizeCommand()` for Bash command strings
+  - [x] 4.3 Add skip detection for un-resolvable paths (`{project-name}`, `.claude/` internal state)
+  - [x] 4.4 Verify: a real dataset record de-anonymizes to valid paths within a worktree
 - [ ] **[Phase 5: Worktree Scaffolding](#phase-5-worktree-scaffolding)**
   - [ ] 5.1 Create `src/main/replay-scaffold.ts` with `buildScaffoldPlan()`
   - [ ] 5.2 Implement `applyScaffold()` to create stub files and directories
