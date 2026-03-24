@@ -35,14 +35,19 @@ new acp.AgentSideConnection(
       // Parse the prompt text as a JSON array of ReplayToolCall
       let toolCalls: ReplayToolCall[];
       try {
-        toolCalls = JSON.parse(userText) as ReplayToolCall[];
-      } catch {
-        // If parsing fails, emit an error message and return
+        const parsed = JSON.parse(userText);
+        if (!Array.isArray(parsed)) {
+          throw new Error(`Expected array, got ${typeof parsed}`);
+        }
+        toolCalls = parsed as ReplayToolCall[];
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown parse error";
+        const preview = userText.length > 200 ? `${userText.slice(0, 200)}... [truncated]` : userText;
         await connection.sessionUpdate({
           sessionId: params.sessionId,
           update: {
             sessionUpdate: "agent_message_chunk",
-            content: { type: "text", text: `Error: failed to parse prompt as ReplayToolCall[]: ${userText}` },
+            content: { type: "text", text: `Error parsing ReplayToolCall[]: ${errorMessage}\nInput: ${preview}` },
           },
         });
         return { stopReason: "end_turn" };
@@ -58,7 +63,7 @@ new acp.AgentSideConnection(
           original_outcome: call.original_outcome,
         };
 
-        // Emit tool_call with pending status
+        // Emit tool_call as completed (skipped — no execution in skeleton)
         await connection.sessionUpdate({
           sessionId: params.sessionId,
           update: {
