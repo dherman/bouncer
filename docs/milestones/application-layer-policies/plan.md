@@ -4,11 +4,11 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
 
 ## Progress
 
-- [ ] **[Phase 1: Policy Types and GitHub Remote Detection](#phase-1-policy-types-and-github-remote-detection)**
-  - [ ] 1.1 Add `GitHubPolicy` and `PolicyEvent` types
-  - [ ] 1.2 Create `github-policy.ts`
-  - [ ] 1.3 Update `standard-pr` template
-  - [ ] 1.4 Write a test script for remote detection
+- [x] **[Phase 1: Policy Types and GitHub Remote Detection](#phase-1-policy-types-and-github-remote-detection)**
+  - [x] 1.1 Add `GitHubPolicy` and `PolicyEvent` types
+  - [x] 1.2 Create `github-policy.ts`
+  - [x] 1.3 Update `standard-pr` template
+  - [x] 1.4 Write a test script for remote detection
 - [ ] **[Phase 2: `gh` Shim — Core](#phase-2-gh-shim--core)**
   - [ ] 2.1 Create the shim entry point
   - [ ] 2.2 Implement the subcommand parser

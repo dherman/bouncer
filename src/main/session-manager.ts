@@ -589,6 +589,8 @@ export class SessionManager {
       sandboxed: session.sandboxConfig !== null,
       policyId: session.policyId,
       policyName,
+      githubRepo: null,
+      ownedPrNumber: null,
     };
   }
 }
