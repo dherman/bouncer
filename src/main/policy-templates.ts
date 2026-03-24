@@ -24,15 +24,16 @@ export const standardPrTemplate: PolicyTemplate = {
 };
 
 /**
- * Research only: read-only filesystem, full network.
+ * Research only: worktree-scoped writes, full network.
  * For code review, analysis, and web research tasks.
+ * Writes are confined to the worktree — no access to dirs outside the sandbox.
  */
 export const researchOnlyTemplate: PolicyTemplate = {
   id: "research-only",
   name: "Research Only",
-  description: "Read-only filesystem, full network access",
+  description: "Worktree-scoped writes, full network access",
   filesystem: {
-    worktreeAccess: "read-only",
+    worktreeAccess: "read-write",
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
