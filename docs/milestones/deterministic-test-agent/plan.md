@@ -14,12 +14,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.3 Update `createSession()` for replay-specific worktree and policy behavior
   - [x] 2.4 Update IPC handler in `src/main/index.ts` to accept `"replay"` agent type
   - [x] 2.5 Write `scripts/test-replay-agent.ts` — spawn replay agent, send hand-crafted tool calls, verify session updates
-- [ ] **[Phase 3: Tool Execution Engine](#phase-3-tool-execution-engine)**
-  - [ ] 3.1 Add filesystem tool executors (`Read`, `Write`, `Edit`, `Grep`, `Glob`)
-  - [ ] 3.2 Add `Bash` executor with timeout and EPERM detection
-  - [ ] 3.3 Add network tool handling (`WebFetch` attempt, `WebSearch` skip)
-  - [ ] 3.4 Add skip rules for non-replayable tools
-  - [ ] 3.5 Verify: hand-crafted sequence with mixed tools produces correct outcomes
+- [x] **[Phase 3: Tool Execution Engine](#phase-3-tool-execution-engine)**
+  - [x] 3.1 Add filesystem tool executors (`Read`, `Write`, `Edit`, `Grep`, `Glob`)
+  - [x] 3.2 Add `Bash` executor with timeout and EPERM detection
+  - [x] 3.3 Add network tool handling (`WebFetch` attempt, `WebSearch` skip)
+  - [x] 3.4 Add skip rules for non-replayable tools
+  - [x] 3.5 Verify: hand-crafted sequence with mixed tools produces correct outcomes
 - [ ] **[Phase 4: Path De-anonymization](#phase-4-path-de-anonymization)**
   - [ ] 4.1 Implement `deanonymizePath()` for `{project}`, `{home}`, `{user}` substitution
   - [ ] 4.2 Implement `deanonymizeCommand()` for Bash command strings
