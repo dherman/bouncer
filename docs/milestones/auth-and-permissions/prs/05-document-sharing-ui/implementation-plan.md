@@ -1,0 +1,18 @@
+- [x] Update `list_accessible_documents` query in `packages/server/src/db.rs` to include role and ownership:
+- [x] Add a similar `get_document_with_role` method for single-document fetch
+- [x]
+- [x]
+- [x] P
+- [x] U
+- [x] A
+- [x] I
+- [x] S
+- [x] C
+- [x] H
+- [x] D
+- [x] "
+- [x] R
+- [x] O
+- [x] E
+- [x] N
+- [x] `

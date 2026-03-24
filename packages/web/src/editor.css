@@ -1,0 +1,10 @@
+.auth-loading {
+  text-align: center;
+  color: #6b7280;
+  padding: 4rem 0;
+}
+
+/* Document card wrapper (for share button positioning) */
+.document-card-wrapper {
+  position: relative;
+  display: flex;...{truncated}
