@@ -46,18 +46,24 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
     setCreating(true)
     setError(null)
     try {
+      // For replay sessions, pre-load dataset before creating session
+      let replayToolCalls: unknown[] | null = null
+      if (agentType === 'replay' && replaySessionId.trim()) {
+        replayToolCalls = await window.glitterball.sessions.loadReplayData(replaySessionId.trim())
+      }
+
       const session = await window.glitterball.sessions.create(
         projectDir,
         agentType,
         selectedPolicyId,
       )
-      onCreated(session)
 
-      // For replay sessions, load dataset and auto-send tool calls
-      if (agentType === 'replay' && replaySessionId.trim()) {
-        const toolCalls = await window.glitterball.sessions.loadReplayData(replaySessionId.trim())
-        await window.glitterball.sessions.sendMessage(session.id, JSON.stringify(toolCalls))
+      // Send replay tool calls before closing dialog
+      if (replayToolCalls) {
+        await window.glitterball.sessions.sendMessage(session.id, JSON.stringify(replayToolCalls))
       }
+
+      onCreated(session)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

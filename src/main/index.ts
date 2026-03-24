@@ -1,6 +1,7 @@
 import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
+import { loadDataset } from './dataset-loader.js'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -106,7 +107,6 @@ app.whenReady().then(() => {
     if (typeof datasetSessionId !== 'string') {
       throw new Error('Invalid argument: datasetSessionId must be a string')
     }
-    const { loadDataset } = await import('./dataset-loader.js')
     const sessions = await loadDataset(join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'))
     const toolCalls = sessions.get(datasetSessionId)
     if (!toolCalls) {
