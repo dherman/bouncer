@@ -70,7 +70,11 @@ app.whenReady().then(() => {
     if (typeof projectDir !== 'string') {
       throw new Error('Invalid argument: projectDir must be a string')
     }
-    const validAgentType = agentType === 'echo' ? 'echo' as const : 'claude-code' as const
+    const validTypes = ['echo', 'claude-code', 'replay'] as const
+    type ValidType = typeof validTypes[number]
+    const validAgentType: ValidType = validTypes.includes(agentType as ValidType)
+      ? (agentType as ValidType)
+      : 'claude-code'
     const validPolicyId = typeof policyId === 'string' ? policyId : undefined
     return sessionManager.createSession(projectDir, validAgentType, validPolicyId)
   })
