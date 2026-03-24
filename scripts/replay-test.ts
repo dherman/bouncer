@@ -18,7 +18,8 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir, userInfo } from "node:os";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
@@ -51,12 +52,20 @@ function parseArgs(argv: string[]) {
   };
 
   for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case "--policy": opts.policy = args[++i]; break;
-      case "--session": opts.session = args[++i]; break;
-      case "--project-dir": opts.projectDir = args[++i]; break;
-      case "--dataset": opts.dataset = args[++i]; break;
-      case "--output": opts.output = args[++i]; break;
+    const flag = args[i];
+    const next = (): string => {
+      if (i + 1 >= args.length) {
+        console.error(`Missing value for ${flag}`);
+        process.exit(1);
+      }
+      return args[++i];
+    };
+    switch (flag) {
+      case "--policy": opts.policy = next(); break;
+      case "--session": opts.session = next(); break;
+      case "--project-dir": opts.projectDir = next(); break;
+      case "--dataset": opts.dataset = next(); break;
+      case "--output": opts.output = next(); break;
       case "--no-sandbox": opts.noSandbox = true; break;
       default:
         console.error(`Unknown option: ${args[i]}`);
@@ -69,7 +78,7 @@ function parseArgs(argv: string[]) {
 // --- De-anonymization ---
 
 function getSafeUsername(): string {
-  try { return userInfo().username; } catch { return process.env.USER || "unknown"; }
+  try { return userInfo().username; } catch { return process.env.USER || process.env.USERNAME || "unknown"; }
 }
 
 function makeDeanonymize(worktreePath: string) {
@@ -180,6 +189,9 @@ async function replaySession(
   const wtId = randomUUID();
   const worktree = await worktreeManager.create(wtId, projectDir);
 
+  let sandboxConfig: Awaited<ReturnType<typeof policyToSandboxConfig>> | null = null;
+  let agentProcess: ReturnType<typeof spawn> | null = null;
+
   try {
     // Scaffold files
     const deanonymize = makeDeanonymize(worktree.path);
@@ -188,7 +200,6 @@ async function replaySession(
     process.stderr.write(`  Scaffolded ${scaffoldedFiles} files\n`);
 
     // Build sandbox config
-    let sandboxConfig = null;
     const safehouseAvailable = await isSafehouseAvailable();
     if (!noSandbox && safehouseAvailable) {
       const registry = new PolicyTemplateRegistry();
@@ -207,7 +218,8 @@ async function replaySession(
     // Resolve replay agent spawn args
     const require = createRequire(import.meta.url);
     const tsxBin = require.resolve("tsx/cli");
-    const agentScript = join(process.cwd(), "src", "agents", "replay-agent.ts");
+    const scriptDir = dirname(fileURLToPath(import.meta.url));
+    const agentScript = join(scriptDir, "..", "src", "agents", "replay-agent.ts");
     let cmd = process.execPath;
     let args = [tsxBin, agentScript];
     const env: Record<string, string> = {
@@ -221,7 +233,7 @@ async function replaySession(
     }
 
     // Spawn agent
-    const agentProcess = spawn(cmd, args, {
+    agentProcess = spawn(cmd, args, {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...env },
       cwd: worktree.path,
@@ -272,13 +284,6 @@ async function replaySession(
       prompt: [{ type: "text", text: JSON.stringify(toolCalls) }],
     });
 
-    agentProcess.kill();
-
-    // Cleanup sandbox policy
-    if (sandboxConfig) {
-      await cleanupPolicy(sandboxConfig.policyOutputPath);
-    }
-
     return {
       sessionId,
       toolCallCount: toolCalls.length,
@@ -287,6 +292,10 @@ async function replaySession(
       replayDurationMs: Date.now() - startTime,
     };
   } finally {
+    agentProcess?.kill();
+    if (sandboxConfig) {
+      await cleanupPolicy(sandboxConfig.policyOutputPath).catch(() => {});
+    }
     await worktreeManager.remove(worktree);
   }
 }
