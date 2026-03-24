@@ -11,6 +11,7 @@ interface Props {
   sessions: SessionSummary[]
   activeSessionId: string | null
   violationCounts: Map<string, number>
+  policyDescriptions: Map<string, string>
   onSelect: (id: string) => void
   onCreate: () => void
   onClose: (id: string) => void
@@ -23,7 +24,7 @@ function projectLabel(session: SessionSummary): string {
   return session.id.slice(0, 8)
 }
 
-export function SessionList({ sessions, activeSessionId, violationCounts, onSelect, onCreate, onClose }: Props) {
+export function SessionList({ sessions, activeSessionId, violationCounts, policyDescriptions, onSelect, onCreate, onClose }: Props) {
   return (
     <div className="session-list">
       <button className="new-session-btn" onClick={onCreate}>
@@ -42,7 +43,14 @@ export function SessionList({ sessions, activeSessionId, violationCounts, onSele
           <span className="session-label">
             {projectLabel(s)}
             {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-            {s.sandboxed && <span className="sandbox-badge">&#x1F6E1;</span>}
+            {s.policyName && (
+              <span
+                className={`policy-badge policy-${s.policyId ?? 'default'}`}
+                title={s.policyId ? (policyDescriptions.get(s.policyId) ?? s.policyId) : ''}
+              >
+                {s.policyName}
+              </span>
+            )}
             {(violationCounts.get(s.id) ?? 0) > 0 && (
               <span className="violation-count">{violationCounts.get(s.id)}</span>
             )}

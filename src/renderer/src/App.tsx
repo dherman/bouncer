@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Message, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
+import type { Message, PolicyTemplateSummary, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 import { NewSessionDialog } from './components/NewSessionDialog'
@@ -12,6 +12,7 @@ function App() {
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
   const [violationsBySession, setViolationsBySession] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
+  const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
 
   const handleUpdate = useCallback((update: SessionUpdate) => {
     switch (update.type) {
@@ -123,6 +124,9 @@ function App() {
         setActiveSessionId(list[0].id)
       }
     })
+    window.glitterball.policies.list().then((list) => {
+      setPolicyDescriptions(new Map(list.map((p) => [p.id, p.description])))
+    })
     const unsubscribe = window.glitterball.sessions.onUpdate(handleUpdate)
     return unsubscribe
   }, [handleUpdate])
@@ -172,6 +176,7 @@ function App() {
         sessions={sessions}
         activeSessionId={activeSessionId}
         violationCounts={violationCounts}
+        policyDescriptions={policyDescriptions}
         onSelect={setActiveSessionId}
         onCreate={() => setShowNewSessionDialog(true)}
         onClose={handleCloseSession}
