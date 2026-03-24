@@ -1,0 +1,22 @@
+- [x] PR 3 (Document CRUD API) merged
+- [x] REST endpoints working: `GET /api/docs`, `POST /api/docs`, `GET /api/docs/{id}`
+- [x] Install React Router: `pnpm -F @{project-name}/web add react-router`
+- [x] Set up the router in `src/main.tsx`:
+- [x] Create `src/api.ts`:
+- [x] Create `src/Dashboard.tsx`:
+- [x] Create `src/EditorPage.tsx`:
+- [x] In `src/collaboration.ts`, remove `DEFAULT_DOC_ID`
+- [x] The `createProvider(docId)` function already accepts a doc ID parameter — verify it works with arbitrary UUIDs
+- [x] In `src/useCollabora...{truncated}
+- [x] Simplify `src/App.tsx` or remove it — the router in `main.tsx` now handles top-level routing
+- [x] If `App.tsx` had any global providers or error boundaries, move them to `main.tsx`
+- [x] Add CSS for the dashboard in the existing stylesheet:
+- [x] Verify Vite dev server handles SPA fallback for `/docs/:id` routes
+- [x] Vite's default behavior serves `index.html` for unknown routes in dev mode, so this should work out of the box
+- [x] Add ...{truncated}
+- [x] Update any existing frontend tests to account for routing
+- [x] Add basic tests for the Dashboard component if a test framework is configured
+- [x] `pnpm -F @{project-name}/web build` succeeds
+- [x] `pnpm -F @{project-name}/web dev` starts without errors
+- [x] Navigate to `http://localhost:5173/` — see the empty dashboard
+- [x] Click "New Document" — creates a document and navigates to `/do...{truncated}
