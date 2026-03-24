@@ -1,0 +1,21 @@
+- [x] PR 1 (Users & Auth Endpoints) merged
+- [x] Auth endpoints working (register, login, refresh)
+- [x] Create `packages/server/src/auth/middleware.rs`
+- [x] Add `pub mod middleware;` to `packages/server/src/auth/mod.rs`
+- [x] Define `AuthUser` struct:
+- [x] Implement `FromRequestParts<Arc<AppState>>` for `AuthUser`:
+- [x] Define and implement `OptionalAuthUser`:
+- [x] Modify `list_documents`
+- [x] Modify `create_document`
+- [x] Add `auth: AuthUser` parameter to all remaining document handlers:
+- [x] No permission logic yet
+- [x] Refactor `ws_token` and `me`
+- [x] Add `create_permission`
+- [x] Update `packages/server/tests/api.rs`
+- [x] Add test: unauthenticated request
+- [x] Add test: request with expired token
+- [x] Add test: request with refresh token (wrong type)
+- [x] `cargo build` succeeds
+- [x] All document endpoints return 401 without a valid token
+- [x] All document endpoints work with a valid access token
+- [x] `POST /api/docs` creates a document with `created_by` set to the authent...{truncated}
