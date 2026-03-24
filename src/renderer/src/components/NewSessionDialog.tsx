@@ -60,6 +60,9 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
 
       // Send replay tool calls before closing dialog
       if (replayToolCalls) {
+        if (session.status === 'error') {
+          throw new Error('Replay session failed to initialize')
+        }
         await window.glitterball.sessions.sendMessage(session.id, JSON.stringify(replayToolCalls))
       }
 

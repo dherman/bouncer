@@ -7,7 +7,7 @@
  * Usage: npx tsx scripts/test-dataset-loader.ts
  */
 import { join } from "node:path";
-import { loadDataset, datasetSummary, listSessions } from "../src/main/dataset-loader.js";
+import { loadDataset, loadSession, datasetSummary, listSessions } from "../src/main/dataset-loader.js";
 
 const datasetPath = join(process.cwd(), "data", "tool-use-dataset.jsonl");
 
@@ -62,6 +62,16 @@ try {
   for (const s of list.slice(0, 3)) {
     console.log(`  ${s.sessionId} (${s.project}): ${s.callCount} calls, tools: ${s.tools.join(", ")}`);
   }
+
+  // Test loadSession
+  console.log("\nTesting loadSession...");
+  const testSessionId = list[0].sessionId;
+  const sessionCalls = await loadSession(datasetPath, testSessionId);
+  check("loadSession returns non-empty", sessionCalls.length > 0);
+  check("loadSession count matches listSessions", sessionCalls.length === list[0].callCount);
+
+  const unknownCalls = await loadSession(datasetPath, "nonexistent-session");
+  check("loadSession returns empty for unknown session", unknownCalls.length === 0);
 } catch (err) {
   console.error("Error:", err);
   exitCode = 1;
