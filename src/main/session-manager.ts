@@ -284,16 +284,12 @@ export class SessionManager {
           // Install gh shim and set up environment (only if gh is available)
           const realGhPath = await findRealGh();
           if (realGhPath) {
-            const require = createRequire(app.getAppPath() + "/");
             const ghShimPath = app.isPackaged
               ? join(app.getAppPath(), "dist", "main", "gh-shim.js")
               : join(app.getAppPath(), "src", "main", "gh-shim.ts");
-            // Resolve tsx/esm to an absolute path so the shim works
-            // regardless of cwd (worktrees don't have node_modules).
-            const tsxEsmPath = require.resolve("tsx/esm");
             // Use "node" (not process.execPath which is Electron) since the
             // shim runs as a standalone subprocess invoked by the agent.
-            const shimDir = await installGhShim(id, ghShimPath, "node", tsxEsmPath);
+            const shimDir = await installGhShim(id, ghShimPath, "node");
             shimEnv = {
               BOUNCER_GITHUB_POLICY: policyStatePath(id),
               BOUNCER_REAL_GH: realGhPath,

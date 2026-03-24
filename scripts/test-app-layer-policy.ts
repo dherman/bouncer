@@ -142,7 +142,7 @@ await test("build and write policy state", async () => {
 
 await test("install gh shim", async () => {
   const ghShimTs = join(process.cwd(), "src", "main", "gh-shim.ts");
-  const dir = await installGhShim(sessionId, ghShimTs, process.execPath, "tsx/esm");
+  const dir = await installGhShim(sessionId, ghShimTs, process.execPath);
 
   assert.equal(dir, shimBinDir(sessionId));
   assert.ok(existsSync(join(dir, "gh")), "gh shim should exist");
@@ -153,7 +153,7 @@ await test("install gh shim", async () => {
 
   // Verify it references the right paths
   const content = await readFile(join(dir, "gh"), "utf-8");
-  assert.ok(content.includes("gh-shim.ts"), "should reference gh-shim.ts");
+  assert.ok(content.includes("gh-shim-bundle.js"), "should reference the bundled shim");
 });
 
 await test("install hooks", async () => {
@@ -229,7 +229,7 @@ const orphanId = `orphan-${Date.now()}`;
 await test("orphan artifacts are cleaned up", async () => {
   // Create artifacts for a fake session
   await writePolicyState(orphanId, buildSessionPolicy("owner/repo", "branch"));
-  await installGhShim(orphanId, "/fake/path.ts", "/fake/node", "tsx/esm");
+  await installGhShim(orphanId, "/fake/path.ts", "/fake/node");
   assert.ok(existsSync(policyStatePath(orphanId)));
   assert.ok(existsSync(shimBinDir(orphanId)));
 
