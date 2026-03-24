@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { app } from "electron";
@@ -18,6 +19,7 @@ import {
 import { SandboxMonitor } from "./sandbox-monitor.js";
 import { PolicyTemplateRegistry } from "./policy-registry.js";
 import { policyToSandboxConfig } from "./policy-sandbox.js";
+import { parsePolicyEvent } from "./policy-event-parser.js";
 import {
   detectGitHubRepo,
   buildSessionPolicy,
@@ -314,16 +316,49 @@ export class SessionManager {
       });
       session.agentProcess = agentProcess;
 
-      // Capture stderr for error reporting
+      // Capture stderr for error reporting and parse policy events.
+      // Use StringDecoder to handle multibyte characters (e.g. em-dash)
+      // that may be split across chunks.
       let collectedStderr = "";
+      let stderrBuffer = "";
+      const stderrDecoder = new StringDecoder("utf8");
+      const flushStderrLine = (line: string): void => {
+        const event = parsePolicyEvent(line);
+        if (event) {
+          this.emit("session-update", {
+            sessionId: id,
+            type: "policy-event",
+            event,
+          });
+        }
+      };
       agentProcess.stderr?.on("data", (data: Buffer) => {
-        collectedStderr += data.toString();
-        // Also forward to the main process console for debugging
+        const chunk = stderrDecoder.write(data);
+        collectedStderr += chunk;
         process.stderr.write(data);
+
+        // Parse policy events from complete lines
+        stderrBuffer += chunk;
+        const lines = stderrBuffer.split("\n");
+        stderrBuffer = lines.pop() ?? ""; // Keep incomplete last line in buffer
+        for (const line of lines) {
+          flushStderrLine(line);
+        }
       });
 
-      // Handle agent crashes
+      // Handle agent crashes — flush any remaining stderr buffer first
       agentProcess.on("exit", (code) => {
+        // Flush remaining bytes from the decoder and parse final line
+        const remaining = stderrDecoder.end();
+        if (remaining) {
+          collectedStderr += remaining;
+          stderrBuffer += remaining;
+        }
+        if (stderrBuffer) {
+          flushStderrLine(stderrBuffer);
+          stderrBuffer = "";
+        }
+
         if (session.status !== "closed") {
           const errorMessage =
             session.status === "initializing"

@@ -189,7 +189,7 @@ await test("push to denied ref blocked by hooks", async () => {
     assert.fail("should have been denied");
   } catch (err: unknown) {
     const stderr = (err as { stderr?: string }).stderr ?? "";
-    assert.ok(stderr.includes("[bouncer:git]") && stderr.includes("denied"));
+    assert.ok(stderr.includes("[bouncer:git] DENY"));
   }
 });
 

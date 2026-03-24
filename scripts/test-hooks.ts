@@ -166,7 +166,7 @@ await test("push to denied ref fails", async () => {
   } catch (err: unknown) {
     const stderr = (err as { stderr?: string }).stderr ?? "";
     assert.ok(
-      stderr.includes("[bouncer:git]") && stderr.includes("denied"),
+      stderr.includes("[bouncer:git] DENY"),
       `expected bouncer denial message, got: ${stderr}`,
     );
   }

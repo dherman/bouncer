@@ -66,10 +66,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         allowed_list="$allowed_list, $ref"
       fi
     done < "$ALLOWED_REFS_FILE"
-    echo "[bouncer:git] push to '$remote_branch' denied by session policy" >&2
-    echo "[bouncer:git] allowed refs: $allowed_list" >&2
+    echo "[bouncer:git] DENY push to $remote_branch — ref not in allowed list ($allowed_list)" >&2
     exit 1
   fi
+  echo "[bouncer:git] ALLOW push to $remote_branch" >&2
 done
 
 exit 0

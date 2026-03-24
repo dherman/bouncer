@@ -542,15 +542,19 @@ async function main(): Promise<void> {
   const parsed = parseGhArgs(args);
   const decision = evaluatePolicy(parsed, policy);
 
-  // Log the decision to stderr
-  const op = [parsed.command, parsed.subcommand].filter(Boolean).join(" ");
+  // Log the decision to stderr in structured format for the policy event parser
+  const op = [parsed.command, parsed.subcommand, ...parsed.positionalArgs]
+    .filter(Boolean)
+    .join(" ");
   const isGraphQL = parsed.command === "api" && parsed.positionalArgs[0] === "graphql";
   const unauditedTag = isGraphQL ? " [unaudited]" : "";
-  process.stderr.write(`[bouncer:gh] ${op} → ${decision.action}${unauditedTag}${decision.action === "deny" ? `: ${decision.reason}` : ""}\n`);
-
   if (decision.action === "deny") {
-    process.stderr.write(`[bouncer:gh] DENIED: ${decision.reason}\n`);
-    process.exit(1);
+    process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`, () => {
+      process.exit(1);
+    });
+    return;
+  } else {
+    process.stderr.write(`[bouncer:gh] ALLOW ${op}${unauditedTag}\n`);
   }
 
   if (decision.action === "allow-and-capture-pr") {
