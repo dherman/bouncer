@@ -102,6 +102,19 @@ app.whenReady().then(() => {
     return sessionManager.getSandboxViolations(sessionId)
   })
 
+  ipcMain.handle('sessions:loadReplayData', async (_e, datasetSessionId: unknown) => {
+    if (typeof datasetSessionId !== 'string') {
+      throw new Error('Invalid argument: datasetSessionId must be a string')
+    }
+    const { loadDataset } = await import('./dataset-loader.js')
+    const sessions = await loadDataset(join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'))
+    const toolCalls = sessions.get(datasetSessionId)
+    if (!toolCalls) {
+      throw new Error(`Session not found in dataset: ${datasetSessionId}`)
+    }
+    return toolCalls
+  })
+
   ipcMain.handle('dialog:selectDirectory', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (!window) return null

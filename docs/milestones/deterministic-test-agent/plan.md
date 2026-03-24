@@ -50,11 +50,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 9.2 Analyze results: allowed rates, false-block rates, per-tool breakdowns
   - [x] 9.3 Categorize blocks: sandbox enforcement vs. missing-file noise vs. network gap
   - [x] 9.4 Document findings in `findings.md`
-- [ ] **[Phase 10: UI Integration](#phase-10-ui-integration)**
-  - [ ] 10.1 Update `NewSessionDialog.tsx` — add agent type selector with "Replay" option
-  - [ ] 10.2 Add session ID text input (shown when Replay is selected)
-  - [ ] 10.3 Update preload bridge and IPC handler for replay-specific session creation
-  - [ ] 10.4 Update `env.d.ts` type declarations
+- [x] **[Phase 10: UI Integration](#phase-10-ui-integration)**
+  - [x] 10.1 Update `NewSessionDialog.tsx` — add agent type selector with "Replay" option
+  - [x] 10.2 Add session ID text input (shown when Replay is selected)
+  - [x] 10.3 Update preload bridge and IPC handler for replay-specific session creation
+  - [x] 10.4 Update `env.d.ts` type declarations
   - [ ] 10.5 Full flow test: select Replay agent, enter session ID, see tool calls stream in chat panel
 - [ ] **[Verification](#verification-checklist)** — all checks pass
 
