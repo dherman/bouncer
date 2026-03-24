@@ -30,11 +30,15 @@ function shouldSkip(tool: string): boolean {
 // --- Error classification ---
 
 function classifyError(err: unknown): "blocked" | "error" {
+  // Prefer structured error code for Node filesystem/process errors
+  const code = (err as NodeJS.ErrnoException)?.code;
+  if (code === "EPERM" || code === "EACCES") {
+    return "blocked";
+  }
+  // Fallback to message matching for non-Node errors (e.g. sandbox stderr)
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
     if (
-      msg.includes("eperm") ||
-      msg.includes("eacces") ||
       msg.includes("operation not permitted") ||
       msg.includes("permission denied")
     ) {
@@ -55,7 +59,7 @@ async function executeRead(input: Record<string, unknown>): Promise<Pick<ReplayR
   const filePath = input.file_path as string;
   if (!filePath) return { replay_outcome: "error", error_message: "missing file_path" };
   try {
-    await fs.readFile(filePath);
+    await fs.access(filePath, fsConstants.R_OK);
     return { replay_outcome: "allowed" };
   } catch (err) {
     return { replay_outcome: classifyError(err), error_message: errorMessage(err) };
@@ -124,17 +128,11 @@ async function executeBash(input: Record<string, unknown>): Promise<Pick<ReplayR
     });
     return { replay_outcome: "allowed" };
   } catch (err) {
+    // classifyError handles err.code (EPERM/EACCES) and message fallback
+    const outcome = classifyError(err);
     const stderr = (err as { stderr?: Buffer })?.stderr?.toString() ?? "";
-    const msg = (err as Error).message ?? "";
-    const combined = stderr + msg;
-    if (
-      combined.includes("Operation not permitted") ||
-      combined.includes("EPERM") ||
-      combined.includes("Permission denied")
-    ) {
-      return { replay_outcome: "blocked", error_message: combined.slice(0, 200) };
-    }
-    return { replay_outcome: "error", error_message: combined.slice(0, 200) };
+    const detail = stderr || errorMessage(err);
+    return { replay_outcome: outcome, error_message: detail.slice(0, 200) };
   }
 }
 

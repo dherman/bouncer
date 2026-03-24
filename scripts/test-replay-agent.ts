@@ -9,8 +9,9 @@
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Writable, Readable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 
@@ -19,9 +20,8 @@ const tsxBin = require.resolve("tsx/cli");
 
 const cwd = process.cwd();
 
-// Create a test file so Read has something to find
-const testDir = join(cwd, ".replay-test-tmp");
-mkdirSync(testDir, { recursive: true });
+// Create a unique temp directory for test files
+const testDir = mkdtempSync(join(tmpdir(), "replay-test-"));
 writeFileSync(join(testDir, "test.txt"), "hello world\n");
 
 const agent = spawn(process.execPath, [tsxBin, "src/agents/replay-agent.ts"], {
