@@ -73,7 +73,15 @@ function parseArgs(argv: string[]) {
       case "--project-dir": opts.projectDir = next(); break;
       case "--dataset": opts.dataset = next(); break;
       case "--output": opts.output = next(); break;
-      case "--concurrency": opts.concurrency = parseInt(next(), 10); break;
+      case "--concurrency": {
+        const val = parseInt(next(), 10);
+        if (Number.isNaN(val) || val < 1) {
+          console.error("--concurrency must be an integer >= 1");
+          process.exit(1);
+        }
+        opts.concurrency = val;
+        break;
+      }
       case "--no-sandbox": opts.noSandbox = true; break;
       default:
         console.error(`Unknown option: ${args[i]}`);
@@ -317,8 +325,8 @@ async function replayBatch(
   concurrency: number,
   noSandbox: boolean,
 ): Promise<SessionReplayResult[]> {
-  const results: SessionReplayResult[] = [];
   const entries = Array.from(sessions.entries());
+  const results = new Array<SessionReplayResult>(entries.length);
   let index = 0;
 
   async function worker() {
@@ -327,17 +335,17 @@ async function replayBatch(
       const [sessionId, toolCalls] = entries[i];
       process.stderr.write(`[${i + 1}/${entries.length}] ${sessionId} (${toolCalls.length} calls)...\n`);
       try {
-        const result = await replaySession(sessionId, toolCalls, policyId, projectDir, noSandbox);
-        results.push(result);
+        results[i] = await replaySession(sessionId, toolCalls, policyId, projectDir, noSandbox);
       } catch (err) {
-        process.stderr.write(`  FAILED: ${(err as Error).message}\n`);
-        results.push({
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`  FAILED: ${msg}\n`);
+        results[i] = {
           sessionId,
           toolCallCount: toolCalls.length,
           results: [],
           scaffoldedFiles: 0,
           replayDurationMs: 0,
-        });
+        };
       }
     }
   }
@@ -405,12 +413,17 @@ try {
   } else if (opts.sessions) {
     targetSessions = new Map<string, ReplayToolCall[]>();
     for (const id of opts.sessions.split(",")) {
-      const toolCalls = allSessions.get(id.trim());
-      if (!toolCalls) {
-        console.error(`Session not found: ${id.trim()}`);
+      const trimmed = id.trim();
+      if (!trimmed) {
+        console.error("Empty session ID in --sessions");
         process.exit(1);
       }
-      targetSessions.set(id.trim(), toolCalls);
+      const toolCalls = allSessions.get(trimmed);
+      if (!toolCalls) {
+        console.error(`Session not found: ${trimmed}`);
+        process.exit(1);
+      }
+      targetSessions.set(trimmed, toolCalls);
     }
   } else {
     targetSessions = allSessions;
@@ -420,6 +433,15 @@ try {
 
   // Resolve which policies to run against
   const registry = new PolicyTemplateRegistry();
+  if (opts.policy !== "all") {
+    try {
+      registry.get(opts.policy);
+    } catch {
+      console.error(`Unknown policy: ${opts.policy}`);
+      console.error(`Available: ${registry.list().map((p) => p.id).join(", ")}, or "all"`);
+      process.exit(1);
+    }
+  }
   const policyIds = opts.policy === "all"
     ? registry.list().map((p) => p.id)
     : [opts.policy];
