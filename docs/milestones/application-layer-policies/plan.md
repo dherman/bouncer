@@ -2,6 +2,51 @@
 
 This plan breaks the [design](design.md) into concrete, sequenced implementation steps. Each phase produces a testable increment. Steps reference specific source files and existing code structures to enable implementation by an agent or developer with minimal ambiguity.
 
+## Progress
+
+- [ ] **[Phase 1: Policy Types and GitHub Remote Detection](#phase-1-policy-types-and-github-remote-detection)**
+  - [ ] 1.1 Add `GitHubPolicy` and `PolicyEvent` types
+  - [ ] 1.2 Create `github-policy.ts`
+  - [ ] 1.3 Update `standard-pr` template
+  - [ ] 1.4 Write a test script for remote detection
+- [ ] **[Phase 2: `gh` Shim — Core](#phase-2-gh-shim--core)**
+  - [ ] 2.1 Create the shim entry point
+  - [ ] 2.2 Implement the subcommand parser
+  - [ ] 2.3 Implement policy evaluation
+  - [ ] 2.4 Implement `gh api` endpoint matching
+  - [ ] 2.5 Implement the main entry point
+  - [ ] 2.6 Build script for standalone shim
+  - [ ] 2.7 Write shim unit tests
+- [ ] **[Phase 3: Git Hooks](#phase-3-git-hooks)**
+  - [ ] 3.1 Create `hooks.ts`
+  - [ ] 3.2 Write hook tests
+- [ ] **[Phase 4: Session Manager Integration](#phase-4-session-manager-integration)**
+  - [ ] 4.1 Update `SessionState`
+  - [ ] 4.2 Integrate into `createSession`
+  - [ ] 4.3 Set up shim PATH and environment
+  - [ ] 4.4 Update `resolveAgentCommand` for PATH
+  - [ ] 4.5 Update `closeSession` for cleanup
+  - [ ] 4.6 Update `summarize` for new `SessionSummary` fields
+  - [ ] 4.7 Update `cleanupOrphans`
+  - [ ] 4.8 Update IPC and preload
+  - [ ] 4.9 Integration test
+- [ ] **[Phase 5: Observability — Stderr Parsing and Policy Events](#phase-5-observability--stderr-parsing-and-policy-events)**
+  - [ ] 5.1 Add stderr log parser
+  - [ ] 5.2 Integrate into stderr capture
+  - [ ] 5.3 Update the `gh` shim to emit structured log lines
+  - [ ] 5.4 Update the pre-push hook to emit structured log lines
+  - [ ] 5.5 Test the parser
+- [ ] **[Phase 6: UI Updates](#phase-6-ui-updates)**
+  - [ ] 6.1 Handle `policy-event` in `App.tsx`
+  - [ ] 6.2 Extend `SandboxLog` component
+  - [ ] 6.3 Show GitHub session info in the session list
+  - [ ] 6.4 Visual verification
+- [ ] **[Phase 7: End-to-End Validation](#phase-7-end-to-end-validation)**
+  - [ ] 7.1 Create a test repository
+  - [ ] 7.2 Manual end-to-end test
+  - [ ] 7.3 Test git hook enforcement
+  - [ ] 7.4 Document findings
+
 ## Prerequisites
 
 - Milestone 4 complete (current state)
