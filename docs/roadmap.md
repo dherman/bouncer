@@ -8,7 +8,8 @@
 - [x] **[Milestone 3: Policy Templates](#milestone-3-policy-templates)**
 - [x] **[Milestone 4: Deterministic Test Agent](#milestone-4-deterministic-test-agent)**
 - [ ] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
-- [ ] **[Milestone 6: Network Boundary](#milestone-6-network-boundary)**
+- [ ] **[Milestone 6: Container Migration](#milestone-6-container-migration)**
+- [ ] **[Milestone 7: Network Boundary](#milestone-7-network-boundary)**
 
 ## Vision
 
@@ -46,7 +47,13 @@ OS-level sandboxes enforce filesystem and network boundaries, but some safety-re
 - "Only update PR #47" is a GitHub API semantic
 - "Don't `npm publish`" is an npm semantic over HTTPS
 
-Closing this gap requires a semantic layer above the OS sandbox — potentially via git hooks, API-aware proxies, or ACP-level interception. This is a key research question for later milestones.
+Closing this gap requires a **layered approach** (see [M5 design investigation](reference/m5-app-layer-design.md)):
+
+1. **CLI wrappers** (`gh` shim, git hooks): guardrails that enforce policy at the tool level. Effective against accidental violations; bypassable via raw HTTP calls. Implemented in M5.
+2. **Container isolation** (M6): strengthens CLI wrappers by controlling the entire filesystem — the real `gh` binary doesn't exist, so the shim can't be bypassed via absolute paths.
+3. **Network proxy** (M7): the authoritative security boundary. Inspects HTTP traffic to GitHub's API and git's smart HTTP transport. At this layer, CLI wrappers become a UX optimization (better error messages), not the enforcement mechanism.
+
+ACP-level interception (via the ACP proxy) serves as an **observability and UX layer**, not a security boundary — parsing security-relevant intent from arbitrary bash command strings is the per-action classification problem we already moved away from.
 
 ## Architecture
 
@@ -101,7 +108,9 @@ The project is structured as an **Electron app** (codename: **Glitter Ball**) th
 | OS sandbox (current) | [agent-safehouse](https://agent-safehouse.dev) | Curated Seatbelt profiles, macOS only; see [sandbox primitive discussion](#sandbox-primitive-seatbelt-vs-containers) |
 | OS sandbox (future) | Containers (Docker/OrbStack) | Cross-platform, isolated filesystem; planned migration |
 | Worktree management | git CLI | `git worktree add/remove` per session |
-| Network boundary (later) | HTTP/SOCKS proxy or container networking | Domain allowlisting |
+| App-layer policy (M5) | CLI wrappers (`gh` shim, git hooks) | Policy enforcement at the tool level |
+| Container sandbox (M6) | OrbStack (Docker-compatible) | Isolated filesystem, read-only policy mounts |
+| Network boundary (M7) | HTTP proxy + container networking | Authoritative policy enforcement, domain allowlisting |
 
 ### Sandbox Primitive: Seatbelt vs. Containers
 
@@ -115,24 +124,19 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 - **Cross-platform**: Docker works on macOS, Linux, and Windows. Seatbelt is macOS-only.
 - **Reproducibility**: A container image is a snapshot. Same image = identical environment across sessions and machines.
 - **The carveout problem goes away**: No need to enumerate global paths. The container has its own copies of everything.
-- **Network isolation is native**: Docker gives fine-grained network control (bridge networks, port mapping, DNS filtering) that could simplify or replace Milestone 6.
+- **Network isolation is native**: Docker gives fine-grained network control (bridge networks, port mapping, DNS filtering) that provides the foundation for Milestone 7's network proxy.
 - **Ecosystem maturity**: E2B, Daytona, Modal, and Kubernetes Agent Sandbox all use containers or VMs.
 
 **Where Seatbelt/safehouse is clearly better:**
 - **Startup latency**: Near-zero overhead vs. 500ms-2s for container start.
 - **Host integration**: Agent sees the user's actual git config, SSH keys, shell environment. In a container, these must be explicitly mounted or copied.
-- **Worktree performance**: Bind-mounted filesystems on macOS Docker have significant performance overhead, especially for large `node_modules`. OrbStack and virtiofs help but are still slower than native.
 - **Simplicity for prototyping**: A single CLI call vs. Docker daemon, images, volumes, networking config.
+
+**OrbStack bind-mount performance (validated 2026-03-24):** Performance testing with OrbStack on this repo (6,500+ files, 462MB `node_modules`) showed bind-mount performance at parity with native macOS — some operations were actually faster due to Linux kernel IO scheduling. See [OrbStack performance investigation](reference/orbstack-perf-investigation.md) for details. This eliminates the key container migration risk.
 
 **Current approach:** Use safehouse for Milestones 2-3 to get to the policy design questions quickly. The policy learnings transfer directly to containers — "the agent needs write access to the worktree, read access to toolchains, and restricted network" is the same policy whether expressed as SBPL rules or as Dockerfile + bind mounts + network config.
 
-**When to migrate:** Consider migrating to containers when:
-1. We need cross-platform support (Linux builders)
-2. The carveout maintenance burden becomes significant
-3. We start building domain-specific sandboxes (e.g., "only work on this PR") where the isolated-snapshot model is more natural than the carveout model
-4. Milestone 5+ application-layer policies benefit from container-level hooks (e.g., git hooks baked into the image, proxy-based network control via container networking)
-
-**Key risk to validate early:** macOS Docker file-sharing performance with large Node.js projects. If bind-mount performance is unacceptable for the worktree, we may need OrbStack, or a hybrid approach (container for isolation + host worktree via high-performance mount).
+**Migration plan:** Milestone 5 implements application-layer policies on Seatbelt to iterate on policy semantics quickly. Milestone 6 migrates to containers (OrbStack), which strengthens the CLI wrapper enforcement model (the real `gh` binary simply doesn't exist in the container) and provides native network isolation for Milestone 7. See the [M5 design investigation](reference/m5-app-layer-design.md) for the analysis behind this sequencing.
 
 ---
 
@@ -187,32 +191,96 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 ### Milestone 5: Application-Layer Policies
 
-**Goal**: Understand and start closing the gap between OS-level and intent-level enforcement.
+**Goal**: Implement application-layer policy enforcement for a GitHub PR workflow, using CLI wrappers on Seatbelt.
 
-- Git semantic constraints: branch restrictions via git hooks or a git wrapper
-- Investigate ACP's `RequestPermissionRequest` as a policy interception point
-- Catalog the full application-layer gap: what can't Seatbelt enforce?
-- Design the semantic policy layer
+**Design use case**: A session where the agent creates and iterates on a pull request. The PR identity (repo, branch, PR number) is static for the session — known at session start. See [M5 design investigation](reference/m5-app-layer-design.md) for the full analysis.
 
-### Milestone 6: Network Boundary
+**`gh` shim:**
+- A policy-aware wrapper placed on the agent's `PATH` that intercepts `gh` commands
+- Parses the `gh` subcommand grammar and enforces session policy:
+  - **Allow**: `gh pr create`, `gh pr edit` (for this session's PR), `gh pr view`, `gh issue list/view`, repo metadata reads
+  - **Deny**: `gh pr merge/close` on other PRs, `gh issue create/edit`, destructive operations
+  - **Special handling**: `gh api` (arbitrary API calls) — parse HTTP method + URL path to apply the same policy
+- Proxies allowed operations to the real `gh` binary; returns policy-violation errors for denied operations
+- GitHub auth: read the user's existing `gh auth` token (zero setup); consider OAuth device flow as a future upgrade for tighter scoping
 
-**Goal**: Network-level enforcement, completing the sandbox boundary.
+**Git hooks:**
+- `pre-push` hook restricting which remote refs the agent can push to (e.g., allow `agent/feature-branch`, deny `main`/`master`)
+- Installed in the worktree during session setup via `core.hooksPath` pointing to a Bouncer-managed directory
+- On Seatbelt, these are guardrails (the agent could bypass them); the container migration (M6) makes them harder to tamper with via read-only mounts
 
-- If Seatbelt: block all network via `--append-profile` overlay except localhost proxy ports
-- If containers: use Docker network policies or bridge network configuration
-- HTTP/SOCKS proxy in the session manager enforcing domain allowlists
-- Integrate with policy templates (allowed domains per policy type)
-- Test with real agent workflows (git push, npm install, web research)
+**ACP observability:**
+- Log `gh` and `git` invocations (allowed and denied) via ACP for UI visibility
+- Surface policy violations in the session event log
+- ACP is the observability layer, not the enforcement layer
+
+**Known gaps (addressed in M6-M7):**
+- Agent can bypass the `gh` shim via `curl` to `api.github.com` (closed by M7 network proxy)
+- Agent can bypass git hooks via `--no-verify` or by unsetting `core.hooksPath` (mitigated by M6 read-only mounts, closed by M7 network proxy)
+- The real `gh` binary is still accessible on the host filesystem (closed by M6 container isolation)
+
+### Milestone 6: Container Migration
+
+**Goal**: Migrate the sandbox primitive from Seatbelt to containers (OrbStack), strengthening application-layer policy enforcement and enabling native network isolation.
+
+**Why now**: Application-layer policies (M5) rely on CLI wrappers and git hooks that can be bypassed on a host filesystem the agent partially controls. Containers close several of these gaps:
+- The real `gh` binary doesn't exist in the container — the shim *is* `gh`, with no bypass via absolute paths
+- Git hooks can be mounted read-only, preventing agent tampering
+- Container networking provides the foundation for M7's network proxy
+
+**Performance**: OrbStack bind-mount performance has been [validated](reference/orbstack-perf-investigation.md) at parity with native macOS filesystem performance (tested 2026-03-24).
+
+**Scope:**
+- Dockerfile(s) for the agent environment: Node.js, git, the `gh` shim, git hooks, standard toolchains
+- Session Manager spawns agent containers via OrbStack's Docker-compatible API
+- Worktree bind-mounted read-write into the container
+- Git hooks directory and `gh` shim mounted read-only
+- User's git config and SSH keys mounted read-only (or copied) for authentication
+- GitHub auth token injected via environment variable
+- Policy templates (M3) updated to generate container configs instead of (or in addition to) Seatbelt profiles
+- Port the sandbox violation detection from Seatbelt log parsing to container-appropriate mechanisms
+
+### Milestone 7: Network Boundary
+
+**Goal**: Network-level enforcement via an HTTP proxy, completing the sandbox boundary. The proxy becomes the authoritative security layer for application-level policies.
+
+**Architecture:**
+- HTTP/HTTPS proxy running in the Session Manager (host-side)
+- Container networking routes all agent egress through the proxy
+- Domain allowlisting per policy template (e.g., `github.com`, `registry.npmjs.org`, `api.github.com`)
+
+**GitHub API policy enforcement:**
+- The proxy inspects requests to `api.github.com` and enforces the same policy as the M5 `gh` shim, but at the HTTP level
+- REST API: match HTTP method + URL path (e.g., `POST /repos/{owner}/{repo}/pulls` = allow, `PUT /repos/{owner}/{repo}/pulls/{number}/merge` = deny)
+- GraphQL API (`POST /graphql`): parse the query body to determine the operation
+- Git smart HTTP transport: inspect ref-update requests to enforce branch restrictions
+
+**At this point, enforcement roles shift:**
+
+| Mechanism | Role after M7 |
+|---|---|
+| `gh` shim | UX (better error messages) + fast-reject optimization |
+| Git hooks | UX (better error messages) |
+| Network proxy | **Authoritative security boundary** |
+| ACP | Observability and session event logging |
+
+**Additional scope:**
+- TLS interception with injected CA certificate (installed in the container's trust store)
+- Proxy bypass prevention: container networking ensures all traffic routes through the proxy
+- Integration with policy templates (allowed domains, allowed API operations per policy type)
+- Test with real agent workflows: `git push`, `npm install`, `gh pr create`, web research
 
 ## Open Questions
 
-- **What legitimate operations does safehouse's sandbox break?** Milestone 2 will answer this empirically. Agent-safehouse handles most common paths, but session-specific edge cases (e.g., unusual toolchains, custom git hooks) may need `--append-profile` overrides.
+- **What legitimate operations does safehouse's sandbox break?** Milestone 2 answered this empirically. Agent-safehouse handles most common paths, but session-specific edge cases may need `--append-profile` overrides.
 - **How reliable is log-stream parsing for detecting sandbox violations?** If flaky, we may need to also detect violations via EPERM errors surfaced through ACP.
-- **Can a small number of policy templates cover most workflows?** Milestone 3-4 will test this against real data.
+- **Can a small number of policy templates cover most workflows?** Milestone 3-4 tested this against real data.
 - **What's the right model for boundary derivation?** Can we eventually infer boundaries from task descriptions, or do users always need to select explicitly?
-- **When should we migrate from Seatbelt to containers?** See [sandbox primitive discussion](#sandbox-primitive-seatbelt-vs-containers). The trigger is likely cross-platform need or domain-specific sandboxing (e.g., "only work on PR #47").
-- **What's the macOS Docker bind-mount performance like for large worktrees?** This is the key feasibility question for the container migration. OrbStack may be the answer, but needs testing.
-- **How do domain-specific policies (e.g., PR-scoped sessions) map to sandbox primitives?** This is the most interesting policy question — it goes beyond filesystem boundaries into git semantics, API scoping, and task-level intent. Neither Seatbelt nor containers solve it alone; it requires an application-layer policy system (Milestone 5).
+- ~~**What's the macOS Docker bind-mount performance like for large worktrees?**~~ **Answered**: OrbStack bind-mount performance is at parity with native. See [investigation](reference/orbstack-perf-investigation.md).
+- ~~**When should we migrate from Seatbelt to containers?**~~ **Answered**: Milestone 6, after M5 establishes application-layer policy semantics on Seatbelt.
+- **How should the `gh` shim handle `gh api`?** The `gh api` subcommand allows arbitrary GitHub API calls, requiring the shim to parse HTTP method + URL path — essentially the same logic the M7 proxy will need. This is a design opportunity: build the policy engine once, use it in both the shim and the proxy.
+- **What's the right GitHub auth strategy long-term?** M5 reuses the user's existing `gh auth` token. For tighter scoping, an OAuth device flow or GitHub App installation could provide session-scoped tokens. Evaluate after M5 based on real usage.
+- **How do we handle dynamic PR identity?** M5 assumes the PR is known at session start. A future enhancement could allow agents to spawn sub-sessions via MCP/CLI tools, where a "create PR" session transitions into an "iterate on PR #N" session.
 
 ## Prior Work
 
@@ -220,3 +288,5 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 - [Research goals and principles](history/initial-research/goals.md)
 - [PR 0: Dataset extraction](history/initial-research/pr-0-dataset-extraction.md) (completed — produced `data/tool-use-dataset.jsonl`)
 - [Claude Code history analysis reference](reference/claude-code-history-analysis.md)
+- [M5 application-layer design investigation](reference/m5-app-layer-design.md) — analysis of enforcement layers, sequencing rationale, and GitHub PR use case
+- [OrbStack performance investigation](reference/orbstack-perf-investigation.md) — bind-mount benchmark results validating container migration feasibility
