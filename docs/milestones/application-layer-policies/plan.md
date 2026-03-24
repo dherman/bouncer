@@ -9,14 +9,14 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
   - [x] 1.2 Create `github-policy.ts`
   - [x] 1.3 Update `standard-pr` template
   - [x] 1.4 Write a test script for remote detection
-- [ ] **[Phase 2: `gh` Shim — Core](#phase-2-gh-shim--core)**
-  - [ ] 2.1 Create the shim entry point
-  - [ ] 2.2 Implement the subcommand parser
-  - [ ] 2.3 Implement policy evaluation
-  - [ ] 2.4 Implement `gh api` endpoint matching
-  - [ ] 2.5 Implement the main entry point
-  - [ ] 2.6 Build script for standalone shim
-  - [ ] 2.7 Write shim unit tests
+- [x] **[Phase 2: `gh` Shim — Core](#phase-2-gh-shim--core)**
+  - [x] 2.1 Create the shim entry point
+  - [x] 2.2 Implement the subcommand parser
+  - [x] 2.3 Implement policy evaluation
+  - [x] 2.4 Implement `gh api` endpoint matching
+  - [x] 2.5 Implement the main entry point
+  - [x] 2.6 Build script for standalone shim
+  - [x] 2.7 Write shim unit tests
 - [ ] **[Phase 3: Git Hooks](#phase-3-git-hooks)**
   - [ ] 3.1 Create `hooks.ts`
   - [ ] 3.2 Write hook tests
