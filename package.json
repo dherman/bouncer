@@ -25,7 +25,8 @@
     "test:github-policy": "tsx scripts/test-github-policy.ts",
     "test:gh-shim": "tsx scripts/test-gh-shim.ts",
     "test:hooks": "tsx scripts/test-hooks.ts",
-    "test:app-layer-policy": "tsx scripts/test-app-layer-policy.ts"
+    "test:app-layer-policy": "tsx scripts/test-app-layer-policy.ts",
+    "test:policy-event-parser": "tsx scripts/test-policy-event-parser.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

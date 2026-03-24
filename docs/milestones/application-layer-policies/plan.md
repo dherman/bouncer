@@ -30,12 +30,12 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
   - [x] 4.7 Update `cleanupOrphans`
   - [x] 4.8 Update IPC and preload
   - [x] 4.9 Integration test
-- [ ] **[Phase 5: Observability — Stderr Parsing and Policy Events](#phase-5-observability--stderr-parsing-and-policy-events)**
-  - [ ] 5.1 Add stderr log parser
-  - [ ] 5.2 Integrate into stderr capture
-  - [ ] 5.3 Update the `gh` shim to emit structured log lines
-  - [ ] 5.4 Update the pre-push hook to emit structured log lines
-  - [ ] 5.5 Test the parser
+- [x] **[Phase 5: Observability — Stderr Parsing and Policy Events](#phase-5-observability--stderr-parsing-and-policy-events)**
+  - [x] 5.1 Add stderr log parser
+  - [x] 5.2 Integrate into stderr capture
+  - [x] 5.3 Update the `gh` shim to emit structured log lines
+  - [x] 5.4 Update the pre-push hook to emit structured log lines
+  - [x] 5.5 Test the parser
 - [ ] **[Phase 6: UI Updates](#phase-6-ui-updates)**
   - [ ] 6.1 Handle `policy-event` in `App.tsx`
   - [ ] 6.2 Extend `SandboxLog` component

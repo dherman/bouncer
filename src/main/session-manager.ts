@@ -18,6 +18,7 @@ import {
 import { SandboxMonitor } from "./sandbox-monitor.js";
 import { PolicyTemplateRegistry } from "./policy-registry.js";
 import { policyToSandboxConfig } from "./policy-sandbox.js";
+import { parsePolicyEvent } from "./policy-event-parser.js";
 import {
   detectGitHubRepo,
   buildSessionPolicy,
@@ -314,12 +315,28 @@ export class SessionManager {
       });
       session.agentProcess = agentProcess;
 
-      // Capture stderr for error reporting
+      // Capture stderr for error reporting and parse policy events
       let collectedStderr = "";
+      let stderrBuffer = "";
       agentProcess.stderr?.on("data", (data: Buffer) => {
-        collectedStderr += data.toString();
-        // Also forward to the main process console for debugging
+        const chunk = data.toString();
+        collectedStderr += chunk;
         process.stderr.write(data);
+
+        // Parse policy events from complete lines
+        stderrBuffer += chunk;
+        const lines = stderrBuffer.split("\n");
+        stderrBuffer = lines.pop() ?? ""; // Keep incomplete last line in buffer
+        for (const line of lines) {
+          const event = parsePolicyEvent(line);
+          if (event) {
+            this.emit("session-update", {
+              sessionId: id,
+              type: "policy-event",
+              event,
+            });
+          }
+        }
       });
 
       // Handle agent crashes
