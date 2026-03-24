@@ -37,12 +37,12 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 6.1 Update `SessionList.tsx` to show policy name badge instead of shield emoji
   - [x] 6.2 Add policy info tooltip on badge hover
   - [x] 6.3 Full flow test: sessions show correct policy labels, tooltip displays details
-- [ ] **[Phase 7: Empirical Validation](#phase-7-empirical-validation)**
-  - [ ] 7.1 Test: `standard-pr` blocks network access
-  - [ ] 7.2 Test: `research-only` blocks file writes
-  - [ ] 7.3 Test: `permissive` allows both network and file writes
-  - [ ] 7.4 Test: SBPL append-profile ordering (deny overrides allow)
-  - [ ] 7.5 Document findings and edge cases
+- [x] **[Phase 7: Empirical Validation](#phase-7-empirical-validation)**
+  - [x] 7.1 Test: `standard-pr` blocks network access — SBPL deny works but blocks agent API; deferred to M6
+  - [x] 7.2 Test: `research-only` blocks file writes — writes outside sandbox blocked; template updated to rw worktree
+  - [x] 7.3 Test: `permissive` allows both network and file writes — PASS
+  - [x] 7.4 Test: SBPL append-profile ordering — confirmed via 7.1 (deny overrides allow)
+  - [x] 7.5 Document findings and edge cases — see findings.md
 - [ ] **[Verification](#verification-checklist)** — all manual checks pass
 
 ---

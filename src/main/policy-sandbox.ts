@@ -48,13 +48,15 @@ export function policyToSandboxConfig(
   let appendProfileContent: string | undefined;
   const profileParts: string[] = [];
 
-  if (template.network.access === "none") {
-    profileParts.push(
-      ";; Block all outbound network access.",
-      "(deny network-outbound)",
-      "(deny network-bind)",
-    );
-  } else if (template.network.access === "filtered") {
+  // Network deny rules are intentionally skipped for now. SBPL deny is
+  // all-or-nothing — it blocks the agent's own API traffic (Anthropic API),
+  // making the session non-functional. Meaningful network restriction requires
+  // an application-layer proxy (Milestone 6) that allows API traffic while
+  // blocking everything else. The template's network.access field still
+  // declares intent for when the proxy layer exists.
+  //
+  // See: docs/milestones/policy-templates/findings.md
+  if (template.network.access === "filtered") {
     throw new Error(
       "Network access mode 'filtered' is not yet supported by policyToSandboxConfig",
     );
