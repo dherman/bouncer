@@ -9,6 +9,7 @@ interface GlitterballAPI {
     sendMessage(sessionId: string, text: string): Promise<void>
     closeSession(sessionId: string): Promise<void>
     getSandboxViolations(sessionId: string): Promise<SandboxViolationInfo[]>
+    loadReplayData(datasetSessionId: string): Promise<unknown[]>
     onUpdate(callback: (update: SessionUpdate) => void): () => void
   }
   policies: {

@@ -1,6 +1,7 @@
 import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
+import { loadSession } from './dataset-loader.js'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -100,6 +101,17 @@ app.whenReady().then(() => {
       throw new Error('Invalid argument: sessionId must be a string')
     }
     return sessionManager.getSandboxViolations(sessionId)
+  })
+
+  ipcMain.handle('sessions:loadReplayData', async (_e, datasetSessionId: unknown) => {
+    if (typeof datasetSessionId !== 'string') {
+      throw new Error('Invalid argument: datasetSessionId must be a string')
+    }
+    const toolCalls = await loadSession(join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'), datasetSessionId)
+    if (toolCalls.length === 0) {
+      throw new Error(`Session not found in dataset: ${datasetSessionId}`)
+    }
+    return toolCalls
   })
 
   ipcMain.handle('dialog:selectDirectory', async (event) => {

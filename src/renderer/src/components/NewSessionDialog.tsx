@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import type { PolicyTemplateSummary, SessionSummary } from '../../../main/types'
+import type { AgentType, PolicyTemplateSummary, SessionSummary } from '../../../main/types'
 
 interface Props {
   onClose: () => void
@@ -7,6 +7,8 @@ interface Props {
 }
 
 export function NewSessionDialog({ onClose, onCreated }: Props) {
+  const [agentType, setAgentType] = useState<AgentType>('claude-code')
+  const [replaySessionId, setReplaySessionId] = useState('')
   const [policies, setPolicies] = useState<PolicyTemplateSummary[]>([])
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null)
   const [projectDir, setProjectDir] = useState<string | null>(null)
@@ -40,14 +42,30 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
 
   async function handleCreate() {
     if (!projectDir || !selectedPolicyId) return
+    if (agentType === 'replay' && !replaySessionId.trim()) return
     setCreating(true)
     setError(null)
     try {
+      // For replay sessions, pre-load dataset before creating session
+      let replayToolCalls: unknown[] | null = null
+      if (agentType === 'replay' && replaySessionId.trim()) {
+        replayToolCalls = await window.glitterball.sessions.loadReplayData(replaySessionId.trim())
+      }
+
       const session = await window.glitterball.sessions.create(
         projectDir,
-        'claude-code',
+        agentType,
         selectedPolicyId,
       )
+
+      // Send replay tool calls before closing dialog
+      if (replayToolCalls) {
+        if (session.status === 'error') {
+          throw new Error('Replay session failed to initialize')
+        }
+        await window.glitterball.sessions.sendMessage(session.id, JSON.stringify(replayToolCalls))
+      }
+
       onCreated(session)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -72,6 +90,41 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
             </button>
           </div>
         </div>
+
+        <div style={sectionStyle}>
+          <label style={labelStyle}>Agent</label>
+          <div style={agentTypeListStyle}>
+            {([
+              ['claude-code', 'Claude Code'] as const,
+              ['replay', 'Replay'] as const,
+              ['echo', 'Echo (dev)'] as const,
+            ]).map(([value, label]) => (
+              <label key={value} style={agentTypeItemStyle}>
+                <input
+                  type="radio"
+                  name="agentType"
+                  checked={agentType === value}
+                  onChange={() => setAgentType(value)}
+                  style={{ marginRight: 6 }}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {agentType === 'replay' && (
+          <div style={sectionStyle}>
+            <label style={labelStyle}>Dataset Session ID</label>
+            <input
+              type="text"
+              placeholder="e.g., session-042"
+              value={replaySessionId}
+              onChange={(e) => setReplaySessionId(e.target.value)}
+              style={textInputStyle}
+            />
+          </div>
+        )}
 
         <div style={sectionStyle}>
           <label style={labelStyle}>Policy</label>
@@ -109,10 +162,10 @@ export function NewSessionDialog({ onClose, onCreated }: Props) {
           <button
             style={{
               ...createButtonStyle,
-              ...((!projectDir || !selectedPolicyId || creating) ? disabledButtonStyle : {}),
+              ...((!projectDir || !selectedPolicyId || creating || (agentType === 'replay' && !replaySessionId.trim())) ? disabledButtonStyle : {}),
             }}
             onClick={handleCreate}
-            disabled={!projectDir || !selectedPolicyId || creating}
+            disabled={!projectDir || !selectedPolicyId || creating || (agentType === 'replay' && !replaySessionId.trim())}
           >
             {creating ? 'Creating...' : 'Create Session'}
           </button>
@@ -255,4 +308,29 @@ const createButtonStyle: CSSProperties = {
 const disabledButtonStyle: CSSProperties = {
   opacity: 0.5,
   cursor: 'not-allowed',
+}
+
+const agentTypeListStyle: CSSProperties = {
+  display: 'flex',
+  gap: 16,
+}
+
+const agentTypeItemStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  fontSize: 14,
+  cursor: 'pointer',
+}
+
+const textInputStyle: CSSProperties = {
+  width: '100%',
+  padding: '6px 10px',
+  fontSize: 14,
+  fontFamily: 'monospace',
+  backgroundColor: '#333',
+  color: '#fff',
+  border: '1px solid #555',
+  borderRadius: 4,
+  outline: 'none',
+  boxSizing: 'border-box',
 }

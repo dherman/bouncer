@@ -91,28 +91,32 @@ function resolveReplayAgentCommand(
   let cmd: string;
   let args: string[];
 
+  let agentArgs: string[];
   if (isDev) {
     const tsxBin = require.resolve("tsx/cli");
     const agentScript = join(app.getAppPath(), "src", "agents", "replay-agent.ts");
-    cmd = process.execPath;
-    args = [tsxBin, agentScript];
+    agentArgs = [tsxBin, agentScript];
   } else {
     const agentScript = join(__dirname, "..", "agents", "replay-agent.js");
-    cmd = process.execPath;
-    args = [agentScript];
+    agentArgs = [agentScript];
   }
 
   const env: Record<string, string> = {
-    ELECTRON_RUN_AS_NODE: "1",
     REPLAY_WORKTREE_PATH: worktreePath,
   };
 
-  // Wrap in safehouse if sandbox config present
+  // Under safehouse, use "node" — Electron's native IOKit/GPU init
+  // crashes when sandbox blocks IOKit access (before ELECTRON_RUN_AS_NODE
+  // takes effect). Without safehouse, use process.execPath with
+  // ELECTRON_RUN_AS_NODE so we don't depend on node being on PATH.
   if (sandboxConfig) {
-    const safehouseArgs = buildSafehouseArgs(sandboxConfig, [cmd, ...args]);
+    const safehouseArgs = buildSafehouseArgs(sandboxConfig, ["node", ...agentArgs]);
     return { cmd: "safehouse", args: safehouseArgs, cwd, env };
   }
 
+  cmd = process.execPath;
+  args = agentArgs;
+  env.ELECTRON_RUN_AS_NODE = "1";
   return { cmd, args, env, cwd };
 }
 
@@ -174,6 +178,7 @@ export class SessionManager {
 
     // Create worktree for Claude Code and replay sessions
     if (agentType === "claude-code" || agentType === "replay") {
+
       const isGitRepo = await this.worktreeManager.validateGitRepo(projectDir);
       if (!isGitRepo) {
         throw new Error(`Not a git repository: ${projectDir}`);
