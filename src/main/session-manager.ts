@@ -228,11 +228,19 @@ export class SessionManager {
         // only the agent package dir is insufficient.
         const appNodeModules = join(app.getAppPath(), "node_modules");
 
+        // The replay agent entrypoint lives in src/agents/ (dev) or
+        // dist/agents/ (prod), outside node_modules. Grant read-only
+        // access to the app root so the sandbox can read the script.
+        const readOnlyDirs = [appNodeModules];
+        if (agentType === "replay") {
+          readOnlyDirs.push(app.getAppPath());
+        }
+
         sandboxConfig = policyToSandboxConfig(template, {
           sessionId: id,
           worktreePath: workingDir,
           gitCommonDir: worktree?.gitCommonDir,
-          readOnlyDirs: [appNodeModules],
+          readOnlyDirs,
         });
         session.sandboxConfig = sandboxConfig;
 
