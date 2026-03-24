@@ -295,6 +295,14 @@ export class SessionManager {
               BOUNCER_REAL_GH: realGhPath,
               PATH: `${shimDir}:${process.env.PATH ?? ""}`,
             };
+            // Ensure safehouse forwards the shim env vars to the agent
+            if (sandboxConfig) {
+              sandboxConfig.envPassthrough.push(
+                "BOUNCER_GITHUB_POLICY",
+                "BOUNCER_REAL_GH",
+                "PATH",
+              );
+            }
           } else {
             console.warn("gh CLI not found — gh shim will not be installed");
           }
