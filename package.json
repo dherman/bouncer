@@ -21,7 +21,8 @@
     "test:sandbox-profile": "tsx scripts/test-sandbox-profile.ts",
     "test:sandboxed-agent": "tsx scripts/test-sandboxed-agent.ts",
     "test:sandbox-monitor": "tsx scripts/test-sandbox-monitor.ts",
-    "test:policy-sandbox": "tsx scripts/test-policy-sandbox.ts"
+    "test:policy-sandbox": "tsx scripts/test-policy-sandbox.ts",
+    "test:github-policy": "tsx scripts/test-github-policy.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

@@ -22,6 +22,12 @@ export const standardPrTemplate: PolicyTemplate = {
     exclude: [],
   },
   safehouseIntegrations: ["all-agents"],
+  github: {
+    repo: "",              // Populated per-session
+    allowedPushRefs: [],   // Populated per-session
+    ownedPrNumber: null,
+    canCreatePr: true,
+  },
 };
 
 /**

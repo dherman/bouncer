@@ -27,6 +27,27 @@ export interface SessionSummary {
   sandboxed: boolean;
   policyId: string | null;
   policyName: string | null;
+  githubRepo: string | null;
+  ownedPrNumber: number | null;
+}
+
+// --- GitHub Application-Layer Policy Types (M5) ---
+
+/** GitHub-specific application-layer policy for a session. */
+export interface GitHubPolicy {
+  repo: string;
+  allowedPushRefs: string[];
+  ownedPrNumber: number | null;
+  canCreatePr: boolean;
+}
+
+/** Logged when the gh shim or git hook allows/denies an operation. */
+export interface PolicyEvent {
+  timestamp: number;
+  tool: "gh" | "git";
+  operation: string;
+  decision: "allow" | "deny";
+  reason?: string;
 }
 
 // --- Policy Template Types ---
@@ -40,6 +61,7 @@ export interface PolicyTemplate {
   env: EnvPolicy;
   safehouseIntegrations: string[];
   appendProfile?: string;
+  github?: GitHubPolicy;
 }
 
 export interface FilesystemPolicy {
@@ -94,4 +116,5 @@ export type SessionUpdate =
   | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
   | { sessionId: string; type: "stream-end"; messageId: string }
   | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
-  | { sessionId: string; type: "sandbox-violation"; violation: SandboxViolationInfo };
+  | { sessionId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
+  | { sessionId: string; type: "policy-event"; event: PolicyEvent };
