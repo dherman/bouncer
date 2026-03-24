@@ -69,7 +69,7 @@ export function buildScaffoldPlan(
     const rel = toRelativePath(abs, worktreePath);
     if (!rel) return;
 
-    if (content && content !== "// stub\n") {
+    if (content != null && content !== "// stub\n") {
       // Meaningful content (e.g. old_string from Edit) — append if file already has content
       const existing = files.get(rel);
       if (existing && existing !== "// stub\n") {
@@ -105,7 +105,10 @@ export function buildScaffoldPlan(
           if (!shouldSkipPath(filePath)) {
             const abs = deanonymize(filePath);
             const rel = toRelativePath(abs, worktreePath);
-            if (rel) directories.add(dirname(rel));
+            if (rel) {
+              const dir = dirname(rel);
+              if (dir !== ".") directories.add(dir);
+            }
           }
         }
         break;
@@ -165,11 +168,18 @@ export async function applyScaffold(
   for (const dir of plan.directories) {
     await mkdir(join(worktreePath, dir), { recursive: true });
   }
-  // Create files
+  // Create files (skip if already exists to avoid clobbering worktree content)
+  let created = 0;
   for (const [relPath, content] of plan.files) {
     const absPath = join(worktreePath, relPath);
     await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, content, "utf-8");
+    try {
+      await writeFile(absPath, content, { encoding: "utf-8", flag: "wx" });
+      created++;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;
+      throw err;
+    }
   }
-  return plan.files.size;
+  return created;
 }
