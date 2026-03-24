@@ -4,10 +4,10 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 
 ## Progress
 
-- [ ] **[Phase 1: Replay Types and Agent Skeleton](#phase-1-replay-types-and-agent-skeleton)**
-  - [ ] 1.1 Add replay types to `src/main/types.ts`
-  - [ ] 1.2 Create `src/agents/replay-agent.ts` skeleton (ACP boilerplate only)
-  - [ ] 1.3 Verify: replay agent starts, completes ACP handshake, echoes back prompt text
+- [x] **[Phase 1: Replay Types and Agent Skeleton](#phase-1-replay-types-and-agent-skeleton)**
+  - [x] 1.1 Add replay types to `src/main/types.ts`
+  - [x] 1.2 Create `src/agents/replay-agent.ts` skeleton (ACP boilerplate only)
+  - [x] 1.3 Verify: replay agent starts, completes ACP handshake, parses prompt JSON and emits `tool_call` updates
 - [ ] **[Phase 2: Agent Type Registration](#phase-2-agent-type-registration)**
   - [ ] 2.1 Add `resolveReplayAgentCommand()` to `src/main/session-manager.ts`
   - [ ] 2.2 Update `resolveAgentCommand()` to handle `"replay"` agent type

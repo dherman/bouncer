@@ -1,4 +1,4 @@
-export type AgentType = "echo" | "claude-code";
+export type AgentType = "echo" | "claude-code" | "replay";
 
 export interface Message {
   id: string;
@@ -69,6 +69,23 @@ export interface SandboxViolationInfo {
   operation: string;
   path?: string;
   processName: string;
+}
+
+// --- Replay Types ---
+
+export interface ReplayToolCall {
+  id: number;
+  tool: string;
+  input: Record<string, unknown>;
+  original_outcome: string;
+}
+
+export interface ReplayResult {
+  id: number;
+  tool: string;
+  replay_outcome: "allowed" | "blocked" | "skipped" | "error";
+  error_message?: string;
+  original_outcome: string;
 }
 
 export type SessionUpdate =
