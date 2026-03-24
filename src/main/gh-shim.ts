@@ -542,19 +542,18 @@ async function main(): Promise<void> {
   const parsed = parseGhArgs(args);
   const decision = evaluatePolicy(parsed, policy);
 
-  // Log the decision to stderr in structured format for the policy event parser
+  // Log deny decisions to stderr for the policy event parser.
+  // Allow events are intentionally not logged to stderr — agents capture
+  // stderr as tool output, and the [bouncer:gh] lines confuse them into
+  // thinking there's no real output from gh.
   const op = [parsed.command, parsed.subcommand, ...parsed.positionalArgs]
     .filter(Boolean)
     .join(" ");
-  const isGraphQL = parsed.command === "api" && parsed.positionalArgs[0] === "graphql";
-  const unauditedTag = isGraphQL ? " [unaudited]" : "";
   if (decision.action === "deny") {
     process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`, () => {
       process.exit(1);
     });
     return;
-  } else {
-    process.stderr.write(`[bouncer:gh] ALLOW ${op}${unauditedTag}\n`);
   }
 
   if (decision.action === "allow-and-capture-pr") {
