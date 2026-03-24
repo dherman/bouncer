@@ -18,6 +18,8 @@ import {
 import { SandboxMonitor } from "./sandbox-monitor.js";
 import { PolicyTemplateRegistry } from "./policy-registry.js";
 import { policyToSandboxConfig } from "./policy-sandbox.js";
+import { appendFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import type {
   AgentType,
   Message,
@@ -26,6 +28,13 @@ import type {
   SessionUpdate,
   ToolCallInfo,
 } from "./types.js";
+
+// Crash-safe diagnostic logging (temporary — remove after diagnosis)
+const DIAG_LOG = join(tmpdir(), "glitterball-diag.log");
+function diag(msg: string) {
+  const line = `[${new Date().toISOString()}] [session-mgr] ${msg}\n`;
+  try { appendFileSync(DIAG_LOG, line); } catch { /* ignore */ }
+}
 
 interface SpawnConfig {
   cmd: string;
@@ -174,11 +183,14 @@ export class SessionManager {
 
     // Create worktree for Claude Code and replay sessions
     if (agentType === "claude-code" || agentType === "replay") {
+      diag("validating git repo");
       const isGitRepo = await this.worktreeManager.validateGitRepo(projectDir);
       if (!isGitRepo) {
         throw new Error(`Not a git repository: ${projectDir}`);
       }
+      diag("creating worktree");
       worktree = await this.worktreeManager.create(id, projectDir);
+      diag(`worktree created: ${worktree.path}`);
     }
 
     const workingDir = worktree?.path ?? projectDir;
@@ -209,6 +221,7 @@ export class SessionManager {
 
     try {
       // Build sandbox config from policy template
+      diag("checking safehouse availability");
       const safehouseAvailable = await isSafehouseAvailable();
       if ((agentType === "claude-code" || agentType === "replay") && !safehouseAvailable) {
         if (!this.safehouseWarningLogged) {
@@ -248,17 +261,20 @@ export class SessionManager {
         await writeAppendProfile(sandboxConfig);
       }
       // Spawn the agent (sandboxed via safehouse if config present)
+      diag(`resolving agent command for ${agentType}, sandbox=${!!sandboxConfig}`);
       const { cmd, args, env, cwd } = resolveAgentCommand(
         agentType,
         workingDir,
         sandboxConfig,
         worktree?.path,
       );
+      diag(`spawning: cmd=${cmd}, args=${JSON.stringify(args)}, cwd=${cwd}`);
       const agentProcess = spawn(cmd, args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...env },
         cwd,
       });
+      diag(`spawned pid=${agentProcess.pid}`);
       session.agentProcess = agentProcess;
 
       // Capture stderr for error reporting
@@ -302,6 +318,7 @@ export class SessionManager {
       });
 
       // Set up ACP connection
+      diag("setting up ACP connection");
       const output = Writable.toWeb(agentProcess.stdin!) as WritableStream<Uint8Array>;
       const input = Readable.toWeb(agentProcess.stdout!) as ReadableStream<Uint8Array>;
       const stream = acp.ndJsonStream(output, input);
@@ -396,6 +413,7 @@ export class SessionManager {
       session.connection = connection;
 
       // ACP handshake
+      diag("starting ACP initialize");
       await connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: {
@@ -404,11 +422,13 @@ export class SessionManager {
         },
       });
 
+      diag("ACP initialize done, creating new session");
       const sessionResp = await connection.newSession({
         cwd: workingDir,
         mcpServers: [],
       });
       session.acpSessionId = sessionResp.sessionId;
+      diag(`ACP session created: ${sessionResp.sessionId}`);
 
       // Start sandbox monitor if sandboxed
       if (sandboxConfig && agentProcess.pid) {
