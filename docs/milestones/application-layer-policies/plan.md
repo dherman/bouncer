@@ -17,9 +17,9 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
   - [x] 2.5 Implement the main entry point
   - [x] 2.6 Build script for standalone shim
   - [x] 2.7 Write shim unit tests
-- [ ] **[Phase 3: Git Hooks](#phase-3-git-hooks)**
-  - [ ] 3.1 Create `hooks.ts`
-  - [ ] 3.2 Write hook tests
+- [x] **[Phase 3: Git Hooks](#phase-3-git-hooks)**
+  - [x] 3.1 Create `hooks.ts`
+  - [x] 3.2 Write hook tests
 - [ ] **[Phase 4: Session Manager Integration](#phase-4-session-manager-integration)**
   - [ ] 4.1 Update `SessionState`
   - [ ] 4.2 Integrate into `createSession`
