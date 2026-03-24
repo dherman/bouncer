@@ -5,10 +5,46 @@ import * as fs from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { execSync } from "node:child_process";
 import { dirname } from "node:path";
+import { homedir, userInfo } from "node:os";
 import type { ReplayToolCall, ReplayResult } from "../main/types.js";
 
 // Environment-based config (set by session manager before spawn)
 const WORKTREE_PATH = process.env.REPLAY_WORKTREE_PATH ?? process.cwd();
+
+// --- Path de-anonymization ---
+
+interface ReplayContext {
+  worktreePath: string;
+  homePath: string;
+  username: string;
+}
+
+const replayCtx: ReplayContext = {
+  worktreePath: WORKTREE_PATH,
+  homePath: homedir(),
+  username: userInfo().username,
+};
+
+function deanonymizePath(path: string, ctx: ReplayContext): string {
+  return path
+    .replace(/\{project\}/g, ctx.worktreePath)
+    .replace(/\{home\}/g, ctx.homePath)
+    .replace(/\{user\}/g, ctx.username);
+}
+
+function deanonymizeCommand(command: string, ctx: ReplayContext): string {
+  return command
+    .replace(/\{project\}/g, ctx.worktreePath)
+    .replace(/\{home\}/g, ctx.homePath)
+    .replace(/\{user\}/g, ctx.username);
+}
+
+function hasUnresolvablePath(input: Record<string, unknown>): boolean {
+  const json = JSON.stringify(input);
+  if (json.includes("{project-name}")) return true;
+  if (json.includes(".claude/")) return true;
+  return false;
+}
 
 // --- Skip rules for non-replayable tools ---
 
@@ -55,9 +91,10 @@ function errorMessage(err: unknown): string {
 
 // --- Tool executors ---
 
-async function executeRead(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
-  const filePath = input.file_path as string;
-  if (!filePath) return { replay_outcome: "error", error_message: "missing file_path" };
+async function executeRead(input: Record<string, unknown>, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+  const raw = input.file_path as string;
+  if (!raw) return { replay_outcome: "error", error_message: "missing file_path" };
+  const filePath = deanonymizePath(raw, ctx);
   try {
     await fs.access(filePath, fsConstants.R_OK);
     return { replay_outcome: "allowed" };
@@ -66,9 +103,10 @@ async function executeRead(input: Record<string, unknown>): Promise<Pick<ReplayR
   }
 }
 
-async function executeWrite(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
-  const filePath = input.file_path as string;
-  if (!filePath) return { replay_outcome: "error", error_message: "missing file_path" };
+async function executeWrite(input: Record<string, unknown>, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+  const raw = input.file_path as string;
+  if (!raw) return { replay_outcome: "error", error_message: "missing file_path" };
+  const filePath = deanonymizePath(raw, ctx);
   try {
     await fs.mkdir(dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, "// replay-stub\n");
@@ -78,9 +116,10 @@ async function executeWrite(input: Record<string, unknown>): Promise<Pick<Replay
   }
 }
 
-async function executeEdit(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
-  const filePath = input.file_path as string;
-  if (!filePath) return { replay_outcome: "error", error_message: "missing file_path" };
+async function executeEdit(input: Record<string, unknown>, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+  const raw = input.file_path as string;
+  if (!raw) return { replay_outcome: "error", error_message: "missing file_path" };
+  const filePath = deanonymizePath(raw, ctx);
   try {
     let content = await fs.readFile(filePath, "utf-8");
     const oldString = input.old_string as string | undefined;
@@ -95,8 +134,9 @@ async function executeEdit(input: Record<string, unknown>): Promise<Pick<ReplayR
   }
 }
 
-async function executeGrep(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
-  const path = (input.path as string) ?? WORKTREE_PATH;
+async function executeGrep(input: Record<string, unknown>, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+  const raw = (input.path as string) ?? ctx.worktreePath;
+  const path = deanonymizePath(raw, ctx);
   try {
     await fs.access(path, fsConstants.R_OK);
     return { replay_outcome: "allowed" };
@@ -105,8 +145,9 @@ async function executeGrep(input: Record<string, unknown>): Promise<Pick<ReplayR
   }
 }
 
-async function executeGlob(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
-  const path = (input.path as string) ?? WORKTREE_PATH;
+async function executeGlob(input: Record<string, unknown>, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+  const raw = (input.path as string) ?? ctx.worktreePath;
+  const path = deanonymizePath(raw, ctx);
   try {
     await fs.readdir(path);
     return { replay_outcome: "allowed" };
@@ -115,13 +156,14 @@ async function executeGlob(input: Record<string, unknown>): Promise<Pick<ReplayR
   }
 }
 
-async function executeBash(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
-  const command = input.command as string;
-  if (!command) return { replay_outcome: "error", error_message: "missing command" };
-  if (command.includes("{host}")) return { replay_outcome: "skipped" };
+async function executeBash(input: Record<string, unknown>, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+  const raw = input.command as string;
+  if (!raw) return { replay_outcome: "error", error_message: "missing command" };
+  if (raw.includes("{host}")) return { replay_outcome: "skipped" };
+  const command = deanonymizeCommand(raw, ctx);
   try {
     execSync(command, {
-      cwd: WORKTREE_PATH,
+      cwd: ctx.worktreePath,
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
       env: process.env,
@@ -136,7 +178,7 @@ async function executeBash(input: Record<string, unknown>): Promise<Pick<ReplayR
   }
 }
 
-async function executeWebFetch(input: Record<string, unknown>): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+async function executeWebFetch(input: Record<string, unknown>, _ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
   const url = input.url as string;
   if (!url || url.includes("{host}")) return { replay_outcome: "skipped" };
   try {
@@ -149,19 +191,24 @@ async function executeWebFetch(input: Record<string, unknown>): Promise<Pick<Rep
 
 // --- Main dispatch ---
 
-async function executeToolCall(call: ReplayToolCall): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
+async function executeToolCall(call: ReplayToolCall, ctx: ReplayContext): Promise<Pick<ReplayResult, "replay_outcome" | "error_message">> {
   if (shouldSkip(call.tool)) {
     return { replay_outcome: "skipped" };
   }
 
+  // Skip tool calls with un-resolvable placeholders
+  if (hasUnresolvablePath(call.input)) {
+    return { replay_outcome: "skipped", error_message: "un-resolvable path placeholder" };
+  }
+
   switch (call.tool) {
-    case "Read": return executeRead(call.input);
-    case "Write": return executeWrite(call.input);
-    case "Edit": return executeEdit(call.input);
-    case "Grep": return executeGrep(call.input);
-    case "Glob": return executeGlob(call.input);
-    case "Bash": return executeBash(call.input);
-    case "WebFetch": return executeWebFetch(call.input);
+    case "Read": return executeRead(call.input, ctx);
+    case "Write": return executeWrite(call.input, ctx);
+    case "Edit": return executeEdit(call.input, ctx);
+    case "Grep": return executeGrep(call.input, ctx);
+    case "Glob": return executeGlob(call.input, ctx);
+    case "Bash": return executeBash(call.input, ctx);
+    case "WebFetch": return executeWebFetch(call.input, ctx);
     case "WebSearch": return { replay_outcome: "skipped" };
     default:
       return { replay_outcome: "skipped", error_message: `unknown tool: ${call.tool}` };
@@ -221,7 +268,7 @@ new acp.AgentSideConnection(
       const counts = { allowed: 0, blocked: 0, skipped: 0, error: 0 };
       for (const call of toolCalls) {
         const toolCallId = `replay-${call.id}`;
-        const outcome = await executeToolCall(call);
+        const outcome = await executeToolCall(call, replayCtx);
         counts[outcome.replay_outcome]++;
 
         const result: ReplayResult = {
