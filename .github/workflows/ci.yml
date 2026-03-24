@@ -33,3 +33,4 @@ jobs:
       - run: npm run test:policy-sandbox
       - run: npm run test:gh-shim
       - run: npm run test:hooks
+      - run: npm run test:app-layer-policy

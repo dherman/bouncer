@@ -24,7 +24,8 @@
     "test:policy-sandbox": "tsx scripts/test-policy-sandbox.ts",
     "test:github-policy": "tsx scripts/test-github-policy.ts",
     "test:gh-shim": "tsx scripts/test-gh-shim.ts",
-    "test:hooks": "tsx scripts/test-hooks.ts"
+    "test:hooks": "tsx scripts/test-hooks.ts",
+    "test:app-layer-policy": "tsx scripts/test-app-layer-policy.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

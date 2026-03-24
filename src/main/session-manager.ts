@@ -18,8 +18,21 @@ import {
 import { SandboxMonitor } from "./sandbox-monitor.js";
 import { PolicyTemplateRegistry } from "./policy-registry.js";
 import { policyToSandboxConfig } from "./policy-sandbox.js";
+import {
+  detectGitHubRepo,
+  buildSessionPolicy,
+  writePolicyState,
+  policyStatePath,
+  cleanupPolicyState,
+  installGhShim,
+  cleanupGhShim,
+  findRealGh,
+  cleanupOrphanGitHubArtifacts,
+} from "./github-policy.js";
+import { installHooks, cleanupHooks } from "./hooks.js";
 import type {
   AgentType,
+  GitHubPolicy,
   Message,
   SandboxViolationInfo,
   SessionSummary,
@@ -150,6 +163,7 @@ interface SessionState {
   sandboxMonitor: SandboxMonitor | null;
   sandboxViolations: SandboxViolationInfo[];
   policyId: string | null;
+  githubPolicy: GitHubPolicy | null;
 }
 
 export class SessionManager {
@@ -204,6 +218,7 @@ export class SessionManager {
       sandboxMonitor: null,
       sandboxViolations: [],
       policyId: resolvedPolicyId,
+      githubPolicy: null,
     };
     this.sessions.set(id, session);
     this.emit("session-update", {
@@ -252,6 +267,31 @@ export class SessionManager {
         // Write append profile file before spawning (if needed)
         await writeAppendProfile(sandboxConfig);
       }
+      // --- Application-layer policy (M5) ---
+      let shimEnv: Record<string, string> = {};
+      if (template?.github && worktree) {
+        const repo = await detectGitHubRepo(workingDir);
+        if (repo) {
+          const githubPolicy = buildSessionPolicy(repo, worktree.branch);
+          await writePolicyState(id, githubPolicy);
+          await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
+          session.githubPolicy = githubPolicy;
+
+          // Install gh shim and set up environment
+          const ghShimTsPath = join(app.getAppPath(), "src", "main", "gh-shim.ts");
+          const shimDir = await installGhShim(id, ghShimTsPath, process.execPath);
+          const realGhPath = await findRealGh();
+          shimEnv = {
+            BOUNCER_GITHUB_POLICY: policyStatePath(id),
+            BOUNCER_REAL_GH: realGhPath,
+            PATH: `${shimDir}:${process.env.PATH ?? ""}`,
+            ELECTRON_RUN_AS_NODE: "1",
+          };
+        } else {
+          console.warn("No GitHub remote detected — skipping application-layer policy");
+        }
+      }
+
       // Spawn the agent (sandboxed via safehouse if config present)
       const { cmd, args, env, cwd } = resolveAgentCommand(
         agentType,
@@ -261,7 +301,7 @@ export class SessionManager {
       );
       const agentProcess = spawn(cmd, args, {
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, ...env },
+        env: { ...process.env, ...env, ...shimEnv },
         cwd,
       });
       session.agentProcess = agentProcess;
@@ -455,6 +495,13 @@ export class SessionManager {
       if (sandboxConfig) {
         await cleanupPolicy(sandboxConfig.policyOutputPath);
       }
+      if (session.githubPolicy) {
+        await cleanupPolicyState(id).catch(() => {});
+        await cleanupGhShim(id).catch(() => {});
+        if (worktree) {
+          await cleanupHooks(id, worktree.path).catch(() => {});
+        }
+      }
       session.status = "error";
       this.emit("session-update", {
         sessionId: id,
@@ -524,6 +571,21 @@ export class SessionManager {
     session.sandboxMonitor?.stop();
     session.agentProcess?.kill();
 
+    // Clean up application-layer policy artifacts
+    if (session.githubPolicy) {
+      if (session.worktree) {
+        await cleanupHooks(sessionId, session.worktree.path).catch((err) =>
+          console.warn(`Failed to clean up hooks for session ${sessionId}:`, err)
+        );
+      }
+      await cleanupPolicyState(sessionId).catch((err) =>
+        console.warn(`Failed to clean up policy state for session ${sessionId}:`, err)
+      );
+      await cleanupGhShim(sessionId).catch((err) =>
+        console.warn(`Failed to clean up gh shim for session ${sessionId}:`, err)
+      );
+    }
+
     // Tear down worktree
     if (session.worktree) {
       try {
@@ -563,6 +625,7 @@ export class SessionManager {
     const activeIds = new Set(this.sessions.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
     await cleanupOrphanPolicies(activeIds);
+    await cleanupOrphanGitHubArtifacts(activeIds);
   }
 
   getSandboxViolations(sessionId: string): SandboxViolationInfo[] {
@@ -589,8 +652,8 @@ export class SessionManager {
       sandboxed: session.sandboxConfig !== null,
       policyId: session.policyId,
       policyName,
-      githubRepo: null,
-      ownedPrNumber: null,
+      githubRepo: session.githubPolicy?.repo ?? null,
+      ownedPrNumber: session.githubPolicy?.ownedPrNumber ?? null,
     };
   }
 }
