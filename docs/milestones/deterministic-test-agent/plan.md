@@ -34,11 +34,11 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 6.1 Create `src/main/dataset-loader.ts` — parse JSONL, group by session, sort by timestamp
   - [x] 6.2 Add session listing and summary statistics
   - [x] 6.3 Verify: loader parses all 11,491 records, groups into 296 sessions
-- [ ] **[Phase 7: Test Harness — Single Session](#phase-7-test-harness--single-session)**
-  - [ ] 7.1 Create `scripts/replay-test.ts` with CLI arg parsing
-  - [ ] 7.2 Implement single-session orchestration: load → scaffold → spawn → prompt → collect → teardown
-  - [ ] 7.3 Implement `ReplayReport` generation with per-call outcomes
-  - [ ] 7.4 Run one real dataset session against `standard-pr` — verify report structure
+- [x] **[Phase 7: Test Harness — Single Session](#phase-7-test-harness--single-session)**
+  - [x] 7.1 Create `scripts/replay-test.ts` with CLI arg parsing
+  - [x] 7.2 Implement single-session orchestration: load → scaffold → spawn → prompt → collect → teardown
+  - [x] 7.3 Implement `ReplayReport` generation with per-call outcomes
+  - [x] 7.4 Run one real dataset session against `standard-pr` — verify report structure
 - [ ] **[Phase 8: Test Harness — Batch Mode](#phase-8-test-harness--batch-mode)**
   - [ ] 8.1 Add batch orchestration with concurrency limit (4 concurrent sessions)
   - [ ] 8.2 Add `--policy all` mode (run against every template)
