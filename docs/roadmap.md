@@ -5,7 +5,7 @@
 - [x] **[Milestone 0: Electron + ACP Hello World](#milestone-0-electron--acp-hello-world)**
 - [x] **[Milestone 1: Live Agent Integration](#milestone-1-live-agent-integration)**
 - [x] **[Milestone 2: Seatbelt Sandbox](#milestone-2-seatbelt-sandbox)**
-- [ ] **[Milestone 3: Policy Templates](#milestone-3-policy-templates)**
+- [x] **[Milestone 3: Policy Templates](#milestone-3-policy-templates)**
 - [ ] **[Milestone 4: Deterministic Test Agent](#milestone-4-deterministic-test-agent)**
 - [ ] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
 - [ ] **[Milestone 6: Network Boundary](#milestone-6-network-boundary)**
