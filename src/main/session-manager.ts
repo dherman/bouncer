@@ -473,7 +473,9 @@ export class SessionManager {
                   title: "title" in update ? (update.title as string) : undefined,
                   output:
                     "rawOutput" in update
-                      ? (update.rawOutput as string)
+                      ? (typeof update.rawOutput === "string"
+                          ? update.rawOutput
+                          : JSON.stringify(update.rawOutput))
                       : undefined,
                 };
                 agentMsg.toolCalls = agentMsg.toolCalls ?? [];
