@@ -23,6 +23,21 @@ function createWindow(): void {
 
   window.on('ready-to-show', () => {
     window.show()
+    // Open DevTools in dev to catch renderer errors
+    if (!app.isPackaged) {
+      window.webContents.openDevTools({ mode: 'detach' })
+    }
+  })
+
+  // Monitor renderer health
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[main] Renderer process gone:', details.reason, 'exitCode:', details.exitCode)
+  })
+  window.webContents.on('unresponsive', () => {
+    console.error('[main] Renderer became unresponsive')
+  })
+  window.webContents.on('responsive', () => {
+    console.log('[main] Renderer became responsive again')
   })
 
   window.webContents.setWindowOpenHandler((details) => {
@@ -56,7 +71,17 @@ app.whenReady().then(() => {
   createWindow()
 
   // SessionManager forwards events to the renderer via IPC
+  // Track IPC throughput to diagnose renderer crashes
+  let ipcCount = 0
+  let ipcLastReport = Date.now()
   const sessionManager = new SessionManager((channel, data) => {
+    ipcCount++
+    const now = Date.now()
+    if (now - ipcLastReport >= 5000) {
+      console.log(`[main] IPC events in last 5s: ${ipcCount} (${(ipcCount / 5).toFixed(0)}/sec)`)
+      ipcCount = 0
+      ipcLastReport = now
+    }
     mainWindow?.webContents.send(channel, data)
   })
 

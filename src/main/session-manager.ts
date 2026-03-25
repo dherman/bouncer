@@ -281,26 +281,65 @@ export class SessionManager {
           await writePolicyState(id, githubPolicy);
           await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
 
-          // Install gh shim and set up environment (only if gh is available)
+          // Configure the worktree for HTTPS push with gh credential helper.
+          // SSH push fails in the sandbox (SSH_AUTH_SOCK socket is blocked),
+          // so switch the remote to HTTPS and configure git to use gh for auth.
+          const { execFile: execFileCb } = await import("node:child_process");
+          const { promisify: pfy } = await import("node:util");
+          const execFileP = pfy(execFileCb);
+          const httpsUrl = `https://github.com/${repo}.git`;
+          await execFileP("git", ["-C", workingDir, "remote", "set-url", "origin", httpsUrl]).catch(() => {});
+
+          // Install gh shim and set up environment (only if gh is available).
+          // Also configure git credential helper to use the real gh binary
+          // so git push via HTTPS can authenticate.
           const realGhPath = await findRealGh();
           if (realGhPath) {
             const ghShimPath = app.isPackaged
               ? join(app.getAppPath(), "dist", "main", "gh-shim.js")
               : join(app.getAppPath(), "src", "main", "gh-shim.ts");
-            // Use "node" (not process.execPath which is Electron) since the
-            // shim runs as a standalone subprocess invoked by the agent.
             const shimDir = await installGhShim(id, ghShimPath, "node");
+
+            // Resolve GH_TOKEN — gh uses keyring auth which the sandbox blocks.
+            let ghToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+            if (!ghToken) {
+              try {
+                const { stdout } = await execFileP("gh", ["auth", "token"]);
+                ghToken = stdout.trim();
+              } catch {
+                console.warn("Could not resolve gh auth token — gh commands may fail in sandbox");
+              }
+            }
+
+            // Configure git credential helper so git push HTTPS uses the token.
+            // Point to the *real* gh (not the shim) for credential operations.
+            if (ghToken) {
+              await execFileP("git", ["-C", workingDir, "config", "credential.helper", ""]).catch(() => {});
+              await execFileP("git", ["-C", workingDir, "config",
+                `credential.https://github.com.helper`,
+                `!${realGhPath} auth git-credential`,
+              ]).catch(() => {});
+            }
+
             shimEnv = {
               BOUNCER_GITHUB_POLICY: policyStatePath(id),
               BOUNCER_REAL_GH: realGhPath,
               PATH: `${shimDir}:${process.env.PATH ?? ""}`,
+              ...(ghToken ? { GH_TOKEN: ghToken } : {}),
             };
-            // Ensure safehouse forwards the shim env vars to the agent
+            // Ensure safehouse forwards the shim env vars and GitHub
+            // auth/network vars to the agent
             if (sandboxConfig) {
               sandboxConfig.envPassthrough.push(
                 "BOUNCER_GITHUB_POLICY",
                 "BOUNCER_REAL_GH",
                 "PATH",
+                // Git push via SSH needs the auth socket
+                "SSH_AUTH_SOCK",
+                "GIT_SSH_COMMAND",
+                // gh CLI auth
+                "GH_TOKEN",
+                "GITHUB_TOKEN",
               );
             }
           } else {
@@ -404,6 +443,29 @@ export class SessionManager {
       const stream = acp.ndJsonStream(output, input);
 
       const emitUpdate = this.emit.bind(this);
+
+      // Batch stream-chunk events to reduce IPC/render pressure.
+      // Accumulate text per message and flush every 50ms.
+      const pendingChunks = new Map<string, { messageId: string; text: string }>();
+      let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushChunks = (): void => {
+        chunkFlushTimer = null;
+        for (const [, chunk] of pendingChunks) {
+          emitUpdate("session-update", {
+            sessionId: id,
+            type: "stream-chunk",
+            messageId: chunk.messageId,
+            text: chunk.text,
+          });
+        }
+        pendingChunks.clear();
+      };
+      const scheduleChunkFlush = (): void => {
+        if (!chunkFlushTimer) {
+          chunkFlushTimer = setTimeout(flushChunks, 50);
+        }
+      };
+
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
           async sessionUpdate(params) {
@@ -417,12 +479,17 @@ export class SessionManager {
               );
               if (agentMsg) {
                 agentMsg.text += update.content.text;
-                emitUpdate("session-update", {
-                  sessionId: id,
-                  type: "stream-chunk",
-                  messageId: agentMsg.id,
-                  text: update.content.text,
-                });
+                // Batch: accumulate text, flush on timer
+                const pending = pendingChunks.get(agentMsg.id);
+                if (pending) {
+                  pending.text += update.content.text;
+                } else {
+                  pendingChunks.set(agentMsg.id, {
+                    messageId: agentMsg.id,
+                    text: update.content.text,
+                  });
+                }
+                scheduleChunkFlush();
               }
             } else if (
               update.sessionUpdate === "tool_call" ||
@@ -445,7 +512,9 @@ export class SessionManager {
                   title: "title" in update ? (update.title as string) : undefined,
                   output:
                     "rawOutput" in update
-                      ? (update.rawOutput as string)
+                      ? (typeof update.rawOutput === "string"
+                          ? update.rawOutput
+                          : JSON.stringify(update.rawOutput))
                       : undefined,
                 };
                 agentMsg.toolCalls = agentMsg.toolCalls ?? [];

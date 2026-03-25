@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { type RefObject, useEffect, useRef } from 'react'
 import type { Message, PolicyEvent, SandboxViolationInfo, SessionSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
 import { SandboxLog } from './SandboxLog'
 
 interface Props {
   messages: Message[]
-  streamingText: Map<string, string>
+  streamingTextRef: RefObject<Map<string, string>>
+  streamTick: number
   sessionStatus: SessionSummary['status']
   sessionError?: string
   violations: SandboxViolationInfo[]
@@ -30,7 +31,7 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCallInfo }) {
       {toolCall.output && (
         <details className="tool-output">
           <summary>Output</summary>
-          <pre>{toolCall.output}</pre>
+          <pre>{typeof toolCall.output === 'string' ? toolCall.output : JSON.stringify(toolCall.output, null, 2)}</pre>
         </details>
       )}
     </div>
@@ -39,7 +40,8 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCallInfo }) {
 
 export function ChatPanel({
   messages,
-  streamingText,
+  streamingTextRef,
+  streamTick,
   sessionStatus,
   sessionError,
   violations,
@@ -48,13 +50,18 @@ export function ChatPanel({
   onCloseSession,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const lastScrollTime = useRef(0)
 
   const isStreaming = messages.some((m) => m.streaming)
   const inputDisabled = isStreaming || sessionStatus !== 'ready'
 
+  // Throttle scrolling to at most once per 100ms
   useEffect(() => {
+    const now = Date.now()
+    if (now - lastScrollTime.current < 100) return
+    lastScrollTime.current = now
     bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' })
-  }, [messages, streamingText, isStreaming])
+  }, [messages, streamTick, isStreaming])
 
   return (
     <div className="chat-panel">
@@ -66,8 +73,8 @@ export function ChatPanel({
           <div className="empty-state">Starting session...</div>
         )}
         {messages.map((msg) => {
-          const msgStreaming = msg.streaming && streamingText.has(msg.id)
-          const rawText = msgStreaming ? streamingText.get(msg.id)! : msg.text
+          const msgStreaming = msg.streaming && streamingTextRef.current.has(msg.id)
+          const rawText = msgStreaming ? (streamingTextRef.current.get(msg.id) ?? '') : msg.text
           const displayText = rawText.replace(/^\n+/, '')
 
           return (
