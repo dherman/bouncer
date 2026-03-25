@@ -3,6 +3,7 @@
  * Parallel to policy-sandbox.ts, which does the same for safehouse.
  */
 
+import { existsSync } from "node:fs";
 import type { PolicyTemplate } from "./types.js";
 import type { ContainerConfig, ContainerMount } from "./container.js";
 
@@ -163,12 +164,26 @@ export function policyToContainerConfig(
 
   // --- Auth mounts (opt-in only) ---
 
+  // Claude Code auth state — the CLI reads and writes tokens, session state,
+  // and cache here. Must be rw because the CLI updates auth tokens on refresh.
   if (ctx.claudeConfigDir) {
-    mounts.push({
-      hostPath: ctx.claudeConfigDir,
-      containerPath: "/home/agent/.claude",
-      readOnly: true,
-    });
+    mounts.push(
+      { hostPath: ctx.claudeConfigDir, containerPath: "/home/agent/.claude", readOnly: false },
+    );
+    // The Claude CLI binary and its supporting files
+    const home = ctx.claudeConfigDir.replace(/\/.claude$/, "");
+    const claudeDirs = [
+      { host: `${home}/.local/bin/claude`, container: "/home/agent/.local/bin/claude", ro: true },
+      { host: `${home}/.local/share/claude`, container: "/home/agent/.local/share/claude", ro: true },
+      { host: `${home}/.local/state/claude`, container: "/home/agent/.local/state/claude", ro: false },
+      { host: `${home}/.cache/claude`, container: "/home/agent/.cache/claude", ro: false },
+      { host: `${home}/.config/claude`, container: "/home/agent/.config/claude", ro: false },
+    ];
+    for (const d of claudeDirs) {
+      if (existsSync(d.host)) {
+        mounts.push({ hostPath: d.host, containerPath: d.container, readOnly: d.ro });
+      }
+    }
   }
 
   if (ctx.sshDir) {
