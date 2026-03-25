@@ -157,6 +157,53 @@ function assert(condition: boolean, msg: string): void {
   assert(!content.includes("[user]"), "gitconfig omits [user] when not provided");
 }
 
+// --- Test policyToContainerConfig: Claude config and credentials mounts ---
+{
+  const config = policyToContainerConfig(
+    researchOnlyTemplate,
+    {
+      sessionId: "test-claude",
+      worktreePath: "/tmp/wt-claude",
+      agentBinPath: "/app/agent",
+      nodeModulesPath: "/app/node_modules",
+      claudeConfigDir: "/home/testuser/.claude",
+      claudeCredentialsPath: "/tmp/creds.json",
+    },
+    {},
+    "glitterball-agent:claude",
+    ["node", "/usr/local/lib/agent/dist/index.js"],
+  );
+
+  const mountPaths = config.mounts.map((m) => m.containerPath);
+  assert(mountPaths.includes("/home/agent/.claude"), "claude config dir mounted");
+  assert(mountPaths.includes("/home/agent/.claude/.credentials.json"), "claude credentials file mounted");
+
+  const configMount = config.mounts.find((m) => m.containerPath === "/home/agent/.claude");
+  assert(configMount?.readOnly === false, "claude config dir is rw");
+  const credsMount = config.mounts.find((m) => m.containerPath === "/home/agent/.claude/.credentials.json");
+  assert(credsMount?.readOnly === true, "claude credentials file is ro");
+}
+
+// --- Test policyToContainerConfig: no Claude mounts when not provided ---
+{
+  const config = policyToContainerConfig(
+    researchOnlyTemplate,
+    {
+      sessionId: "test-no-claude",
+      worktreePath: "/tmp/wt-no-claude",
+      agentBinPath: "/app/agent",
+      nodeModulesPath: "/app/node_modules",
+    },
+    {},
+    "glitterball-agent:no-claude",
+    ["node", "/usr/local/lib/agent/dist/index.js"],
+  );
+
+  const mountPaths = config.mounts.map((m) => m.containerPath);
+  assert(!mountPaths.includes("/home/agent/.claude"), "no claude config mount when not provided");
+  assert(!mountPaths.includes("/home/agent/.claude/.credentials.json"), "no claude creds mount when not provided");
+}
+
 // --- Results ---
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

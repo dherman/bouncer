@@ -32,7 +32,7 @@ import {
   findRealGh,
   cleanupOrphanGitHubArtifacts,
 } from "./github-policy.js";
-import { installHooks, cleanupHooks, generatePrePushHookForContainer, hooksDir, allowedRefsPath } from "./hooks.js";
+import { installHooks, cleanupHooks, generatePrePushHookForContainer, allowedRefsPath } from "./hooks.js";
 import { policyToContainerConfig, generateGitconfig, type ContainerSessionContext } from "./policy-container.js";
 import { writeFile, mkdir, rm, chmod } from "node:fs/promises";
 import { POLICY_DIR } from "./sandbox.js";
@@ -451,8 +451,9 @@ export class SessionManager {
               : join(app.getAppPath(), "src", "main", "gh-credential-helper.ts");
           }
 
-          // Resolve the shim bundle (reuse from safehouse path — same bundle)
-          const shimBundlePath = shimEnv.BOUNCER_GITHUB_POLICY
+          // Resolve the shim bundle — mount whenever GitHub policy is active,
+          // independent of whether a host gh binary was found.
+          const shimBundlePath = (template.github && session.githubPolicy)
             ? join(POLICY_DIR, "gh-shim-bundle.js")
             : undefined;
 
@@ -478,9 +479,10 @@ export class SessionManager {
               claudeCredentialsPath = undefined;
             }
           }
+          const ghToken = shimEnv.GH_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
           const containerEnv: Record<string, string> = {
             ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
-            ...(shimEnv.GH_TOKEN ? { GH_TOKEN: shimEnv.GH_TOKEN } : {}),
+            ...(ghToken ? { GH_TOKEN: ghToken } : {}),
             ...(process.env.GIT_AUTHOR_NAME ? { GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME } : {}),
             ...(process.env.GIT_AUTHOR_EMAIL ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL } : {}),
             ...(process.env.GIT_COMMITTER_NAME ? { GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME } : {}),
@@ -515,6 +517,15 @@ export class SessionManager {
 
         if (containerConfig) {
           session.sandboxBackend = "container";
+          // Unset repo-level core.hooksPath so the system gitconfig
+          // (/etc/gitconfig) takes effect inside the container.
+          // installHooks() set it earlier for the safehouse path.
+          if (worktree) {
+            const { execFile: execFileCb3 } = await import("node:child_process");
+            const { promisify: pfy3 } = await import("node:util");
+            const execFileP3 = pfy3(execFileCb3);
+            await execFileP3("git", ["-C", workingDir, "config", "--unset", "core.hooksPath"]).catch(() => {});
+          }
         }
       }
 
@@ -944,7 +955,7 @@ export class SessionManager {
     );
   }
 
-  /** Remove orphan worktree directories, sandbox policies, and containers left behind by a previous crash. */
+  /** Remove orphan worktree directories, sandbox policies, containers, and container artifacts left behind by a previous crash. */
   async cleanupOrphans(): Promise<void> {
     const activeIds = new Set(this.sessions.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
@@ -953,6 +964,24 @@ export class SessionManager {
     await cleanupOrphanContainers(activeIds).catch((err) =>
       console.warn("Failed to clean up orphan containers:", err)
     );
+    // Clean up orphan container artifacts (credentials, gitconfig, wrapper, hooks)
+    try {
+      const { readdir } = await import("node:fs/promises");
+      const files = await readdir(POLICY_DIR).catch(() => [] as string[]);
+      const suffixes = ["-container-gh-wrapper", "-container-hooks", "-gitconfig", "-claude-credentials.json"];
+      for (const f of files) {
+        for (const suffix of suffixes) {
+          if (f.endsWith(suffix)) {
+            const sessionId = f.slice(0, -suffix.length);
+            if (sessionId && !activeIds.has(sessionId)) {
+              await rm(join(POLICY_DIR, f), { recursive: true, force: true }).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch {
+      // Best effort
+    }
   }
 
   getSandboxViolations(sessionId: string): SandboxViolationInfo[] {
