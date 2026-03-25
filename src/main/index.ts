@@ -2,6 +2,7 @@ import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electro
 import { join } from 'path'
 import { SessionManager } from './session-manager.js'
 import { loadSession } from './dataset-loader.js'
+import { isDockerAvailable, ensureAgentImage } from './container.js'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -69,6 +70,16 @@ app.whenReady().then(() => {
   }
 
   createWindow()
+
+  // Pre-warm Docker: check availability and build/cache the agent image
+  isDockerAvailable().then((available) => {
+    console.log(`[main] Docker available: ${available}`)
+    if (available) {
+      ensureAgentImage().catch((err) => {
+        console.warn('[main] Failed to pre-build agent image:', err)
+      })
+    }
+  })
 
   // SessionManager forwards events to the renderer via IPC
   // Track IPC throughput to diagnose renderer crashes
