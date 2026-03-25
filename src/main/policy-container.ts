@@ -21,6 +21,8 @@ export interface ContainerSessionContext {
   gitconfigPath?: string;
   /** Mount ~/.ssh into the container. Only set when SSH access is needed. */
   sshDir?: string;
+  /** Mount ~/.claude into the container for agent authentication. */
+  claudeConfigDir?: string;
 }
 
 /**
@@ -159,7 +161,15 @@ export function policyToContainerConfig(
     }
   }
 
-  // --- Auth mounts (opt-in only — SSH keys are sensitive) ---
+  // --- Auth mounts (opt-in only) ---
+
+  if (ctx.claudeConfigDir) {
+    mounts.push({
+      hostPath: ctx.claudeConfigDir,
+      containerPath: "/home/agent/.claude",
+      readOnly: true,
+    });
+  }
 
   if (ctx.sshDir) {
     mounts.push({

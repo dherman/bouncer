@@ -457,15 +457,8 @@ export class SessionManager {
             : undefined;
 
           // Container env — only explicit vars, no process.env inheritance.
-          // The agent can't access the macOS keychain from inside the container,
-          // so the API key must be in the environment when the app starts.
+          // Auth is handled by mounting ~/.claude into the container.
           const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
-          if (!anthropicKey) {
-            console.warn(
-              "[container] ANTHROPIC_API_KEY not set — export it before running the app.\n" +
-              "  Example: ANTHROPIC_API_KEY=sk-ant-... ELECTRON_RUN_AS_NODE= npm run dev"
-            );
-          }
           const containerEnv: Record<string, string> = {
             ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
             ...(shimEnv.GH_TOKEN ? { GH_TOKEN: shimEnv.GH_TOKEN } : {}),
@@ -488,6 +481,7 @@ export class SessionManager {
             policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
+            claudeConfigDir: join((await import("node:os")).homedir(), ".claude"),
           };
 
           containerConfig = policyToContainerConfig(
