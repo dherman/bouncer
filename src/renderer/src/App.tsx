@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Message, PolicyEvent, PolicyTemplateSummary, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
@@ -8,12 +8,25 @@ function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map())
-  const [streamingText, setStreamingText] = useState<Map<string, string>>(new Map())
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
   const [violationsBySession, setViolationsBySession] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
   const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
   const [policyEventsBySession, setPolicyEventsBySession] = useState<Map<string, PolicyEvent[]>>(new Map())
+
+  // Use a ref for streaming text to avoid re-rendering the entire tree on every chunk.
+  // A tick counter triggers periodic re-renders so the UI updates smoothly.
+  const streamingTextRef = useRef(new Map<string, string>())
+  const [streamTick, setStreamTick] = useState(0)
+  const streamTickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleStreamTick = useCallback(() => {
+    if (!streamTickTimer.current) {
+      streamTickTimer.current = setTimeout(() => {
+        streamTickTimer.current = null
+        setStreamTick((t) => t + 1)
+      }, 80)
+    }
+  }, [])
 
   const handleUpdate = useCallback((update: SessionUpdate) => {
     switch (update.type) {
@@ -40,44 +53,38 @@ function App() {
           return next
         })
         if (update.message.streaming) {
-          setStreamingText((prev) => {
-            const next = new Map(prev)
-            next.set(update.message.id, '')
-            return next
-          })
+          streamingTextRef.current.set(update.message.id, '')
         }
         break
 
       case 'stream-chunk':
-        setStreamingText((prev) => {
-          const next = new Map(prev)
-          next.set(update.messageId, (next.get(update.messageId) ?? '') + update.text)
-          return next
-        })
+        streamingTextRef.current.set(
+          update.messageId,
+          (streamingTextRef.current.get(update.messageId) ?? '') + update.text
+        )
+        scheduleStreamTick()
         break
 
       case 'stream-end': {
-        setStreamingText((prev) => {
-          const finalText = prev.get(update.messageId) ?? ''
-          setMessagesBySession((prevMsgs) => {
-            const next = new Map(prevMsgs)
-            const msgs = next.get(update.sessionId)
-            if (msgs) {
-              next.set(
-                update.sessionId,
-                msgs.map((m) =>
-                  m.id === update.messageId
-                    ? { ...m, text: finalText, streaming: false }
-                    : m
-                )
+        const finalText = streamingTextRef.current.get(update.messageId) ?? ''
+        streamingTextRef.current.delete(update.messageId)
+        setMessagesBySession((prevMsgs) => {
+          const next = new Map(prevMsgs)
+          const msgs = next.get(update.sessionId)
+          if (msgs) {
+            next.set(
+              update.sessionId,
+              msgs.map((m) =>
+                m.id === update.messageId
+                  ? { ...m, text: finalText, streaming: false }
+                  : m
               )
-            }
-            return next
-          })
-          const next = new Map(prev)
-          next.delete(update.messageId)
+            )
+          }
           return next
         })
+        // Force a final render to clear streaming state
+        setStreamTick((t) => t + 1)
         break
       }
 
@@ -109,7 +116,6 @@ function App() {
         setViolationsBySession((prev) => {
           const next = new Map(prev)
           const existing = next.get(update.sessionId) ?? []
-          // Cap at 200 entries to avoid memory bloat
           const updated = [...existing, update.violation].slice(-200)
           next.set(update.sessionId, updated)
           return next
@@ -126,7 +132,7 @@ function App() {
         })
         break
     }
-  }, [])
+  }, [scheduleStreamTick])
 
   useEffect(() => {
     window.glitterball.sessions.list().then((list) => {
@@ -198,7 +204,8 @@ function App() {
       {activeSession ? (
         <ChatPanel
           messages={activeMessages}
-          streamingText={streamingText}
+          streamingTextRef={streamingTextRef}
+          streamTick={streamTick}
           sessionStatus={activeSession.status}
           sessionError={sessionErrors.get(activeSession.id)}
           violations={activeViolations}
