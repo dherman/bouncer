@@ -31,7 +31,7 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCallInfo }) {
       {toolCall.output && (
         <details className="tool-output">
           <summary>Output</summary>
-          <pre>{toolCall.output}</pre>
+          <pre>{typeof toolCall.output === 'string' ? toolCall.output : JSON.stringify(toolCall.output, null, 2)}</pre>
         </details>
       )}
     </div>
