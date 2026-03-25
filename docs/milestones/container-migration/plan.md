@@ -7,12 +7,12 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
 
 ## Progress
 
-- [ ] **[Phase 1: Dockerfile + Image Build Infrastructure](#phase-1-dockerfile--image-build-infrastructure)**
-  - [ ] 1.1 Create `docker/agent.Dockerfile`
-  - [ ] 1.2 Implement `isDockerAvailable()` and `ensureAgentImage()` in `container.ts`
-  - [ ] 1.3 Kick off image build at app startup in `index.ts`
-  - [ ] 1.4 Include `docker/` in packaged app resources
-  - [ ] 1.5 Test: image builds, contains expected toolchains, no `gh` binary
+- [x] **[Phase 1: Dockerfile + Image Build Infrastructure](#phase-1-dockerfile--image-build-infrastructure)**
+  - [x] 1.1 Create `docker/agent.Dockerfile`
+  - [x] 1.2 Implement `isDockerAvailable()` and `ensureAgentImage()` in `container.ts`
+  - [x] 1.3 Kick off image build at app startup in `index.ts`
+  - [x] 1.4 Include `docker/` in packaged app resources
+  - [x] 1.5 Test: image builds, contains expected toolchains, no `gh` binary
 - [ ] **[Phase 2: Container Spawn + stdio Piping](#phase-2-container-spawn--stdio-piping)**
   - [ ] 2.1 Implement `ContainerHandle`, `buildDockerRunArgs`, `spawnContainer`
   - [ ] 2.2 Implement `removeContainer` and `cleanupOrphanContainers`

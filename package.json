@@ -8,6 +8,11 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "build": {
+    "extraResources": [
+      { "from": "docker", "to": "docker" }
+    ]
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
