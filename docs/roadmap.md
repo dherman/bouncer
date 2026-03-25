@@ -7,7 +7,7 @@
 - [x] **[Milestone 2: Seatbelt Sandbox](#milestone-2-seatbelt-sandbox)**
 - [x] **[Milestone 3: Policy Templates](#milestone-3-policy-templates)**
 - [x] **[Milestone 4: Deterministic Test Agent](#milestone-4-deterministic-test-agent)**
-- [ ] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
+- [x] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
 - [ ] **[Milestone 6: Container Migration](#milestone-6-container-migration)**
 - [ ] **[Milestone 7: Network Boundary](#milestone-7-network-boundary)**
 
