@@ -46,7 +46,6 @@ import type {
 import {
   isDockerAvailable,
   ensureAgentImage,
-  buildDockerRunArgs,
   spawnContainer,
   removeContainer,
   cleanupOrphanContainers,
@@ -147,17 +146,15 @@ function resolveReplayAgentCommand(
   return { cmd, args, env, cwd };
 }
 
+// Resolve the command for non-container agent spawning.
+// Container agents are spawned via spawnContainer() directly in createSession.
 function resolveAgentCommand(
   agentType: AgentType,
   cwd: string,
   sandboxConfig: SandboxConfig | null,
-  containerConfig: ContainerConfig | null,
   worktreePath?: string,
 ): SpawnConfig {
   if (agentType === "echo") {
-    if (containerConfig) {
-      return { cmd: "docker", args: buildDockerRunArgs(containerConfig) };
-    }
     return resolveEchoAgentCommand();
   }
   if (agentType === "replay") {
@@ -376,18 +373,28 @@ export class SessionManager {
       if (agentType === "echo" && dockerAvailable) {
         // Build container config for echo agent
         const imageTag = await ensureAgentImage();
-        const echoAgentHost = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
         const appNodeModules = join(app.getAppPath(), "node_modules");
-        const tsxBin = createRequire(app.getAppPath() + "/").resolve("tsx/cli");
-        const tsxDir = join(tsxBin, "..", "..");
+
+        let echoAgentHost: string;
+        let echoAgentContainerPath: string;
+        let echoCommand: string[];
+        if (app.isPackaged) {
+          echoAgentHost = join(app.getAppPath(), "dist", "agents", "echo-agent.js");
+          echoAgentContainerPath = "/app/agents/echo-agent.js";
+          echoCommand = ["node", echoAgentContainerPath];
+        } else {
+          echoAgentHost = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
+          echoAgentContainerPath = "/app/agents/echo-agent.ts";
+          echoCommand = ["npx", "tsx", echoAgentContainerPath];
+        }
 
         containerConfig = {
           sessionId: id,
           image: imageTag,
-          command: ["npx", "tsx", "/app/agents/echo-agent.ts"],
+          command: echoCommand,
           workdir: "/workspace",
           mounts: [
-            { hostPath: echoAgentHost, containerPath: "/app/agents/echo-agent.ts", readOnly: true },
+            { hostPath: echoAgentHost, containerPath: echoAgentContainerPath, readOnly: true },
             { hostPath: appNodeModules, containerPath: "/app/node_modules", readOnly: true },
           ],
           env: { NODE_PATH: "/app/node_modules" },
@@ -405,7 +412,6 @@ export class SessionManager {
         agentType,
         workingDir,
         sandboxConfig,
-        containerConfig,
         worktree?.path,
       );
 
