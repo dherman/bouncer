@@ -93,6 +93,9 @@ await test("api graphql -f query=...", () => {
   assert.equal(p.command, "api");
   assert.ok(p.positionalArgs.includes("graphql"));
   assert.equal(p.flags.hasBodyParams, true);
+  assert.equal(p.flags.fields.length, 1);
+  assert.equal(p.flags.fields[0].key, "query");
+  assert.equal(p.flags.fields[0].value, "...");
 });
 
 await test("--help (global)", () => {
@@ -141,7 +144,7 @@ await test("api endpoint -XPOST (concatenated short flag)", () => {
 console.log("\nAPI endpoint parser:");
 
 await test("/repos/owner/repo/pulls — GET", () => {
-  const m = parseApiEndpoint("/repos/owner/repo/pulls", {});
+  const m = parseApiEndpoint("/repos/owner/repo/pulls", { fields: [] });
   assert.equal(m.resource, "pulls");
   assert.equal(m.ownerRepo, "owner/repo");
   assert.equal(m.method, "GET");
@@ -149,14 +152,14 @@ await test("/repos/owner/repo/pulls — GET", () => {
 });
 
 await test("/repos/owner/repo/pulls/42 — GET", () => {
-  const m = parseApiEndpoint("/repos/owner/repo/pulls/42", {});
+  const m = parseApiEndpoint("/repos/owner/repo/pulls/42", { fields: [] });
   assert.equal(m.resource, "pulls");
   assert.equal(m.number, 42);
   assert.equal(m.ownerRepo, "owner/repo");
 });
 
 await test("/repos/owner/repo/pulls/42/merge — PUT", () => {
-  const m = parseApiEndpoint("/repos/owner/repo/pulls/42/merge", { method: "PUT" });
+  const m = parseApiEndpoint("/repos/owner/repo/pulls/42/merge", { method: "PUT", fields: [] });
   assert.equal(m.resource, "pulls");
   assert.equal(m.number, 42);
   assert.equal(m.subResource, "merge");
@@ -164,19 +167,19 @@ await test("/repos/owner/repo/pulls/42/merge — PUT", () => {
 });
 
 await test("graphql — POST inferred from body params", () => {
-  const m = parseApiEndpoint("graphql", { hasBodyParams: true });
+  const m = parseApiEndpoint("graphql", { hasBodyParams: true, fields: [] });
   assert.equal(m.isGraphQL, true);
   assert.equal(m.method, "POST");
 });
 
 await test("/repos/{owner}/{repo}/pulls — placeholder", () => {
-  const m = parseApiEndpoint("/repos/{owner}/{repo}/pulls", {});
+  const m = parseApiEndpoint("/repos/{owner}/{repo}/pulls", { fields: [] });
   assert.equal(m.resource, "pulls");
   assert.equal(m.ownerRepo, null); // placeholder
 });
 
 await test("/repos/owner/repo — repo metadata", () => {
-  const m = parseApiEndpoint("/repos/owner/repo", {});
+  const m = parseApiEndpoint("/repos/owner/repo", { fields: [] });
   assert.equal(m.resource, "");
   assert.equal(m.ownerRepo, "owner/repo");
 });
