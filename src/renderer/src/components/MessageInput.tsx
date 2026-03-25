@@ -1,29 +1,29 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react';
 
 interface Props {
-  onSend: (text: string) => void
-  disabled: boolean
-  placeholder?: string
+  onSend: (text: string) => void;
+  disabled: boolean;
+  placeholder?: string;
 }
 
 export function MessageInput({ onSend, disabled, placeholder }: Props) {
-  const [text, setText] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus whenever the input becomes enabled (including initial mount)
   useEffect(() => {
     if (!disabled) {
-      inputRef.current?.focus()
+      inputRef.current?.focus();
     }
-  }, [disabled])
+  }, [disabled]);
 
   function handleSubmit() {
-    const trimmed = text.trim()
-    if (!trimmed || disabled) return
-    onSend(trimmed)
-    setText('')
+    const trimmed = text.trim();
+    if (!trimmed || disabled) return;
+    onSend(trimmed);
+    setText('');
     // Keep focus after sending
-    requestAnimationFrame(() => inputRef.current?.focus())
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   return (
@@ -34,7 +34,7 @@ export function MessageInput({ onSend, disabled, placeholder }: Props) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSubmit()
+          if (e.key === 'Enter') handleSubmit();
         }}
         placeholder={placeholder ?? (disabled ? 'Agent is responding...' : 'Type a message...')}
         disabled={disabled}
@@ -43,5 +43,5 @@ export function MessageInput({ onSend, disabled, placeholder }: Props) {
         Send
       </button>
     </div>
-  )
+  );
 }

@@ -1,12 +1,12 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
-import { StringDecoder } from "node:string_decoder";
-import { Writable, Readable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
-import { app } from "electron";
-import { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
+import { Writable, Readable } from 'node:stream';
+import * as acp from '@agentclientprotocol/sdk';
+import { app } from 'electron';
+import { WorktreeManager, type WorktreeInfo } from './worktree-manager.js';
 import {
   type SandboxConfig,
   buildSafehouseArgs,
@@ -15,11 +15,11 @@ import {
   cleanupPolicy,
   cleanupOrphanPolicies,
   writeAppendProfile,
-} from "./sandbox.js";
-import { SandboxMonitor } from "./sandbox-monitor.js";
-import { PolicyTemplateRegistry } from "./policy-registry.js";
-import { policyToSandboxConfig } from "./policy-sandbox.js";
-import { parsePolicyEvent } from "./policy-event-parser.js";
+} from './sandbox.js';
+import { SandboxMonitor } from './sandbox-monitor.js';
+import { PolicyTemplateRegistry } from './policy-registry.js';
+import { policyToSandboxConfig } from './policy-sandbox.js';
+import { parsePolicyEvent } from './policy-event-parser.js';
 import {
   detectGitHubRepo,
   buildSessionPolicy,
@@ -31,8 +31,8 @@ import {
   cleanupGhShim,
   findRealGh,
   cleanupOrphanGitHubArtifacts,
-} from "./github-policy.js";
-import { installHooks, cleanupHooks } from "./hooks.js";
+} from './github-policy.js';
+import { installHooks, cleanupHooks } from './hooks.js';
 import type {
   AgentType,
   GitHubPolicy,
@@ -41,7 +41,7 @@ import type {
   SessionSummary,
   SessionUpdate,
   ToolCallInfo,
-} from "./types.js";
+} from './types.js';
 
 interface SpawnConfig {
   cmd: string;
@@ -53,44 +53,39 @@ interface SpawnConfig {
 function resolveEchoAgentCommand(): SpawnConfig {
   const isDev = !app.isPackaged;
   if (isDev) {
-    const require = createRequire(app.getAppPath() + "/");
-    const tsxBin = require.resolve("tsx/cli");
-    const agentScript = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
+    const require = createRequire(app.getAppPath() + '/');
+    const tsxBin = require.resolve('tsx/cli');
+    const agentScript = join(app.getAppPath(), 'src', 'agents', 'echo-agent.ts');
     return {
       cmd: process.execPath,
       args: [tsxBin, agentScript],
-      env: { ELECTRON_RUN_AS_NODE: "1" },
+      env: { ELECTRON_RUN_AS_NODE: '1' },
     };
   } else {
-    const agentScript = join(__dirname, "..", "agents", "echo-agent.js");
+    const agentScript = join(__dirname, '..', 'agents', 'echo-agent.js');
     return {
       cmd: process.execPath,
       args: [agentScript],
-      env: { ELECTRON_RUN_AS_NODE: "1" },
+      env: { ELECTRON_RUN_AS_NODE: '1' },
     };
   }
 }
 
-function resolveClaudeCodeCommand(
-  cwd: string,
-  sandboxConfig: SandboxConfig | null,
-): SpawnConfig {
-  const require = createRequire(app.getAppPath() + "/");
-  const binPath = require.resolve(
-    "@zed-industries/claude-agent-acp/dist/index.js"
-  );
+function resolveClaudeCodeCommand(cwd: string, sandboxConfig: SandboxConfig | null): SpawnConfig {
+  const require = createRequire(app.getAppPath() + '/');
+  const binPath = require.resolve('@zed-industries/claude-agent-acp/dist/index.js');
 
   // When safehouse is available, wrap in sandbox
   if (sandboxConfig) {
-    const args = buildSafehouseArgs(sandboxConfig, ["node", binPath]);
-    return { cmd: "safehouse", args, cwd };
+    const args = buildSafehouseArgs(sandboxConfig, ['node', binPath]);
+    return { cmd: 'safehouse', args, cwd };
   }
 
   // Unsandboxed fallback — use node binary rather than process.execPath
   // (Electron) to avoid spawning a second Electron instance with its own
   // Dock icon on macOS.
   return {
-    cmd: "node",
+    cmd: 'node',
     args: [binPath],
     cwd,
   };
@@ -102,18 +97,18 @@ function resolveReplayAgentCommand(
   worktreePath: string,
 ): SpawnConfig {
   const isDev = !app.isPackaged;
-  const require = createRequire(app.getAppPath() + "/");
+  const require = createRequire(app.getAppPath() + '/');
 
   let cmd: string;
   let args: string[];
 
   let agentArgs: string[];
   if (isDev) {
-    const tsxBin = require.resolve("tsx/cli");
-    const agentScript = join(app.getAppPath(), "src", "agents", "replay-agent.ts");
+    const tsxBin = require.resolve('tsx/cli');
+    const agentScript = join(app.getAppPath(), 'src', 'agents', 'replay-agent.ts');
     agentArgs = [tsxBin, agentScript];
   } else {
-    const agentScript = join(__dirname, "..", "agents", "replay-agent.js");
+    const agentScript = join(__dirname, '..', 'agents', 'replay-agent.js');
     agentArgs = [agentScript];
   }
 
@@ -126,13 +121,13 @@ function resolveReplayAgentCommand(
   // takes effect). Without safehouse, use process.execPath with
   // ELECTRON_RUN_AS_NODE so we don't depend on node being on PATH.
   if (sandboxConfig) {
-    const safehouseArgs = buildSafehouseArgs(sandboxConfig, ["node", ...agentArgs]);
-    return { cmd: "safehouse", args: safehouseArgs, cwd, env };
+    const safehouseArgs = buildSafehouseArgs(sandboxConfig, ['node', ...agentArgs]);
+    return { cmd: 'safehouse', args: safehouseArgs, cwd, env };
   }
 
   cmd = process.execPath;
   args = agentArgs;
-  env.ELECTRON_RUN_AS_NODE = "1";
+  env.ELECTRON_RUN_AS_NODE = '1';
   return { cmd, args, env, cwd };
 }
 
@@ -142,10 +137,10 @@ function resolveAgentCommand(
   sandboxConfig: SandboxConfig | null,
   worktreePath?: string,
 ): SpawnConfig {
-  if (agentType === "echo") {
+  if (agentType === 'echo') {
     return resolveEchoAgentCommand(); // no sandbox for echo agent
   }
-  if (agentType === "replay") {
+  if (agentType === 'replay') {
     return resolveReplayAgentCommand(cwd, sandboxConfig, worktreePath ?? cwd);
   }
   return resolveClaudeCodeCommand(cwd, sandboxConfig);
@@ -157,7 +152,7 @@ interface SessionState {
   agentProcess: ChildProcess;
   connection: acp.ClientSideConnection;
   messages: Message[];
-  status: "initializing" | "ready" | "error" | "closed";
+  status: 'initializing' | 'ready' | 'error' | 'closed';
   errorMessage?: string;
   agentType: AgentType;
   projectDir: string;
@@ -179,23 +174,21 @@ export class SessionManager {
 
   async createSession(
     projectDir: string,
-    agentType: AgentType = "claude-code",
+    agentType: AgentType = 'claude-code',
     policyId?: string,
   ): Promise<SessionSummary> {
     const id = randomUUID();
     let worktree: WorktreeInfo | null = null;
 
     // Resolve policy template — replay agents also get sandboxed
-    const resolvedPolicyId = (agentType === "claude-code" || agentType === "replay")
-      ? (policyId ?? this.policyRegistry.defaultId)
-      : null;
-    const template = resolvedPolicyId
-      ? this.policyRegistry.get(resolvedPolicyId)
-      : null;
+    const resolvedPolicyId =
+      agentType === 'claude-code' || agentType === 'replay'
+        ? (policyId ?? this.policyRegistry.defaultId)
+        : null;
+    const template = resolvedPolicyId ? this.policyRegistry.get(resolvedPolicyId) : null;
 
     // Create worktree for Claude Code and replay sessions
-    if (agentType === "claude-code" || agentType === "replay") {
-
+    if (agentType === 'claude-code' || agentType === 'replay') {
       const isGitRepo = await this.worktreeManager.validateGitRepo(projectDir);
       if (!isGitRepo) {
         throw new Error(`Not a git repository: ${projectDir}`);
@@ -209,11 +202,11 @@ export class SessionManager {
 
     const session: SessionState = {
       id,
-      acpSessionId: "",
+      acpSessionId: '',
       agentProcess: null!,
       connection: null!,
       messages: [],
-      status: "initializing",
+      status: 'initializing',
       agentType,
       projectDir,
       worktree,
@@ -224,20 +217,18 @@ export class SessionManager {
       githubPolicy: null,
     };
     this.sessions.set(id, session);
-    this.emit("session-update", {
+    this.emit('session-update', {
       sessionId: id,
-      type: "status-change",
-      status: "initializing",
+      type: 'status-change',
+      status: 'initializing',
     });
 
     try {
       // Build sandbox config from policy template
       const safehouseAvailable = await isSafehouseAvailable();
-      if ((agentType === "claude-code" || agentType === "replay") && !safehouseAvailable) {
+      if ((agentType === 'claude-code' || agentType === 'replay') && !safehouseAvailable) {
         if (!this.safehouseWarningLogged) {
-          console.warn(
-            "safehouse not available — agent will run without OS-level sandboxing"
-          );
+          console.warn('safehouse not available — agent will run without OS-level sandboxing');
           this.safehouseWarningLogged = true;
         }
       }
@@ -249,13 +240,13 @@ export class SessionManager {
         // but ESM bare-specifier resolution walks up to the parent node_modules
         // to find peer dependencies (e.g. @agentclientprotocol/sdk). Granting
         // only the agent package dir is insufficient.
-        const appNodeModules = join(app.getAppPath(), "node_modules");
+        const appNodeModules = join(app.getAppPath(), 'node_modules');
 
         // The replay agent entrypoint lives in src/agents/ (dev) or
         // dist/agents/ (prod), outside node_modules. Grant read-only
         // access to the app root so the sandbox can read the script.
         const readOnlyDirs = [appNodeModules];
-        if (agentType === "replay") {
+        if (agentType === 'replay') {
           readOnlyDirs.push(app.getAppPath());
         }
 
@@ -284,11 +275,13 @@ export class SessionManager {
           // Configure the worktree for HTTPS push with gh credential helper.
           // SSH push fails in the sandbox (SSH_AUTH_SOCK socket is blocked),
           // so switch the remote to HTTPS and configure git to use gh for auth.
-          const { execFile: execFileCb } = await import("node:child_process");
-          const { promisify: pfy } = await import("node:util");
+          const { execFile: execFileCb } = await import('node:child_process');
+          const { promisify: pfy } = await import('node:util');
           const execFileP = pfy(execFileCb);
           const httpsUrl = `https://github.com/${repo}.git`;
-          await execFileP("git", ["-C", workingDir, "remote", "set-url", "origin", httpsUrl]).catch(() => {});
+          await execFileP('git', ['-C', workingDir, 'remote', 'set-url', 'origin', httpsUrl]).catch(
+            () => {},
+          );
 
           // Install gh shim and set up environment (only if gh is available).
           // Also configure git credential helper to use the real gh binary
@@ -296,26 +289,31 @@ export class SessionManager {
           const realGhPath = await findRealGh();
           if (realGhPath) {
             const ghShimPath = app.isPackaged
-              ? join(app.getAppPath(), "dist", "main", "gh-shim.js")
-              : join(app.getAppPath(), "src", "main", "gh-shim.ts");
-            const shimDir = await installGhShim(id, ghShimPath, "node");
+              ? join(app.getAppPath(), 'dist', 'main', 'gh-shim.js')
+              : join(app.getAppPath(), 'src', 'main', 'gh-shim.ts');
+            const shimDir = await installGhShim(id, ghShimPath, 'node');
 
             // Resolve GH_TOKEN — gh uses keyring auth which the sandbox blocks.
-            let ghToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+            let ghToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? '';
             if (!ghToken) {
               try {
-                const { stdout } = await execFileP("gh", ["auth", "token"]);
+                const { stdout } = await execFileP('gh', ['auth', 'token']);
                 ghToken = stdout.trim();
               } catch {
-                console.warn("Could not resolve gh auth token — gh commands may fail in sandbox");
+                console.warn('Could not resolve gh auth token — gh commands may fail in sandbox');
               }
             }
 
             // Configure git credential helper so git push HTTPS uses the token.
             // Point to the *real* gh (not the shim) for credential operations.
             if (ghToken) {
-              await execFileP("git", ["-C", workingDir, "config", "credential.helper", ""]).catch(() => {});
-              await execFileP("git", ["-C", workingDir, "config",
+              await execFileP('git', ['-C', workingDir, 'config', 'credential.helper', '']).catch(
+                () => {},
+              );
+              await execFileP('git', [
+                '-C',
+                workingDir,
+                'config',
                 `credential.https://github.com.helper`,
                 `!${realGhPath} auth git-credential`,
               ]).catch(() => {});
@@ -324,29 +322,29 @@ export class SessionManager {
             shimEnv = {
               BOUNCER_GITHUB_POLICY: policyStatePath(id),
               BOUNCER_REAL_GH: realGhPath,
-              PATH: `${shimDir}:${process.env.PATH ?? ""}`,
+              PATH: `${shimDir}:${process.env.PATH ?? ''}`,
               ...(ghToken ? { GH_TOKEN: ghToken } : {}),
             };
             // Ensure safehouse forwards the shim env vars and GitHub
             // auth/network vars to the agent
             if (sandboxConfig) {
               sandboxConfig.envPassthrough.push(
-                "BOUNCER_GITHUB_POLICY",
-                "BOUNCER_REAL_GH",
-                "PATH",
+                'BOUNCER_GITHUB_POLICY',
+                'BOUNCER_REAL_GH',
+                'PATH',
                 // Git push via SSH needs the auth socket
-                "SSH_AUTH_SOCK",
-                "GIT_SSH_COMMAND",
+                'SSH_AUTH_SOCK',
+                'GIT_SSH_COMMAND',
                 // gh CLI auth
-                "GH_TOKEN",
-                "GITHUB_TOKEN",
+                'GH_TOKEN',
+                'GITHUB_TOKEN',
               );
             }
           } else {
-            console.warn("gh CLI not found — gh shim will not be installed");
+            console.warn('gh CLI not found — gh shim will not be installed');
           }
         } else {
-          console.warn("No GitHub remote detected — skipping application-layer policy");
+          console.warn('No GitHub remote detected — skipping application-layer policy');
         }
       }
 
@@ -358,7 +356,7 @@ export class SessionManager {
         worktree?.path,
       );
       const agentProcess = spawn(cmd, args, {
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, ...env, ...shimEnv },
         cwd,
       });
@@ -367,35 +365,35 @@ export class SessionManager {
       // Capture stderr for error reporting and parse policy events.
       // Use StringDecoder to handle multibyte characters (e.g. em-dash)
       // that may be split across chunks.
-      let collectedStderr = "";
-      let stderrBuffer = "";
-      const stderrDecoder = new StringDecoder("utf8");
+      let collectedStderr = '';
+      let stderrBuffer = '';
+      const stderrDecoder = new StringDecoder('utf8');
       const flushStderrLine = (line: string): void => {
         const event = parsePolicyEvent(line);
         if (event) {
-          this.emit("session-update", {
+          this.emit('session-update', {
             sessionId: id,
-            type: "policy-event",
+            type: 'policy-event',
             event,
           });
         }
       };
-      agentProcess.stderr?.on("data", (data: Buffer) => {
+      agentProcess.stderr?.on('data', (data: Buffer) => {
         const chunk = stderrDecoder.write(data);
         collectedStderr += chunk;
         process.stderr.write(data);
 
         // Parse policy events from complete lines
         stderrBuffer += chunk;
-        const lines = stderrBuffer.split("\n");
-        stderrBuffer = lines.pop() ?? ""; // Keep incomplete last line in buffer
+        const lines = stderrBuffer.split('\n');
+        stderrBuffer = lines.pop() ?? ''; // Keep incomplete last line in buffer
         for (const line of lines) {
           flushStderrLine(line);
         }
       });
 
       // Handle agent crashes — flush any remaining stderr buffer first
-      agentProcess.on("exit", (code) => {
+      agentProcess.on('exit', (code) => {
         // Flush remaining bytes from the decoder and parse final line
         const remaining = stderrDecoder.end();
         if (remaining) {
@@ -404,34 +402,33 @@ export class SessionManager {
         }
         if (stderrBuffer) {
           flushStderrLine(stderrBuffer);
-          stderrBuffer = "";
+          stderrBuffer = '';
         }
 
-        if (session.status !== "closed") {
+        if (session.status !== 'closed') {
           const errorMessage =
-            session.status === "initializing"
-              ? collectedStderr.trim() ||
-                `Agent exited with code ${code}`
+            session.status === 'initializing'
+              ? collectedStderr.trim() || `Agent exited with code ${code}`
               : undefined;
-          session.status = "error";
+          session.status = 'error';
           session.errorMessage = errorMessage;
-          this.emit("session-update", {
+          this.emit('session-update', {
             sessionId: id,
-            type: "status-change",
-            status: "error",
+            type: 'status-change',
+            status: 'error',
             error: errorMessage,
           });
         }
       });
-      agentProcess.on("error", (err) => {
-        if (session.status !== "closed") {
+      agentProcess.on('error', (err) => {
+        if (session.status !== 'closed') {
           const errorMessage = err.message;
-          session.status = "error";
+          session.status = 'error';
           session.errorMessage = errorMessage;
-          this.emit("session-update", {
+          this.emit('session-update', {
             sessionId: id,
-            type: "status-change",
-            status: "error",
+            type: 'status-change',
+            status: 'error',
             error: errorMessage,
           });
         }
@@ -451,9 +448,9 @@ export class SessionManager {
       const flushChunks = (): void => {
         chunkFlushTimer = null;
         for (const [, chunk] of pendingChunks) {
-          emitUpdate("session-update", {
+          emitUpdate('session-update', {
             sessionId: id,
-            type: "stream-chunk",
+            type: 'stream-chunk',
             messageId: chunk.messageId,
             text: chunk.text,
           });
@@ -470,13 +467,8 @@ export class SessionManager {
         (_agent) => ({
           async sessionUpdate(params) {
             const update = params.update;
-            if (
-              update.sessionUpdate === "agent_message_chunk" &&
-              update.content.type === "text"
-            ) {
-              const agentMsg = session.messages.findLast(
-                (m) => m.role === "agent" && m.streaming
-              );
+            if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
+              const agentMsg = session.messages.findLast((m) => m.role === 'agent' && m.streaming);
               if (agentMsg) {
                 agentMsg.text += update.content.text;
                 // Batch: accumulate text, flush on timer
@@ -492,43 +484,37 @@ export class SessionManager {
                 scheduleChunkFlush();
               }
             } else if (
-              update.sessionUpdate === "tool_call" ||
-              update.sessionUpdate === "tool_call_update"
+              update.sessionUpdate === 'tool_call' ||
+              update.sessionUpdate === 'tool_call_update'
             ) {
-              const agentMsg = session.messages.findLast(
-                (m) => m.role === "agent"
-              );
+              const agentMsg = session.messages.findLast((m) => m.role === 'agent');
               if (agentMsg) {
                 const meta = update._meta as
                   | { claudeCode?: { toolName?: string; toolResponse?: unknown } }
                   | undefined;
                 const toolCall: ToolCallInfo = {
                   id: update.toolCallId,
-                  name: meta?.claudeCode?.toolName ?? "Tool",
+                  name: meta?.claudeCode?.toolName ?? 'Tool',
                   status:
-                    "status" in update
-                      ? (update.status as ToolCallInfo["status"])
-                      : "in_progress",
-                  title: "title" in update ? (update.title as string) : undefined,
+                    'status' in update ? (update.status as ToolCallInfo['status']) : 'in_progress',
+                  title: 'title' in update ? (update.title as string) : undefined,
                   output:
-                    "rawOutput" in update
-                      ? (typeof update.rawOutput === "string"
-                          ? update.rawOutput
-                          : JSON.stringify(update.rawOutput))
+                    'rawOutput' in update
+                      ? typeof update.rawOutput === 'string'
+                        ? update.rawOutput
+                        : JSON.stringify(update.rawOutput)
                       : undefined,
                 };
                 agentMsg.toolCalls = agentMsg.toolCalls ?? [];
-                const existing = agentMsg.toolCalls.find(
-                  (tc) => tc.id === toolCall.id
-                );
+                const existing = agentMsg.toolCalls.find((tc) => tc.id === toolCall.id);
                 if (existing) {
                   Object.assign(existing, toolCall);
                 } else {
                   agentMsg.toolCalls.push(toolCall);
                 }
-                emitUpdate("session-update", {
+                emitUpdate('session-update', {
                   sessionId: id,
-                  type: "tool-call",
+                  type: 'tool-call',
                   messageId: agentMsg.id,
                   toolCall,
                 });
@@ -537,13 +523,11 @@ export class SessionManager {
           },
           async requestPermission(params) {
             // Auto-approve: select the first allow_once option
-            const allowOption = params.options.find(
-              (o) => o.kind === "allow_once"
-            );
+            const allowOption = params.options.find((o) => o.kind === 'allow_once');
             if (allowOption) {
               return {
                 outcome: {
-                  outcome: "selected" as const,
+                  outcome: 'selected' as const,
                   optionId: allowOption.optionId,
                 },
               };
@@ -551,13 +535,13 @@ export class SessionManager {
             // Fallback: select first option
             return {
               outcome: {
-                outcome: "selected" as const,
+                outcome: 'selected' as const,
                 optionId: params.options[0].optionId,
               },
             };
           },
         }),
-        stream
+        stream,
       );
       session.connection = connection;
 
@@ -579,7 +563,7 @@ export class SessionManager {
       // Start sandbox monitor if sandboxed
       if (sandboxConfig && agentProcess.pid) {
         const monitor = new SandboxMonitor();
-        monitor.on("violation", (violation) => {
+        monitor.on('violation', (violation) => {
           const info: SandboxViolationInfo = {
             timestamp: violation.timestamp.getTime(),
             operation: violation.operation,
@@ -587,9 +571,9 @@ export class SessionManager {
             processName: violation.processName,
           };
           session.sandboxViolations.push(info);
-          this.emit("session-update", {
+          this.emit('session-update', {
             sessionId: id,
-            type: "sandbox-violation",
+            type: 'sandbox-violation',
             violation: info,
           });
         });
@@ -597,11 +581,11 @@ export class SessionManager {
         session.sandboxMonitor = monitor;
       }
 
-      session.status = "ready";
-      this.emit("session-update", {
+      session.status = 'ready';
+      this.emit('session-update', {
         sessionId: id,
-        type: "status-change",
-        status: "ready",
+        type: 'status-change',
+        status: 'ready',
       });
     } catch (err) {
       console.error(`Failed to create session ${id}:`, err);
@@ -622,11 +606,11 @@ export class SessionManager {
       if (worktree) {
         await cleanupHooks(id, worktree.path).catch(() => {});
       }
-      session.status = "error";
-      this.emit("session-update", {
+      session.status = 'error';
+      this.emit('session-update', {
         sessionId: id,
-        type: "status-change",
-        status: "error",
+        type: 'status-change',
+        status: 'error',
       });
     }
 
@@ -636,35 +620,34 @@ export class SessionManager {
   async sendMessage(sessionId: string, text: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
-    if (session.status !== "ready")
-      throw new Error(`Session not ready: ${session.status}`);
+    if (session.status !== 'ready') throw new Error(`Session not ready: ${session.status}`);
 
     // Create user message
     const userMsg: Message = {
       id: randomUUID(),
-      role: "user",
+      role: 'user',
       text,
       timestamp: Date.now(),
     };
     session.messages.push(userMsg);
-    this.emit("session-update", { sessionId, type: "message", message: userMsg });
+    this.emit('session-update', { sessionId, type: 'message', message: userMsg });
 
     // Create placeholder agent message for streaming
     const agentMsg: Message = {
       id: randomUUID(),
-      role: "agent",
-      text: "",
+      role: 'agent',
+      text: '',
       timestamp: Date.now(),
       streaming: true,
     };
     session.messages.push(agentMsg);
-    this.emit("session-update", { sessionId, type: "message", message: agentMsg });
+    this.emit('session-update', { sessionId, type: 'message', message: agentMsg });
 
     // Send prompt via ACP
     try {
       await session.connection.prompt({
         sessionId: session.acpSessionId,
-        prompt: [{ type: "text", text }],
+        prompt: [{ type: 'text', text }],
       });
     } catch (err) {
       console.error(`Prompt failed for session ${sessionId}:`, err);
@@ -672,24 +655,22 @@ export class SessionManager {
 
     // Finalize the agent message
     agentMsg.streaming = false;
-    this.emit("session-update", {
+    this.emit('session-update', {
       sessionId,
-      type: "stream-end",
+      type: 'stream-end',
       messageId: agentMsg.id,
     });
   }
 
   async listSessions(): Promise<SessionSummary[]> {
-    return await Promise.all(
-      Array.from(this.sessions.values()).map((s) => this.summarize(s))
-    );
+    return await Promise.all(Array.from(this.sessions.values()).map((s) => this.summarize(s)));
   }
 
   async closeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
-    session.status = "closed";
+    session.status = 'closed';
     session.sandboxMonitor?.stop();
     session.agentProcess?.kill();
 
@@ -697,14 +678,14 @@ export class SessionManager {
     if (session.githubPolicy) {
       if (session.worktree) {
         await cleanupHooks(sessionId, session.worktree.path).catch((err) =>
-          console.warn(`Failed to clean up hooks for session ${sessionId}:`, err)
+          console.warn(`Failed to clean up hooks for session ${sessionId}:`, err),
         );
       }
       await cleanupPolicyState(sessionId).catch((err) =>
-        console.warn(`Failed to clean up policy state for session ${sessionId}:`, err)
+        console.warn(`Failed to clean up policy state for session ${sessionId}:`, err),
       );
       await cleanupGhShim(sessionId).catch((err) =>
-        console.warn(`Failed to clean up gh shim for session ${sessionId}:`, err)
+        console.warn(`Failed to clean up gh shim for session ${sessionId}:`, err),
       );
     }
 
@@ -713,10 +694,7 @@ export class SessionManager {
       try {
         await this.worktreeManager.remove(session.worktree);
       } catch (err) {
-        console.warn(
-          `Failed to remove worktree for session ${sessionId}:`,
-          err
-        );
+        console.warn(`Failed to remove worktree for session ${sessionId}:`, err);
       }
     }
 
@@ -725,21 +703,17 @@ export class SessionManager {
       await cleanupPolicy(session.sandboxConfig.policyOutputPath);
     }
 
-    this.emit("session-update", {
+    this.emit('session-update', {
       sessionId,
-      type: "status-change",
-      status: "closed",
+      type: 'status-change',
+      status: 'closed',
     });
   }
 
   /** Close all active sessions. Called on app quit. */
   async closeAllSessions(): Promise<void> {
-    const activeSessions = Array.from(this.sessions.values()).filter(
-      (s) => s.status !== "closed"
-    );
-    await Promise.all(
-      activeSessions.map((s) => this.closeSession(s.id).catch(() => {}))
-    );
+    const activeSessions = Array.from(this.sessions.values()).filter((s) => s.status !== 'closed');
+    await Promise.all(activeSessions.map((s) => this.closeSession(s.id).catch(() => {})));
   }
 
   /** Remove orphan worktree directories and sandbox policies left behind by a previous crash. */

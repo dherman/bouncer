@@ -1,4 +1,4 @@
-import type { PolicyTemplate } from "./types.js";
+import type { PolicyTemplate } from './types.js';
 
 /**
  * Standard PR implementation: read-write worktree, network deny intended.
@@ -6,25 +6,25 @@ import type { PolicyTemplate } from "./types.js";
  * Network deny is declared but not yet enforced — requires app-layer proxy (M6).
  */
 export const standardPrTemplate: PolicyTemplate = {
-  id: "standard-pr",
-  name: "Standard PR",
-  description: "Read-write worktree, standard toolchains (network deny planned)",
+  id: 'standard-pr',
+  name: 'Standard PR',
+  description: 'Read-write worktree, standard toolchains (network deny planned)',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "none",
+    access: 'none',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
+  safehouseIntegrations: ['all-agents'],
   github: {
-    repo: "",              // Populated per-session
-    allowedPushRefs: [],   // Populated per-session
+    repo: '', // Populated per-session
+    allowedPushRefs: [], // Populated per-session
     ownedPrNumber: null,
     canCreatePr: true,
   },
@@ -37,22 +37,22 @@ export const standardPrTemplate: PolicyTemplate = {
  * due to safehouse agent profiles. See findings.md for details.
  */
 export const researchOnlyTemplate: PolicyTemplate = {
-  id: "research-only",
-  name: "Research Only",
-  description: "Read-write worktree, full network, no access outside sandbox",
+  id: 'research-only',
+  name: 'Research Only',
+  description: 'Read-write worktree, full network, no access outside sandbox',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "full",
+    access: 'full',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
+  safehouseIntegrations: ['all-agents'],
 };
 
 /**
@@ -61,20 +61,20 @@ export const researchOnlyTemplate: PolicyTemplate = {
  * Equivalent to the M2 default safehouse configuration.
  */
 export const permissiveTemplate: PolicyTemplate = {
-  id: "permissive",
-  name: "Permissive",
-  description: "Read-write worktree, toolchains, full network access",
+  id: 'permissive',
+  name: 'Permissive',
+  description: 'Read-write worktree, toolchains, full network access',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "full",
+    access: 'full',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
+  safehouseIntegrations: ['all-agents'],
 };

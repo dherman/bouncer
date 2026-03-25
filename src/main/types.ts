@@ -1,8 +1,8 @@
-export type AgentType = "echo" | "claude-code" | "replay";
+export type AgentType = 'echo' | 'claude-code' | 'replay';
 
 export interface Message {
   id: string;
-  role: "user" | "agent";
+  role: 'user' | 'agent';
   text: string;
   timestamp: number;
   streaming?: boolean;
@@ -12,7 +12,7 @@ export interface Message {
 export interface ToolCallInfo {
   id: string;
   name: string;
-  status: "pending" | "in_progress" | "completed" | "failed";
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
   title?: string;
   input?: Record<string, unknown>;
   output?: string;
@@ -20,7 +20,7 @@ export interface ToolCallInfo {
 
 export interface SessionSummary {
   id: string;
-  status: "initializing" | "ready" | "error" | "closed";
+  status: 'initializing' | 'ready' | 'error' | 'closed';
   messageCount: number;
   agentType: AgentType;
   projectDir: string;
@@ -44,9 +44,9 @@ export interface GitHubPolicy {
 /** Logged when the gh shim or git hook allows/denies an operation. */
 export interface PolicyEvent {
   timestamp: number;
-  tool: "gh" | "git";
+  tool: 'gh' | 'git';
   operation: string;
-  decision: "allow" | "deny";
+  decision: 'allow' | 'deny';
   reason?: string;
 }
 
@@ -65,15 +65,15 @@ export interface PolicyTemplate {
 }
 
 export interface FilesystemPolicy {
-  worktreeAccess: "read-write" | "read-only";
+  worktreeAccess: 'read-write' | 'read-only';
   additionalWritableDirs: string[];
   additionalReadOnlyDirs: string[];
 }
 
 export type NetworkPolicy =
-  | { access: "full" }
-  | { access: "none" }
-  | { access: "filtered"; allowedDomains: string[] };
+  | { access: 'full' }
+  | { access: 'none' }
+  | { access: 'filtered'; allowedDomains: string[] };
 
 export interface EnvPolicy {
   additional: string[];
@@ -105,16 +105,16 @@ export interface ReplayToolCall {
 export interface ReplayResult {
   id: number;
   tool: string;
-  replay_outcome: "allowed" | "blocked" | "skipped" | "error";
+  replay_outcome: 'allowed' | 'blocked' | 'skipped' | 'error';
   error_message?: string;
   original_outcome: string;
 }
 
 export type SessionUpdate =
-  | { sessionId: string; type: "status-change"; status: SessionSummary["status"]; error?: string }
-  | { sessionId: string; type: "message"; message: Message }
-  | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { sessionId: string; type: "stream-end"; messageId: string }
-  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
-  | { sessionId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
-  | { sessionId: string; type: "policy-event"; event: PolicyEvent };
+  | { sessionId: string; type: 'status-change'; status: SessionSummary['status']; error?: string }
+  | { sessionId: string; type: 'message'; message: Message }
+  | { sessionId: string; type: 'stream-chunk'; messageId: string; text: string }
+  | { sessionId: string; type: 'stream-end'; messageId: string }
+  | { sessionId: string; type: 'tool-call'; messageId: string; toolCall: ToolCallInfo }
+  | { sessionId: string; type: 'sandbox-violation'; violation: SandboxViolationInfo }
+  | { sessionId: string; type: 'policy-event'; event: PolicyEvent };

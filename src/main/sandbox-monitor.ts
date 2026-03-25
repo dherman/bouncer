@@ -1,7 +1,7 @@
-import { spawn, execFile, type ChildProcess } from "node:child_process";
-import { promisify } from "node:util";
-import { EventEmitter } from "node:events";
-import { createInterface } from "node:readline";
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
+import { EventEmitter } from 'node:events';
+import { createInterface } from 'node:readline';
 
 const execFileAsync = promisify(execFile);
 
@@ -54,13 +54,13 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
     const WARMUP_MS = 5000;
 
     this.logProcess = spawn(
-      "log",
-      ["stream", "--style", "ndjson", "--predicate", 'sender=="Sandbox"'],
-      { stdio: ["ignore", "pipe", "ignore"] }
+      'log',
+      ['stream', '--style', 'ndjson', '--predicate', 'sender=="Sandbox"'],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
     );
 
     const rl = createInterface({ input: this.logProcess.stdout! });
-    rl.on("line", (line) => {
+    rl.on('line', (line) => {
       const violation = this.parseLine(line);
       if (!violation) return;
 
@@ -68,18 +68,18 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
       if (inWarmup || this.knownPids.has(violation.pid)) {
         // During warmup, add discovered PIDs to the known set
         if (inWarmup) this.knownPids.add(violation.pid);
-        this.emit("violation", violation);
+        this.emit('violation', violation);
       }
     });
 
-    this.logProcess.on("exit", (code) => {
+    this.logProcess.on('exit', (code) => {
       if (code !== null && code !== 0) {
         console.warn(`Sandbox monitor log stream exited with code ${code}`);
       }
     });
 
-    this.logProcess.on("error", (err) => {
-      console.warn("Sandbox monitor log stream error:", err.message);
+    this.logProcess.on('error', (err) => {
+      console.warn('Sandbox monitor log stream error:', err.message);
     });
 
     // Refresh PID tree periodically
@@ -110,11 +110,9 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
   private parseLine(line: string): SandboxViolation | null {
     try {
       const entry = JSON.parse(line);
-      const msg: string = entry.eventMessage ?? "";
+      const msg: string = entry.eventMessage ?? '';
 
-      const match = msg.match(
-        /Sandbox:\s+(\S+)\((\d+)\)\s+deny\(\d+\)\s+([\w*-]+)\s*(.*)/
-      );
+      const match = msg.match(/Sandbox:\s+(\S+)\((\d+)\)\s+deny\(\d+\)\s+([\w*-]+)\s*(.*)/);
       if (!match) return null;
 
       const [, processName, pidStr, operation, path] = match;
@@ -138,11 +136,11 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
   }
 
   private discoverDescendants(parentPid: number): void {
-    execFileAsync("pgrep", ["-P", String(parentPid)])
+    execFileAsync('pgrep', ['-P', String(parentPid)])
       .then(({ stdout }) => {
         const pids = stdout
           .trim()
-          .split("\n")
+          .split('\n')
           .filter(Boolean)
           .map(Number)
           .filter((n) => !isNaN(n));
@@ -156,11 +154,8 @@ export class SandboxMonitor extends EventEmitter<SandboxMonitorEvents> {
       .catch((error: unknown) => {
         // pgrep returns exit code 1 when no children found — expected
         const err = error as { code?: number | string | null; message?: string };
-        if (err?.code === 1 || err?.code === "1") return;
-        console.warn(
-          `SandboxMonitor: pgrep failed for PID ${parentPid}:`,
-          err?.message ?? error
-        );
+        if (err?.code === 1 || err?.code === '1') return;
+        console.warn(`SandboxMonitor: pgrep failed for PID ${parentPid}:`, err?.message ?? error);
       });
   }
 }

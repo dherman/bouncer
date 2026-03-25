@@ -26,7 +26,9 @@
     "test:gh-shim": "tsx scripts/test-gh-shim.ts",
     "test:hooks": "tsx scripts/test-hooks.ts",
     "test:app-layer-policy": "tsx scripts/test-app-layer-policy.ts",
-    "test:policy-event-parser": "tsx scripts/test-policy-event-parser.ts"
+    "test:policy-event-parser": "tsx scripts/test-policy-event-parser.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
@@ -35,6 +37,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^41.0.3",
     "electron-vite": "^5.0.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

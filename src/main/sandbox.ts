@@ -18,26 +18,26 @@
  *   - Policy file lifecycle management
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 
 const execFileAsync = promisify(execFile);
 
-export const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
+export const POLICY_DIR = join(tmpdir(), 'glitterball-sandbox');
 
 export const BASE_ENV_PASSTHROUGH = [
-  "ANTHROPIC_API_KEY",
-  "NODE_OPTIONS",
-  "NODE_PATH",
-  "EDITOR",
-  "VISUAL",
-  "GIT_AUTHOR_NAME",
-  "GIT_AUTHOR_EMAIL",
-  "GIT_COMMITTER_NAME",
-  "GIT_COMMITTER_EMAIL",
+  'ANTHROPIC_API_KEY',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'EDITOR',
+  'VISUAL',
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
 ];
 
 export interface SandboxConfig {
@@ -63,10 +63,7 @@ export interface SandboxConfig {
  *
  * When safehouse is unavailable, falls back to unsandboxed execution.
  */
-export function buildSafehouseArgs(
-  config: SandboxConfig,
-  command: string[]
-): string[] {
+export function buildSafehouseArgs(config: SandboxConfig, command: string[]): string[] {
   const args: string[] = [];
 
   // Persist the policy file so we control its lifecycle
@@ -76,34 +73,34 @@ export function buildSafehouseArgs(
   // basename, but we spawn "node <agent-bin>" so it can't detect that
   // the wrapped process is Claude Code. --enable=all-agents loads all
   // agent-specific grants (Claude Code state dirs, etc.).
-  args.push("--enable=all-agents");
+  args.push('--enable=all-agents');
 
   // Set the working directory for git root detection
   args.push(`--workdir=${config.workdir}`);
 
   // Writable directories
   if (config.writableDirs.length > 0) {
-    args.push(`--add-dirs=${config.writableDirs.join(":")}`);
+    args.push(`--add-dirs=${config.writableDirs.join(':')}`);
   }
 
   // Read-only directories
   if (config.readOnlyDirs.length > 0) {
-    args.push(`--add-dirs-ro=${config.readOnlyDirs.join(":")}`);
+    args.push(`--add-dirs-ro=${config.readOnlyDirs.join(':')}`);
   }
 
   // Environment passthrough
   if (config.envPassthrough.length > 0) {
-    args.push(`--env-pass=${config.envPassthrough.join(",")}`);
+    args.push(`--env-pass=${config.envPassthrough.join(',')}`);
   }
 
   // Append profile overlay for policy-specific SBPL rules
   if (config.appendProfileContent) {
-    const appendPath = config.policyOutputPath.replace(/\.sb$/, "-append.sb");
+    const appendPath = config.policyOutputPath.replace(/\.sb$/, '-append.sb');
     args.push(`--append-profile=${appendPath}`);
   }
 
   // Separator and command
-  args.push("--");
+  args.push('--');
   args.push(...command);
 
   return args;
@@ -151,7 +148,7 @@ let _safehouseAvailable: boolean | null = null;
 export async function isSafehouseAvailable(): Promise<boolean> {
   if (_safehouseAvailable !== null) return _safehouseAvailable;
   try {
-    await execFileAsync("safehouse", ["--version"]);
+    await execFileAsync('safehouse', ['--version']);
     _safehouseAvailable = true;
   } catch {
     _safehouseAvailable = false;
@@ -172,15 +169,15 @@ export async function ensurePolicyDir(): Promise<void> {
  */
 export async function writeAppendProfile(config: SandboxConfig): Promise<void> {
   if (!config.appendProfileContent) return;
-  const appendPath = config.policyOutputPath.replace(/\.sb$/, "-append.sb");
-  await writeFile(appendPath, config.appendProfileContent, "utf-8");
+  const appendPath = config.policyOutputPath.replace(/\.sb$/, '-append.sb');
+  await writeFile(appendPath, config.appendProfileContent, 'utf-8');
 }
 
 /**
  * Clean up a session's policy file(s), including any append profile.
  */
 export async function cleanupPolicy(policyPath: string): Promise<void> {
-  const appendPath = policyPath.replace(/\.sb$/, "-append.sb");
+  const appendPath = policyPath.replace(/\.sb$/, '-append.sb');
   await rm(policyPath, { force: true }).catch(() => {});
   await rm(appendPath, { force: true }).catch(() => {});
 }
@@ -188,16 +185,14 @@ export async function cleanupPolicy(policyPath: string): Promise<void> {
 /**
  * Clean up orphan policy files from previous sessions.
  */
-export async function cleanupOrphanPolicies(
-  activeSessionIds: Set<string>
-): Promise<void> {
-  const { readdir } = await import("node:fs/promises");
+export async function cleanupOrphanPolicies(activeSessionIds: Set<string>): Promise<void> {
+  const { readdir } = await import('node:fs/promises');
   try {
     const entries = await readdir(POLICY_DIR);
     for (const entry of entries) {
-      if (entry.endsWith(".sb")) {
+      if (entry.endsWith('.sb')) {
         // Extract session ID from both "uuid.sb" and "uuid-append.sb"
-        const sessionId = entry.replace(/-append\.sb$/, "").replace(/\.sb$/, "");
+        const sessionId = entry.replace(/-append\.sb$/, '').replace(/\.sb$/, '');
         if (!activeSessionIds.has(sessionId)) {
           await rm(join(POLICY_DIR, entry), { force: true });
         }
