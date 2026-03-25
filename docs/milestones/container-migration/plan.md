@@ -25,13 +25,13 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 3.4 Populate `sandboxBackend` in `summarize`
   - [x] 3.5 Call `ensureAgentImage()` before first session creation
   - [x] 3.6 Test: echo agent ACP round-trip in container
-- [ ] **[Phase 4: Bind Mount Strategy + Git Configuration](#phase-4-bind-mount-strategy--git-configuration)**
-  - [ ] 4.1 Create `policy-container.ts` with `policyToContainerConfig()`
-  - [ ] 4.2 Implement `generateGitconfig()` for system gitconfig
-  - [ ] 4.3 Create `gh-credential-helper.ts`
-  - [ ] 4.4 Add `ContainerPolicy` to `PolicyTemplate` type
-  - [ ] 4.5 Add `container` config to policy templates
-  - [ ] 4.6 Test: mount list generation, gitconfig content, credential helper output
+- [x] **[Phase 4: Bind Mount Strategy + Git Configuration](#phase-4-bind-mount-strategy--git-configuration)**
+  - [x] 4.1 Create `policy-container.ts` with `policyToContainerConfig()`
+  - [x] 4.2 Implement `generateGitconfig()` for system gitconfig
+  - [x] 4.3 Create `gh-credential-helper.ts`
+  - [x] 4.4 Add `ContainerPolicy` to `PolicyTemplate` type
+  - [x] 4.5 Add `container` config to policy templates
+  - [x] 4.6 Test: mount list generation, gitconfig content, credential helper output
 - [ ] **[Phase 5: Claude Code + Replay Agent in Container](#phase-5-claude-code--replay-agent-in-container)**
   - [ ] 5.1 Extend container path in `createSession` for Claude Code and replay agents
   - [ ] 5.2 Generate container-specific `gh` wrapper script and mount table
