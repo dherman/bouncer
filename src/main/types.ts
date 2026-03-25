@@ -18,6 +18,8 @@ export interface ToolCallInfo {
   output?: string;
 }
 
+export type SandboxBackend = "safehouse" | "container" | "none";
+
 export interface SessionSummary {
   id: string;
   status: "initializing" | "ready" | "error" | "closed";
@@ -25,6 +27,7 @@ export interface SessionSummary {
   agentType: AgentType;
   projectDir: string;
   sandboxed: boolean;
+  sandboxBackend: SandboxBackend;
   policyId: string | null;
   policyName: string | null;
   githubRepo: string | null;

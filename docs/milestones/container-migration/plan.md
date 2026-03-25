@@ -13,11 +13,11 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 1.3 Kick off image build at app startup in `index.ts`
   - [x] 1.4 Include `docker/` in packaged app resources
   - [x] 1.5 Test: image builds, contains expected toolchains, no `gh` binary
-- [ ] **[Phase 2: Container Spawn + stdio Piping](#phase-2-container-spawn--stdio-piping)**
-  - [ ] 2.1 Implement `ContainerHandle`, `buildDockerRunArgs`, `spawnContainer`
-  - [ ] 2.2 Implement `removeContainer` and `cleanupOrphanContainers`
-  - [ ] 2.3 Add `SandboxBackend` type and `sandboxBackend` to `SessionSummary`
-  - [ ] 2.4 Test: bidirectional stdio through `docker run -i`
+- [x] **[Phase 2: Container Spawn + stdio Piping](#phase-2-container-spawn--stdio-piping)**
+  - [x] 2.1 Implement `ContainerHandle`, `buildDockerRunArgs`, `spawnContainer`
+  - [x] 2.2 Implement `removeContainer` and `cleanupOrphanContainers`
+  - [x] 2.3 Add `SandboxBackend` type and `sandboxBackend` to `SessionSummary`
+  - [x] 2.4 Test: bidirectional stdio through `docker run -i`
 - [ ] **[Phase 3: Echo Agent in Container](#phase-3-echo-agent-in-container-session-manager-integration)**
   - [ ] 3.1 Add backend selection logic to `createSession`
   - [ ] 3.2 Add container path to `resolveAgentCommand` for echo agent

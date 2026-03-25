@@ -2,10 +2,10 @@
  * Container lifecycle management for Docker-based agent sandboxing.
  *
  * Phase 1: image availability check and build infrastructure.
- * Later phases add container spawn, teardown, and orphan cleanup.
+ * Phase 2: container spawn, teardown, and orphan cleanup.
  */
 
-import { execFile } from "node:child_process";
+import { execFile, spawn, ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -15,6 +15,37 @@ import { app } from "electron";
 const execFileAsync = promisify(execFile);
 
 export const AGENT_IMAGE_PREFIX = "glitterball-agent";
+const CONTAINER_PREFIX = "glitterball";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ContainerMount {
+  hostPath: string;
+  containerPath: string;
+  readOnly: boolean;
+}
+
+export interface ContainerConfig {
+  sessionId: string;
+  image: string;
+  command: string[];
+  workdir: string;
+  mounts: ContainerMount[];
+  env: Record<string, string>;
+  networkMode: "none" | "bridge";
+}
+
+export interface ContainerHandle {
+  process: ChildProcess;
+  containerName: string;
+  kill(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Docker availability (Phase 1)
+// ---------------------------------------------------------------------------
 
 /**
  * Check whether Docker is available on this machine.
@@ -40,11 +71,10 @@ export async function isDockerAvailable(): Promise<boolean> {
   return _dockerAvailable;
 }
 
-/**
- * Resolve the path to the agent Dockerfile.
- * In dev mode this is `<project>/docker/agent.Dockerfile`.
- * In a packaged app it lives under `extraResources`.
- */
+// ---------------------------------------------------------------------------
+// Image build (Phase 1)
+// ---------------------------------------------------------------------------
+
 function resolveDockerfilePath(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, "docker", "agent.Dockerfile");
@@ -52,22 +82,12 @@ function resolveDockerfilePath(): string {
   return join(app.getAppPath(), "docker", "agent.Dockerfile");
 }
 
-/**
- * Build (or reuse) the agent container image.
- *
- * The image is tagged `glitterball-agent:<hash>` where `<hash>` is derived
- * from the Dockerfile contents. If an image with that tag already exists
- * the build is skipped.
- *
- * Returns the full image tag, e.g. `glitterball-agent:a1b2c3d4`.
- */
 export async function ensureAgentImage(): Promise<string> {
   const dockerfilePath = resolveDockerfilePath();
   const content = await readFile(dockerfilePath, "utf-8");
   const hash = createHash("sha256").update(content).digest("hex").slice(0, 12);
   const imageTag = `${AGENT_IMAGE_PREFIX}:${hash}`;
 
-  // Check if the image already exists
   try {
     await execFileAsync("docker", ["image", "inspect", imageTag], {
       timeout: 10_000,
@@ -83,8 +103,126 @@ export async function ensureAgentImage(): Promise<string> {
   await execFileAsync(
     "docker",
     ["build", "-t", imageTag, "-f", dockerfilePath, dockerDir],
-    { timeout: 600_000 }, // 10 minute timeout for builds
+    { timeout: 600_000 },
   );
   console.log(`[container] Image ${imageTag} built successfully`);
   return imageTag;
+}
+
+// ---------------------------------------------------------------------------
+// Container spawn + teardown (Phase 2)
+// ---------------------------------------------------------------------------
+
+function containerName(sessionId: string): string {
+  return `${CONTAINER_PREFIX}-${sessionId}`;
+}
+
+/**
+ * Build the `docker run` argument list from a ContainerConfig.
+ * Does not include the leading `"docker"` — caller passes these to
+ * `spawn("docker", args)`.
+ */
+export function buildDockerRunArgs(config: ContainerConfig): string[] {
+  const name = containerName(config.sessionId);
+  const args: string[] = [
+    "run", "-i", "--rm",
+    "--name", name,
+    "--label", "glitterball.managed=true",
+    "--label", `glitterball.sessionId=${config.sessionId}`,
+  ];
+
+  for (const m of config.mounts) {
+    const flag = m.readOnly
+      ? `${m.hostPath}:${m.containerPath}:ro`
+      : `${m.hostPath}:${m.containerPath}`;
+    args.push("-v", flag);
+  }
+
+  for (const [key, value] of Object.entries(config.env)) {
+    args.push("-e", `${key}=${value}`);
+  }
+
+  args.push("-w", config.workdir);
+  args.push("--network", config.networkMode);
+  args.push(config.image);
+  args.push(...config.command);
+
+  return args;
+}
+
+/**
+ * Spawn a Docker container and return a handle for stdio communication.
+ */
+export function spawnContainer(config: ContainerConfig): ContainerHandle {
+  const args = buildDockerRunArgs(config);
+  const name = containerName(config.sessionId);
+
+  const proc = spawn("docker", args, {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  proc.on("error", (err) => {
+    console.error(`[container] Failed to spawn docker process for ${name}:`, err);
+  });
+
+  return {
+    process: proc,
+    containerName: name,
+    kill() {
+      proc.kill();
+      // Force-remove in case the process doesn't exit cleanly.
+      // Fire-and-forget — removeContainer is idempotent.
+      execFileAsync("docker", ["rm", "-f", name]).catch(() => {});
+    },
+  };
+}
+
+/**
+ * Force-remove a container by session ID. Idempotent — safe to call on
+ * already-stopped or nonexistent containers.
+ */
+export async function removeContainer(sessionId: string): Promise<void> {
+  const name = containerName(sessionId);
+  try {
+    await execFileAsync("docker", ["rm", "-f", name], { timeout: 10_000 });
+  } catch {
+    // Container already gone — fine
+  }
+}
+
+/**
+ * Find and remove any glitterball containers that don't belong to active
+ * sessions. Called at startup to clean up after crashes.
+ */
+export async function cleanupOrphanContainers(
+  activeSessionIds: Set<string>,
+): Promise<void> {
+  let stdout: string;
+  try {
+    const result = await execFileAsync(
+      "docker",
+      [
+        "ps", "-a",
+        "--filter", "label=glitterball.managed=true",
+        "--format", "{{.Label \"glitterball.sessionId\"}}\t{{.Names}}",
+      ],
+      { timeout: 10_000 },
+    );
+    stdout = result.stdout;
+  } catch {
+    return; // Docker not available or error — nothing to clean up
+  }
+
+  const lines = stdout.trim().split("\n").filter(Boolean);
+  for (const line of lines) {
+    const [sessionId, name] = line.split("\t");
+    if (sessionId && name && !activeSessionIds.has(sessionId)) {
+      console.log(`[container] Removing orphan container: ${name}`);
+      try {
+        await execFileAsync("docker", ["rm", "-f", name], { timeout: 10_000 });
+      } catch {
+        console.warn(`[container] Failed to remove orphan container: ${name}`);
+      }
+    }
+  }
 }

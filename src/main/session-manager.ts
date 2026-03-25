@@ -789,6 +789,7 @@ export class SessionManager {
       agentType: session.agentType,
       projectDir: session.projectDir,
       sandboxed: session.sandboxConfig !== null,
+      sandboxBackend: session.sandboxConfig !== null ? "safehouse" : "none",
       policyId: session.policyId,
       policyName,
       githubRepo,
