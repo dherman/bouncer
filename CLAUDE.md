@@ -10,13 +10,6 @@ ELECTRON_RUN_AS_NODE= npm run dev
 
 See: https://github.com/anthropics/claude-code/issues/34836
 
-## Container sessions need ANTHROPIC_API_KEY
+## Container auth
 
-Claude Code authenticates via OAuth tokens stored in the macOS keychain, which Linux containers can't access. Container-based agent sessions require `ANTHROPIC_API_KEY` (a direct API key from https://console.anthropic.com):
-
-```sh
-export ANTHROPIC_API_KEY=sk-ant-api03-...
-ELECTRON_RUN_AS_NODE= npm run dev
-```
-
-This only affects container sessions — safehouse (Seatbelt) sessions can access the keychain natively.
+Claude Code stores OAuth tokens in the macOS keychain, which Linux containers can't access directly. The app extracts credentials from the keychain at session creation and writes them to `~/.claude/.credentials.json` inside the container (the Linux credential storage path). This happens automatically — no manual setup needed if you're logged in via `claude login`.

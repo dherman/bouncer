@@ -457,10 +457,27 @@ export class SessionManager {
             : undefined;
 
           // Container env — only explicit vars, no process.env inheritance.
-          // The container can't access the macOS keychain for OAuth auth.
-          // If ANTHROPIC_API_KEY is set, pass it through. Otherwise, the
-          // agent will authenticate via the claude CLI using ~/.claude state.
+          // The container runs Linux, where the Claude CLI reads credentials
+          // from ~/.claude/.credentials.json (not the macOS keychain).
+          // Extract from macOS keychain and write a credentials file for the container.
           const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
+          let claudeCredentialsPath: string | undefined;
+          if (!anthropicKey && process.platform === "darwin") {
+            try {
+              const { execFile: execFileCb2 } = await import("node:child_process");
+              const { promisify: pfy2 } = await import("node:util");
+              const execFileP2 = pfy2(execFileCb2);
+              const { stdout: credJson } = await execFileP2("security", [
+                "find-generic-password", "-s", "Claude Code-credentials", "-w",
+              ]);
+              claudeCredentialsPath = join(POLICY_DIR, `${id}-claude-credentials.json`);
+              await writeFile(claudeCredentialsPath, credJson.trim(), { mode: 0o600 });
+              console.log("[container] Wrote Claude credentials file from macOS keychain");
+            } catch (err) {
+              console.warn("[container] Could not extract Claude credentials from keychain:", err);
+              claudeCredentialsPath = undefined;
+            }
+          }
           const containerEnv: Record<string, string> = {
             ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
             ...(shimEnv.GH_TOKEN ? { GH_TOKEN: shimEnv.GH_TOKEN } : {}),
@@ -484,6 +501,7 @@ export class SessionManager {
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
             claudeConfigDir: join((await import("node:os")).homedir(), ".claude"),
+            claudeCredentialsPath,
           };
 
           containerConfig = policyToContainerConfig(
@@ -874,6 +892,7 @@ export class SessionManager {
       await rm(join(POLICY_DIR, `${sessionId}-container-gh-wrapper`), { force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${sessionId}-container-hooks`), { recursive: true, force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${sessionId}-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${sessionId}-claude-credentials.json`), { force: true }).catch(() => {});
     }
 
     // Clean up application-layer policy artifacts

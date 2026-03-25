@@ -23,6 +23,8 @@ export interface ContainerSessionContext {
   sshDir?: string;
   /** Mount ~/.claude into the container for agent authentication. */
   claudeConfigDir?: string;
+  /** Credentials file extracted from macOS keychain for Linux-mode auth. */
+  claudeCredentialsPath?: string;
 }
 
 /**
@@ -169,6 +171,16 @@ export function policyToContainerConfig(
     mounts.push(
       { hostPath: ctx.claudeConfigDir, containerPath: "/home/agent/.claude", readOnly: false },
     );
+  }
+
+  // Credentials file extracted from macOS keychain — mounted into .claude dir
+  // so the Claude CLI (Linux mode) can read OAuth tokens.
+  if (ctx.claudeCredentialsPath) {
+    mounts.push({
+      hostPath: ctx.claudeCredentialsPath,
+      containerPath: "/home/agent/.claude/.credentials.json",
+      readOnly: true,
+    });
   }
 
   if (ctx.sshDir) {
