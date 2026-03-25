@@ -9,7 +9,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { app } from "electron";
 
 const execFileAsync = promisify(execFile);
@@ -18,17 +18,25 @@ export const AGENT_IMAGE_PREFIX = "glitterball-agent";
 
 /**
  * Check whether Docker is available on this machine.
- * Result is cached after first probe.
+ * A positive result is cached permanently. A negative result is re-probed
+ * after a cooldown, since Docker Desktop may start after the app.
  */
 let _dockerAvailable: boolean | null = null;
+let _dockerCheckedAt = 0;
+const DOCKER_RETRY_MS = 60_000;
+
 export async function isDockerAvailable(): Promise<boolean> {
-  if (_dockerAvailable !== null) return _dockerAvailable;
+  if (_dockerAvailable === true) return true;
+  if (_dockerAvailable === false && Date.now() - _dockerCheckedAt < DOCKER_RETRY_MS) {
+    return false;
+  }
   try {
     await execFileAsync("docker", ["info"], { timeout: 10_000 });
     _dockerAvailable = true;
   } catch {
     _dockerAvailable = false;
   }
+  _dockerCheckedAt = Date.now();
   return _dockerAvailable;
 }
 
@@ -70,7 +78,7 @@ export async function ensureAgentImage(): Promise<string> {
     // Image doesn't exist — build it
   }
 
-  const dockerDir = join(dockerfilePath, "..");
+  const dockerDir = dirname(dockerfilePath);
   console.log(`[container] Building image ${imageTag}...`);
   await execFileAsync(
     "docker",
