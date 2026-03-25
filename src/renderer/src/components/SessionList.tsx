@@ -51,6 +51,11 @@ export function SessionList({ sessions, activeSessionId, violationCounts, policy
                 {s.policyName}
               </span>
             )}
+            {s.githubRepo && (
+              <span className="github-badge" title={`GitHub: ${s.githubRepo}`}>
+                {s.githubRepo}{s.ownedPrNumber != null ? ` #${s.ownedPrNumber}` : ''}
+              </span>
+            )}
             {(violationCounts.get(s.id) ?? 0) > 0 && (
               <span className="violation-count">{violationCounts.get(s.id)}</span>
             )}

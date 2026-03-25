@@ -432,7 +432,7 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.sandbox-log-op {
+.sandbox-log-op-violation {
   color: #d9534f;
   font-weight: 600;
   flex-shrink: 0;
@@ -448,6 +448,71 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sandbox-log-entry-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+  width: 16px;
+  text-align: center;
+}
+
+.sandbox-log-tool {
+  color: #888;
+  font-size: 10px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.sandbox-log-op-allow {
+  color: #aaa;
+  font-weight: 400;
+}
+
+.sandbox-log-op-deny {
+  color: #d9534f;
+  font-weight: 600;
+}
+
+.sandbox-log-reason {
+  color: #888;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sandbox-log-deny-count {
+  margin-left: 8px;
+  color: #d9534f;
+  font-size: 11px;
+}
+
+.sandbox-log-violation-count {
+  margin-left: 8px;
+  color: #f0ad4e;
+  font-size: 11px;
+}
+
+.sandbox-log-policy-allow {
+  opacity: 0.7;
+}
+
+.sandbox-log-policy-deny {
+  background-color: rgba(217, 83, 79, 0.08);
+}
+
+/* GitHub badge in session list */
+.github-badge {
+  display: inline-block;
+  font-size: 10px;
+  color: #888;
+  margin-left: 4px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 /* Tool call blocks */

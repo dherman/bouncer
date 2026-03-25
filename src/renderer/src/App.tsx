@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Message, PolicyTemplateSummary, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
+import type { Message, PolicyEvent, PolicyTemplateSummary, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
 import { SessionList } from './components/SessionList'
 import { ChatPanel } from './components/ChatPanel'
 import { NewSessionDialog } from './components/NewSessionDialog'
@@ -13,6 +13,7 @@ function App() {
   const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
   const [violationsBySession, setViolationsBySession] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
   const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
+  const [policyEventsBySession, setPolicyEventsBySession] = useState<Map<string, PolicyEvent[]>>(new Map())
 
   const handleUpdate = useCallback((update: SessionUpdate) => {
     switch (update.type) {
@@ -114,6 +115,16 @@ function App() {
           return next
         })
         break
+
+      case 'policy-event':
+        setPolicyEventsBySession((prev) => {
+          const next = new Map(prev)
+          const existing = next.get(update.sessionId) ?? []
+          const updated = [...existing, update.event].slice(-200)
+          next.set(update.sessionId, updated)
+          return next
+        })
+        break
     }
   }, [])
 
@@ -161,6 +172,9 @@ function App() {
   const activeViolations = activeSessionId
     ? violationsBySession.get(activeSessionId) ?? []
     : []
+  const activePolicyEvents = activeSessionId
+    ? policyEventsBySession.get(activeSessionId) ?? []
+    : []
 
   const violationCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -188,6 +202,7 @@ function App() {
           sessionStatus={activeSession.status}
           sessionError={sessionErrors.get(activeSession.id)}
           violations={activeViolations}
+          policyEvents={activePolicyEvents}
           onSendMessage={handleSendMessage}
           onCloseSession={() => handleCloseSession(activeSession.id)}
         />

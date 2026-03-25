@@ -542,19 +542,18 @@ async function main(): Promise<void> {
   const parsed = parseGhArgs(args);
   const decision = evaluatePolicy(parsed, policy);
 
-  // Log the decision to stderr in structured format for the policy event parser
+  // Log deny decisions to stderr for the policy event parser.
+  // Allow events are intentionally not logged to stderr — agents capture
+  // stderr as tool output, and the [bouncer:gh] lines confuse them into
+  // thinking there's no real output from gh.
   const op = [parsed.command, parsed.subcommand, ...parsed.positionalArgs]
     .filter(Boolean)
     .join(" ");
-  const isGraphQL = parsed.command === "api" && parsed.positionalArgs[0] === "graphql";
-  const unauditedTag = isGraphQL ? " [unaudited]" : "";
   if (decision.action === "deny") {
     process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`, () => {
       process.exit(1);
     });
     return;
-  } else {
-    process.stderr.write(`[bouncer:gh] ALLOW ${op}${unauditedTag}\n`);
   }
 
   if (decision.action === "allow-and-capture-pr") {
@@ -618,10 +617,13 @@ function deriveSessionId(policyPath: string): string | null {
 }
 
 // Run main if this is the entry point.
-// Check both argv[1] and the BOUNCER env vars to avoid triggering when imported as a library.
+// Check env vars to avoid triggering when imported as a library.
+// Use top-level await so Node keeps the event loop alive until main() completes.
 if (process.env.BOUNCER_GITHUB_POLICY && process.env.BOUNCER_REAL_GH) {
-  main().catch((err) => {
+  try {
+    await main();
+  } catch (err) {
     process.stderr.write(`[bouncer:gh] fatal: ${err}\n`);
     process.exit(1);
-  });
+  }
 }

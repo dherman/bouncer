@@ -287,13 +287,22 @@ export class SessionManager {
             const ghShimPath = app.isPackaged
               ? join(app.getAppPath(), "dist", "main", "gh-shim.js")
               : join(app.getAppPath(), "src", "main", "gh-shim.ts");
-            const shimDir = await installGhShim(id, ghShimPath, process.execPath);
+            // Use "node" (not process.execPath which is Electron) since the
+            // shim runs as a standalone subprocess invoked by the agent.
+            const shimDir = await installGhShim(id, ghShimPath, "node");
             shimEnv = {
               BOUNCER_GITHUB_POLICY: policyStatePath(id),
               BOUNCER_REAL_GH: realGhPath,
               PATH: `${shimDir}:${process.env.PATH ?? ""}`,
-              ELECTRON_RUN_AS_NODE: "1",
             };
+            // Ensure safehouse forwards the shim env vars to the agent
+            if (sandboxConfig) {
+              sandboxConfig.envPassthrough.push(
+                "BOUNCER_GITHUB_POLICY",
+                "BOUNCER_REAL_GH",
+                "PATH",
+              );
+            }
           } else {
             console.warn("gh CLI not found — gh shim will not be installed");
           }

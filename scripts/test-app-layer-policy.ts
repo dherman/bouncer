@@ -153,7 +153,7 @@ await test("install gh shim", async () => {
 
   // Verify it references the right paths
   const content = await readFile(join(dir, "gh"), "utf-8");
-  assert.ok(content.includes("gh-shim.ts"), "should reference gh-shim.ts");
+  assert.ok(content.includes("gh-shim-bundle.js"), "should reference the bundled shim");
 });
 
 await test("install hooks", async () => {
