@@ -23,6 +23,10 @@ function createWindow(): void {
 
   window.on('ready-to-show', () => {
     window.show()
+    // Open DevTools in dev to catch renderer errors
+    if (!app.isPackaged) {
+      window.webContents.openDevTools({ mode: 'detach' })
+    }
   })
 
   // Monitor renderer health
