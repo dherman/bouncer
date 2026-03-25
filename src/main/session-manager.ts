@@ -729,7 +729,7 @@ export class SessionManager {
       });
 
       const sessionResp = await connection.newSession({
-        cwd: workingDir,
+        cwd: containerConfig ? "/workspace" : workingDir,
         mcpServers: [],
       });
       session.acpSessionId = sessionResp.sessionId;
