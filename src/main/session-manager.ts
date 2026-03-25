@@ -404,6 +404,29 @@ export class SessionManager {
       const stream = acp.ndJsonStream(output, input);
 
       const emitUpdate = this.emit.bind(this);
+
+      // Batch stream-chunk events to reduce IPC/render pressure.
+      // Accumulate text per message and flush every 50ms.
+      const pendingChunks = new Map<string, { messageId: string; text: string }>();
+      let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushChunks = (): void => {
+        chunkFlushTimer = null;
+        for (const [, chunk] of pendingChunks) {
+          emitUpdate("session-update", {
+            sessionId: id,
+            type: "stream-chunk",
+            messageId: chunk.messageId,
+            text: chunk.text,
+          });
+        }
+        pendingChunks.clear();
+      };
+      const scheduleChunkFlush = (): void => {
+        if (!chunkFlushTimer) {
+          chunkFlushTimer = setTimeout(flushChunks, 50);
+        }
+      };
+
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
           async sessionUpdate(params) {
@@ -417,12 +440,17 @@ export class SessionManager {
               );
               if (agentMsg) {
                 agentMsg.text += update.content.text;
-                emitUpdate("session-update", {
-                  sessionId: id,
-                  type: "stream-chunk",
-                  messageId: agentMsg.id,
-                  text: update.content.text,
-                });
+                // Batch: accumulate text, flush on timer
+                const pending = pendingChunks.get(agentMsg.id);
+                if (pending) {
+                  pending.text += update.content.text;
+                } else {
+                  pendingChunks.set(agentMsg.id, {
+                    messageId: agentMsg.id,
+                    text: update.content.text,
+                  });
+                }
+                scheduleChunkFlush();
               }
             } else if (
               update.sessionUpdate === "tool_call" ||

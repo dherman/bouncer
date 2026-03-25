@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PolicyEvent, SandboxViolationInfo } from '../../../main/types'
 
 interface Props {
@@ -16,23 +16,33 @@ export function SandboxLog({ violations, policyEvents }: Props) {
 
   const totalCount = violations.length + policyEvents.length
 
+  // Memoize the merged/sorted entries so we don't re-sort on every render
+  const entries = useMemo(() => {
+    const merged: LogEntry[] = [
+      ...violations.map((v): LogEntry => ({ kind: 'violation', timestamp: v.timestamp, data: v })),
+      ...policyEvents.map((e): LogEntry => ({ kind: 'policy', timestamp: e.timestamp, data: e })),
+    ]
+    merged.sort((a, b) => a.timestamp - b.timestamp)
+    return merged.slice(-200)
+  }, [violations, policyEvents])
+
+  const { denyCount, violationCount } = useMemo(() => {
+    let deny = 0
+    let viol = 0
+    for (const e of entries) {
+      if (e.kind === 'violation') viol++
+      else if ((e.data as PolicyEvent).decision === 'deny') deny++
+    }
+    return { denyCount: deny, violationCount: viol }
+  }, [entries])
+
   useEffect(() => {
     if (expanded) {
       bottomRef.current?.scrollIntoView({ behavior: 'auto' })
     }
-  }, [violations, policyEvents, expanded])
+  }, [entries, expanded])
 
   if (totalCount === 0) return null
-
-  // Merge and sort by timestamp, cap at 200
-  const entries: LogEntry[] = [
-    ...violations.map((v): LogEntry => ({ kind: 'violation', timestamp: v.timestamp, data: v })),
-    ...policyEvents.map((e): LogEntry => ({ kind: 'policy', timestamp: e.timestamp, data: e })),
-  ].sort((a, b) => a.timestamp - b.timestamp).slice(-200)
-
-  // Derive counts from the rendered entries so header matches what's displayed
-  const denyCount = entries.filter((e) => e.kind === 'policy' && (e.data as PolicyEvent).decision === 'deny').length
-  const violationCount = entries.filter((e) => e.kind === 'violation').length
 
   return (
     <div className="sandbox-log">
