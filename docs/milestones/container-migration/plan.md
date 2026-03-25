@@ -40,14 +40,14 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 5.5 Add `generatePrePushHookForContainer()` to `hooks.ts`
   - [x] 5.6 Update `closeSession` and `cleanupOrphans` for container artifacts
   - [x] 5.7 Test: full agent session in container with policy enforcement
-- [ ] **[Phase 6: `gh` Shim Direct API Mode](#phase-6-gh-shim-direct-api-mode)** *(parallel with Phases 3-5)*
-  - [ ] 6.1 Relax `BOUNCER_REAL_GH` requirement in shim entry point
-  - [ ] 6.2 Add dispatch branch: real gh vs. direct API
-  - [ ] 6.3 Implement `executeViaApi()` with `fetch`
-  - [ ] 6.4 Implement API mapping for `pr create/view/edit/list`, `issue list/view`, `api`
-  - [ ] 6.5 Implement flag extraction for `--title`, `--body`, `--base`, `--head`
-  - [ ] 6.6 Handle `allow-and-capture-pr` via API response
-  - [ ] 6.7 Test: shim API mode for each supported command
+- [x] **[Phase 6: `gh` Shim Direct API Mode](#phase-6-gh-shim-direct-api-mode)** *(parallel with Phases 3-5)*
+  - [x] 6.1 Relax `BOUNCER_REAL_GH` requirement in shim entry point
+  - [x] 6.2 Add dispatch branch: real gh vs. direct API
+  - [x] 6.3 Implement `executeViaApi()` with `fetch`
+  - [x] 6.4 Implement API mapping for `pr create/view/edit/list`, `issue list/view`, `api`
+  - [x] 6.5 Implement flag extraction for `--title`, `--body`, `--base`, `--head`
+  - [x] 6.6 Handle `allow-and-capture-pr` via API response
+  - [x] 6.7 Test: shim API mode for each supported command
 - [ ] **[Phase 7: Sandbox Monitor + UI Updates](#phase-7-sandbox-monitor--ui-updates)**
   - [ ] 7.1 Create `ContainerMonitor` class
   - [ ] 7.2 Start `ContainerMonitor` for container sessions in session manager

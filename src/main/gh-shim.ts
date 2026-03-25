@@ -25,6 +25,11 @@ export interface ParsedGhCommand {
     repo?: string;
     method?: string;
     hasBodyParams?: boolean;
+    title?: string;
+    body?: string;
+    base?: string;
+    head?: string;
+    fields: Array<{ key: string; value: string }>;
   };
   /** The raw args to forward to real gh (everything after "gh"). */
   rawArgs: string[];
@@ -38,6 +43,8 @@ const COMMANDS_WITH_SUBCOMMANDS = new Set([
 /** Flags that consume the next argument as their value. */
 const FLAGS_WITH_VALUES = new Set([
   "-R", "--repo", "--method", "-X",
+  "--title", "--body", "--base", "--head",
+  "-f", "--field", "-F", "--raw-field",
 ]);
 
 /** Flags whose presence implies a POST body. */
@@ -75,7 +82,7 @@ export function parseGhArgs(args: string[]): ParsedGhCommand {
     command: "",
     subcommand: null,
     positionalArgs: [],
-    flags: {},
+    flags: { fields: [] },
     rawArgs: [...args],
   };
 
@@ -180,6 +187,29 @@ function extractFlag(result: ParsedGhCommand, flag: string, value: string): void
     case "-X":
       result.flags.method = value;
       break;
+    case "--title":
+      result.flags.title = value;
+      break;
+    case "--body":
+      result.flags.body = value;
+      break;
+    case "--base":
+      result.flags.base = value;
+      break;
+    case "--head":
+      result.flags.head = value;
+      break;
+    case "-f":
+    case "--field":
+    case "-F":
+    case "--raw-field": {
+      result.flags.hasBodyParams = true;
+      const eqIdx = value.indexOf("=");
+      if (eqIdx !== -1) {
+        result.flags.fields.push({ key: value.slice(0, eqIdx), value: value.slice(eqIdx + 1) });
+      }
+      break;
+    }
   }
 }
 
@@ -511,6 +541,215 @@ function evaluateApiIssues(match: ApiEndpointMatch): PolicyDecision {
   return { action: "deny", reason: `API issues ${match.method} is not allowed` };
 }
 
+// --- Direct API Mode (Phase 6) ---
+
+/**
+ * Execute an allowed gh command by calling the GitHub REST API directly.
+ * Used inside containers where no real gh binary is available.
+ */
+async function executeViaApi(
+  parsed: ParsedGhCommand,
+  decision: PolicyDecision,
+  policy: GitHubPolicy,
+  policyPath: string,
+): Promise<void> {
+  const token = process.env.GH_TOKEN;
+  if (!token) {
+    process.stderr.write("[bouncer:gh] error: GH_TOKEN is required for API mode\n");
+    process.exit(1);
+  }
+
+  const { command, subcommand } = parsed;
+
+  if (command === "pr" && subcommand === "create") {
+    await apiPrCreate(parsed, policy, policyPath, token, decision);
+  } else if (command === "pr" && subcommand === "view") {
+    await apiPrView(parsed, policy, token);
+  } else if (command === "pr" && subcommand === "edit") {
+    await apiPrEdit(parsed, policy, token);
+  } else if (command === "pr" && subcommand === "list") {
+    await apiPrList(policy, token);
+  } else if (command === "issue" && subcommand === "list") {
+    await apiIssueList(policy, token);
+  } else if (command === "issue" && subcommand === "view") {
+    await apiIssueView(parsed, policy, token);
+  } else if (command === "api") {
+    await apiDirect(parsed, policy, token);
+  } else if (command === "--help" || command === "--version" ||
+             subcommand === "--help") {
+    // Help/version — just print a stub
+    process.stdout.write(`gh shim (bouncer API mode)\n`);
+  } else {
+    process.stderr.write(
+      `error: 'gh ${command}${subcommand ? " " + subcommand : ""}' is not available in this sandbox environment\n`
+    );
+    process.exit(1);
+  }
+}
+
+async function githubFetch(
+  path: string,
+  token: string,
+  opts: { method?: string; body?: Record<string, unknown> } = {},
+): Promise<unknown> {
+  const url = path.startsWith("http") ? path : `https://api.github.com${path}`;
+  const resp = await fetch(url, {
+    method: opts.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(opts.body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    process.stderr.write(`[bouncer:gh] API error: ${resp.status} ${text}\n`);
+    process.exit(1);
+  }
+
+  return resp.json();
+}
+
+async function apiPrCreate(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  policyPath: string,
+  token: string,
+  decision: PolicyDecision,
+): Promise<void> {
+  if (!parsed.flags.head) {
+    process.stderr.write("[bouncer:gh] error: --head is required for pr create\n");
+    process.exit(1);
+  }
+
+  const body: Record<string, unknown> = {
+    title: parsed.flags.title ?? "Untitled PR",
+    body: parsed.flags.body ?? "",
+    head: parsed.flags.head,
+  };
+  // Only include base if explicitly provided — let GitHub default to the repo's default branch
+  if (parsed.flags.base) {
+    body.base = parsed.flags.base;
+  }
+
+  const data = await githubFetch(`/repos/${policy.repo}/pulls`, token, {
+    method: "POST",
+    body,
+  }) as { html_url: string; number: number };
+  // Print PR URL to stdout (same as real gh)
+  process.stdout.write(`${data.html_url}\n`);
+
+  // Capture PR number if policy requires it
+  if (decision.action === "allow-and-capture-pr") {
+    const sessionId = deriveSessionId(policyPath);
+    if (sessionId) {
+      policy.canCreatePr = false;
+      policy.ownedPrNumber = data.number;
+      process.stderr.write(`[bouncer:gh] captured PR #${data.number}\n`);
+      await writePolicyState(sessionId, policy);
+    }
+  }
+}
+
+async function apiPrView(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write("[bouncer:gh] error: PR number required\n");
+    process.exit(1);
+  }
+  const data = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token);
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiPrEdit(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write("[bouncer:gh] error: PR number required\n");
+    process.exit(1);
+  }
+  const body: Record<string, unknown> = {};
+  if (parsed.flags.title) body.title = parsed.flags.title;
+  if (parsed.flags.body) body.body = parsed.flags.body;
+
+  const data = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token, {
+    method: "PATCH",
+    body,
+  });
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiPrList(
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const data = await githubFetch(`/repos/${policy.repo}/pulls`, token);
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiIssueList(
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const data = await githubFetch(`/repos/${policy.repo}/issues`, token);
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiIssueView(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const issueNumber = parsed.positionalArgs[0];
+  if (!issueNumber) {
+    process.stderr.write("[bouncer:gh] error: issue number required\n");
+    process.exit(1);
+  }
+  const data = await githubFetch(`/repos/${policy.repo}/issues/${issueNumber}`, token);
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiDirect(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const endpoint = parsed.positionalArgs[0];
+  if (!endpoint) {
+    process.stderr.write("[bouncer:gh] error: API endpoint required\n");
+    process.exit(1);
+  }
+
+  // Expand {owner} and {repo} placeholders
+  const expandedEndpoint = endpoint
+    .replace("{owner}", policy.repo.split("/")[0] ?? "")
+    .replace("{repo}", policy.repo.split("/")[1] ?? "");
+
+  // Infer POST when body params are present (same as real gh / parseApiEndpoint)
+  let method = (parsed.flags.method ?? "GET").toUpperCase();
+  let body: Record<string, unknown> | undefined;
+  if (parsed.flags.fields.length > 0) {
+    if (method === "GET") method = "POST";
+    body = {};
+    for (const { key, value } of parsed.flags.fields) {
+      body[key] = value;
+    }
+  }
+
+  const data = await githubFetch(expandedEndpoint, token, { method, body });
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
 // --- Main (standalone entry point) ---
 
 function parsePrNumberFromOutput(output: string): number | null {
@@ -519,45 +758,19 @@ function parsePrNumberFromOutput(output: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-async function main(): Promise<void> {
-  const policyPath = process.env.BOUNCER_GITHUB_POLICY;
-  const realGh = process.env.BOUNCER_REAL_GH;
-
-  if (!policyPath || !realGh) {
-    process.stderr.write(
-      "[bouncer:gh] error: BOUNCER_GITHUB_POLICY and BOUNCER_REAL_GH must be set\n"
-    );
-    process.exit(1);
-  }
-
-  let policy: GitHubPolicy;
-  try {
-    policy = await readPolicyState(policyPath);
-  } catch (err) {
-    process.stderr.write(`[bouncer:gh] error: failed to read policy: ${err}\n`);
-    process.exit(1);
-  }
-
-  const args = process.argv.slice(2);
-  const parsed = parseGhArgs(args);
-  const decision = evaluatePolicy(parsed, policy);
-
-  // Log deny decisions to stderr for the policy event parser.
-  // Allow events are intentionally not logged to stderr — agents capture
-  // stderr as tool output, and the [bouncer:gh] lines confuse them into
-  // thinking there's no real output from gh.
-  const op = [parsed.command, parsed.subcommand, ...parsed.positionalArgs]
-    .filter(Boolean)
-    .join(" ");
-  if (decision.action === "deny") {
-    process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`, () => {
-      process.exit(1);
-    });
-    return;
-  }
-
+/**
+ * Execute an allowed command by proxying to the real gh binary.
+ * Used on the host or inside safehouse where real gh is available.
+ */
+function execRealGhCommand(
+  realGh: string,
+  args: string[],
+  parsed: ParsedGhCommand,
+  decision: PolicyDecision,
+  policy: GitHubPolicy,
+  policyPath: string,
+): void {
   if (decision.action === "allow-and-capture-pr") {
-    // Spawn real gh, capture stdout to extract PR number
     try {
       const result = execFileSync(realGh, args, {
         stdio: ["inherit", "pipe", "inherit"],
@@ -568,7 +781,6 @@ async function main(): Promise<void> {
 
       let prNumber = parsePrNumberFromOutput(stdout);
       if (prNumber === null) {
-        // Fallback: attempt to parse JSON output (e.g. from gh api)
         try {
           const parsed = JSON.parse(stdout);
           if (parsed && typeof parsed === "object" && typeof (parsed as { number?: unknown }).number === "number") {
@@ -581,13 +793,14 @@ async function main(): Promise<void> {
 
       const sessionId = deriveSessionId(policyPath);
       if (sessionId) {
-        // Always prevent further PR creation after a successful PR-create command
         policy.canCreatePr = false;
         if (prNumber !== null) {
           policy.ownedPrNumber = prNumber;
           process.stderr.write(`[bouncer:gh] captured PR #${prNumber}\n`);
         }
-        await writePolicyState(sessionId, policy);
+        // Note: writePolicyState is async but we're in a sync context here.
+        // Fire-and-forget — the state file write is best-effort.
+        writePolicyState(sessionId, policy).catch(() => {});
       }
     } catch (err: unknown) {
       const exitCode = (err as { status?: number }).status ?? 1;
@@ -605,6 +818,49 @@ async function main(): Promise<void> {
   }
 }
 
+async function main(): Promise<void> {
+  const policyPath = process.env.BOUNCER_GITHUB_POLICY;
+  const realGh = process.env.BOUNCER_REAL_GH; // may be undefined in container
+
+  if (!policyPath) {
+    process.stderr.write(
+      "[bouncer:gh] error: BOUNCER_GITHUB_POLICY must be set\n"
+    );
+    process.exit(1);
+  }
+
+  let policy: GitHubPolicy;
+  try {
+    policy = await readPolicyState(policyPath);
+  } catch (err) {
+    process.stderr.write(`[bouncer:gh] error: failed to read policy: ${err}\n`);
+    process.exit(1);
+  }
+
+  const args = process.argv.slice(2);
+  const parsed = parseGhArgs(args);
+  const decision = evaluatePolicy(parsed, policy);
+
+  // Log deny decisions to stderr for the policy event parser.
+  const op = [parsed.command, parsed.subcommand, ...parsed.positionalArgs]
+    .filter(Boolean)
+    .join(" ");
+  if (decision.action === "deny") {
+    process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`, () => {
+      process.exit(1);
+    });
+    return;
+  }
+
+  if (realGh) {
+    // Host/safehouse path: proxy to real gh
+    execRealGhCommand(realGh, args, parsed, decision, policy, policyPath);
+  } else {
+    // Container path: call GitHub API directly
+    await executeViaApi(parsed, decision, policy, policyPath);
+  }
+}
+
 /**
  * Derive session ID from policy file path.
  * Path format: <POLICY_DIR>/<sessionId>-github-policy.json
@@ -618,8 +874,7 @@ function deriveSessionId(policyPath: string): string | null {
 
 // Run main if this is the entry point.
 // Check env vars to avoid triggering when imported as a library.
-// Use top-level await so Node keeps the event loop alive until main() completes.
-if (process.env.BOUNCER_GITHUB_POLICY && process.env.BOUNCER_REAL_GH) {
+if (process.env.BOUNCER_GITHUB_POLICY) {
   try {
     await main();
   } catch (err) {
