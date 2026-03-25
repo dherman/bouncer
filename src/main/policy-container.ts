@@ -82,10 +82,11 @@ export function policyToContainerConfig(
 
   // Agent package dir → /usr/local/lib/agent/
   // Must include package.json so ESM resolution works (the agent uses "type": "module").
+  // Not read-only because Docker needs to create the node_modules mountpoint inside it.
   mounts.push({
     hostPath: ctx.agentBinPath,
     containerPath: "/usr/local/lib/agent",
-    readOnly: true,
+    readOnly: false,
   });
 
   // App node_modules → /usr/local/lib/agent/node_modules/
