@@ -457,8 +457,12 @@ export class SessionManager {
             : undefined;
 
           // Container env — only explicit vars, no process.env inheritance
+          const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
+          if (!anthropicKey) {
+            console.warn("[container] ANTHROPIC_API_KEY not found in process.env — agent may fail to authenticate");
+          }
           const containerEnv: Record<string, string> = {
-            ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
+            ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
             ...(shimEnv.GH_TOKEN ? { GH_TOKEN: shimEnv.GH_TOKEN } : {}),
             ...(process.env.GIT_AUTHOR_NAME ? { GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME } : {}),
             ...(process.env.GIT_AUTHOR_EMAIL ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL } : {}),
