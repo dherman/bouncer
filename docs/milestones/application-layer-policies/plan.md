@@ -40,7 +40,7 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
   - [x] 6.1 Handle `policy-event` in `App.tsx`
   - [x] 6.2 Extend `SandboxLog` component
   - [x] 6.3 Show GitHub session info in the session list
-  - [ ] 6.4 Visual verification
+  - [x] 6.4 Visual verification
 - [ ] **[Phase 7: End-to-End Validation](#phase-7-end-to-end-validation)**
   - [ ] 7.1 Create a test repository
   - [ ] 7.2 Manual end-to-end test
