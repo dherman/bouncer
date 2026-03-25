@@ -32,14 +32,14 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 4.4 Add `ContainerPolicy` to `PolicyTemplate` type
   - [x] 4.5 Add `container` config to policy templates
   - [x] 4.6 Test: mount list generation, gitconfig content, credential helper output
-- [ ] **[Phase 5: Claude Code + Replay Agent in Container](#phase-5-claude-code--replay-agent-in-container)**
-  - [ ] 5.1 Extend container path in `createSession` for Claude Code and replay agents
-  - [ ] 5.2 Generate container-specific `gh` wrapper script and mount table
-  - [ ] 5.3 Set container env vars (`BOUNCER_GITHUB_POLICY`, `GH_TOKEN`, no `BOUNCER_REAL_GH`)
-  - [ ] 5.4 Add container path to `resolveClaudeCodeCommand` and `resolveReplayAgentCommand`
-  - [ ] 5.5 Add `generatePrePushHookForContainer()` to `hooks.ts`
-  - [ ] 5.6 Update `closeSession` and `cleanupOrphans` for container artifacts
-  - [ ] 5.7 Test: full agent session in container with policy enforcement
+- [x] **[Phase 5: Claude Code + Replay Agent in Container](#phase-5-claude-code--replay-agent-in-container)**
+  - [x] 5.1 Extend container path in `createSession` for Claude Code and replay agents
+  - [x] 5.2 Generate container-specific `gh` wrapper script and mount table
+  - [x] 5.3 Set container env vars (`BOUNCER_GITHUB_POLICY`, `GH_TOKEN`, no `BOUNCER_REAL_GH`)
+  - [x] 5.4 Add container path to `resolveClaudeCodeCommand` and `resolveReplayAgentCommand`
+  - [x] 5.5 Add `generatePrePushHookForContainer()` to `hooks.ts`
+  - [x] 5.6 Update `closeSession` and `cleanupOrphans` for container artifacts
+  - [x] 5.7 Test: full agent session in container with policy enforcement
 - [ ] **[Phase 6: `gh` Shim Direct API Mode](#phase-6-gh-shim-direct-api-mode)** *(parallel with Phases 3-5)*
   - [ ] 6.1 Relax `BOUNCER_REAL_GH` requirement in shim entry point
   - [ ] 6.2 Add dispatch branch: real gh vs. direct API

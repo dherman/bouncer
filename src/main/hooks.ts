@@ -77,6 +77,15 @@ exit 0
 }
 
 /**
+ * Generate the pre-push hook for container use.
+ * Same logic as generatePrePushHook, but with a hardcoded container path
+ * for the allowed-refs file (mounted at /etc/bouncer/allowed-refs.txt).
+ */
+export function generatePrePushHookForContainer(): string {
+  return generatePrePushHook("/etc/bouncer/allowed-refs.txt");
+}
+
+/**
  * Install the pre-push hook for a session.
  * Creates the hooks directory, writes the hook script and allowed-refs file,
  * and sets core.hooksPath in the worktree's git config.
