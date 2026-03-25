@@ -39,7 +39,7 @@ export interface ContainerConfig {
 
 export interface ContainerHandle {
   process: ChildProcess;
-  containerId: string;
+  containerName: string;
   kill(): void;
 }
 
@@ -127,6 +127,8 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
   const args: string[] = [
     "run", "-i", "--rm",
     "--name", name,
+    "--label", "glitterball.managed=true",
+    "--label", `glitterball.sessionId=${config.sessionId}`,
   ];
 
   for (const m of config.mounts) {
@@ -159,9 +161,13 @@ export function spawnContainer(config: ContainerConfig): ContainerHandle {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
+  proc.on("error", (err) => {
+    console.error(`[container] Failed to spawn docker process for ${name}:`, err);
+  });
+
   return {
     process: proc,
-    containerId: name,
+    containerName: name,
     kill() {
       proc.kill();
       // Force-remove in case the process doesn't exit cleanly.
@@ -195,7 +201,11 @@ export async function cleanupOrphanContainers(
   try {
     const result = await execFileAsync(
       "docker",
-      ["ps", "-a", "--filter", `name=${CONTAINER_PREFIX}-`, "--format", "{{.Names}}"],
+      [
+        "ps", "-a",
+        "--filter", "label=glitterball.managed=true",
+        "--format", "{{.Label \"glitterball.sessionId\"}}\t{{.Names}}",
+      ],
       { timeout: 10_000 },
     );
     stdout = result.stdout;
@@ -203,10 +213,10 @@ export async function cleanupOrphanContainers(
     return; // Docker not available or error — nothing to clean up
   }
 
-  const names = stdout.trim().split("\n").filter(Boolean);
-  for (const name of names) {
-    const sessionId = name.slice(CONTAINER_PREFIX.length + 1);
-    if (!activeSessionIds.has(sessionId)) {
+  const lines = stdout.trim().split("\n").filter(Boolean);
+  for (const line of lines) {
+    const [sessionId, name] = line.split("\t");
+    if (sessionId && name && !activeSessionIds.has(sessionId)) {
       console.log(`[container] Removing orphan container: ${name}`);
       try {
         await execFileAsync("docker", ["rm", "-f", name], { timeout: 10_000 });
