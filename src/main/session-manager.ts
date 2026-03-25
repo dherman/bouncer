@@ -283,35 +283,42 @@ export class SessionManager {
 
           // Configure the worktree for HTTPS push with gh credential helper.
           // SSH push fails in the sandbox (SSH_AUTH_SOCK socket is blocked),
-          // so switch the remote to HTTPS and use gh as the credential helper.
+          // so switch the remote to HTTPS and configure git to use gh for auth.
           const { execFile: execFileCb } = await import("node:child_process");
           const { promisify: pfy } = await import("node:util");
           const execFileP = pfy(execFileCb);
           const httpsUrl = `https://github.com/${repo}.git`;
           await execFileP("git", ["-C", workingDir, "remote", "set-url", "origin", httpsUrl]).catch(() => {});
 
-          // Install gh shim and set up environment (only if gh is available)
+          // Install gh shim and set up environment (only if gh is available).
+          // Also configure git credential helper to use the real gh binary
+          // so git push via HTTPS can authenticate.
           const realGhPath = await findRealGh();
           if (realGhPath) {
             const ghShimPath = app.isPackaged
               ? join(app.getAppPath(), "dist", "main", "gh-shim.js")
               : join(app.getAppPath(), "src", "main", "gh-shim.ts");
-            // Use "node" (not process.execPath which is Electron) since the
-            // shim runs as a standalone subprocess invoked by the agent.
             const shimDir = await installGhShim(id, ghShimPath, "node");
-            // Resolve GH_TOKEN for the agent — gh uses keyring auth which
-            // the sandbox may block, so provide the token via env var.
+
+            // Resolve GH_TOKEN — gh uses keyring auth which the sandbox blocks.
             let ghToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
             if (!ghToken) {
               try {
-                const { execFile: execFileCb } = await import("node:child_process");
-                const { promisify: pfy } = await import("node:util");
-                const execFileP = pfy(execFileCb);
                 const { stdout } = await execFileP("gh", ["auth", "token"]);
                 ghToken = stdout.trim();
               } catch {
                 console.warn("Could not resolve gh auth token — gh commands may fail in sandbox");
               }
+            }
+
+            // Configure git credential helper so git push HTTPS uses the token.
+            // Point to the *real* gh (not the shim) for credential operations.
+            if (ghToken) {
+              await execFileP("git", ["-C", workingDir, "config", "credential.helper", ""]).catch(() => {});
+              await execFileP("git", ["-C", workingDir, "config",
+                `credential.https://github.com.helper`,
+                `!${realGhPath} auth git-credential`,
+              ]).catch(() => {});
             }
 
             shimEnv = {
