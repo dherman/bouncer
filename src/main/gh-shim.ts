@@ -591,9 +591,9 @@ async function githubFetch(
   path: string,
   token: string,
   opts: { method?: string; body?: Record<string, unknown> } = {},
-): Promise<Response> {
+): Promise<unknown> {
   const url = path.startsWith("http") ? path : `https://api.github.com${path}`;
-  return fetch(url, {
+  const resp = await fetch(url, {
     method: opts.method ?? "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -603,6 +603,14 @@ async function githubFetch(
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    process.stderr.write(`[bouncer:gh] API error: ${resp.status} ${text}\n`);
+    process.exit(1);
+  }
+
+  return resp.json();
 }
 
 async function apiPrCreate(
@@ -612,23 +620,25 @@ async function apiPrCreate(
   token: string,
   decision: PolicyDecision,
 ): Promise<void> {
-  const resp = await githubFetch(`/repos/${policy.repo}/pulls`, token, {
-    method: "POST",
-    body: {
-      title: parsed.flags.title ?? "Untitled PR",
-      body: parsed.flags.body ?? "",
-      base: parsed.flags.base ?? "main",
-      head: parsed.flags.head ?? "",
-    },
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    process.stderr.write(`[bouncer:gh] API error: ${resp.status} ${text}\n`);
+  if (!parsed.flags.head) {
+    process.stderr.write("[bouncer:gh] error: --head is required for pr create\n");
     process.exit(1);
   }
 
-  const data = await resp.json() as { html_url: string; number: number };
+  const body: Record<string, unknown> = {
+    title: parsed.flags.title ?? "Untitled PR",
+    body: parsed.flags.body ?? "",
+    head: parsed.flags.head,
+  };
+  // Only include base if explicitly provided — let GitHub default to the repo's default branch
+  if (parsed.flags.base) {
+    body.base = parsed.flags.base;
+  }
+
+  const data = await githubFetch(`/repos/${policy.repo}/pulls`, token, {
+    method: "POST",
+    body,
+  }) as { html_url: string; number: number };
   // Print PR URL to stdout (same as real gh)
   process.stdout.write(`${data.html_url}\n`);
 
@@ -654,8 +664,7 @@ async function apiPrView(
     process.stderr.write("[bouncer:gh] error: PR number required\n");
     process.exit(1);
   }
-  const resp = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token);
-  const data = await resp.json();
+  const data = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 
@@ -673,11 +682,10 @@ async function apiPrEdit(
   if (parsed.flags.title) body.title = parsed.flags.title;
   if (parsed.flags.body) body.body = parsed.flags.body;
 
-  const resp = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token, {
+  const data = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token, {
     method: "PATCH",
     body,
   });
-  const data = await resp.json();
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 
@@ -685,8 +693,7 @@ async function apiPrList(
   policy: GitHubPolicy,
   token: string,
 ): Promise<void> {
-  const resp = await githubFetch(`/repos/${policy.repo}/pulls`, token);
-  const data = await resp.json();
+  const data = await githubFetch(`/repos/${policy.repo}/pulls`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 
@@ -694,8 +701,7 @@ async function apiIssueList(
   policy: GitHubPolicy,
   token: string,
 ): Promise<void> {
-  const resp = await githubFetch(`/repos/${policy.repo}/issues`, token);
-  const data = await resp.json();
+  const data = await githubFetch(`/repos/${policy.repo}/issues`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 
@@ -709,8 +715,7 @@ async function apiIssueView(
     process.stderr.write("[bouncer:gh] error: issue number required\n");
     process.exit(1);
   }
-  const resp = await githubFetch(`/repos/${policy.repo}/issues/${issueNumber}`, token);
-  const data = await resp.json();
+  const data = await githubFetch(`/repos/${policy.repo}/issues/${issueNumber}`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 
@@ -730,17 +735,18 @@ async function apiDirect(
     .replace("{owner}", policy.repo.split("/")[0] ?? "")
     .replace("{repo}", policy.repo.split("/")[1] ?? "");
 
-  const method = (parsed.flags.method ?? "GET").toUpperCase();
+  // Infer POST when body params are present (same as real gh / parseApiEndpoint)
+  let method = (parsed.flags.method ?? "GET").toUpperCase();
   let body: Record<string, unknown> | undefined;
   if (parsed.flags.fields.length > 0) {
+    if (method === "GET") method = "POST";
     body = {};
     for (const { key, value } of parsed.flags.fields) {
       body[key] = value;
     }
   }
 
-  const resp = await githubFetch(expandedEndpoint, token, { method, body });
-  const data = await resp.json();
+  const data = await githubFetch(expandedEndpoint, token, { method, body });
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 
