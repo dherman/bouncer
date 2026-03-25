@@ -456,10 +456,15 @@ export class SessionManager {
             ? join(POLICY_DIR, "gh-shim-bundle.js")
             : undefined;
 
-          // Container env — only explicit vars, no process.env inheritance
+          // Container env — only explicit vars, no process.env inheritance.
+          // The agent can't access the macOS keychain from inside the container,
+          // so the API key must be in the environment when the app starts.
           const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
           if (!anthropicKey) {
-            console.warn("[container] ANTHROPIC_API_KEY not found in process.env — agent may fail to authenticate");
+            console.warn(
+              "[container] ANTHROPIC_API_KEY not set — export it before running the app.\n" +
+              "  Example: ANTHROPIC_API_KEY=sk-ant-... ELECTRON_RUN_AS_NODE= npm run dev"
+            );
           }
           const containerEnv: Record<string, string> = {
             ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
