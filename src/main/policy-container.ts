@@ -3,9 +3,6 @@
  * Parallel to policy-sandbox.ts, which does the same for safehouse.
  */
 
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { PolicyTemplate } from "./types.js";
 import type { ContainerConfig, ContainerMount } from "./container.js";
 
@@ -15,12 +12,14 @@ export interface ContainerSessionContext {
   gitCommonDir?: string;
   agentBinPath: string;
   nodeModulesPath: string;
+  credentialHelperPath?: string;
   shimBundlePath?: string;
   shimScriptPath?: string;
   hooksDir?: string;
   allowedRefsPath?: string;
   policyStatePath?: string;
   gitconfigPath?: string;
+  /** Mount ~/.ssh into the container. Only set when SSH access is needed. */
   sshDir?: string;
 }
 
@@ -146,14 +145,21 @@ export function policyToContainerConfig(
         readOnly: true,
       });
     }
+
+    if (ctx.credentialHelperPath) {
+      mounts.push({
+        hostPath: ctx.credentialHelperPath,
+        containerPath: "/usr/local/lib/bouncer/gh-credential-helper.js",
+        readOnly: true,
+      });
+    }
   }
 
-  // --- Auth mounts (conditional) ---
+  // --- Auth mounts (opt-in only — SSH keys are sensitive) ---
 
-  const sshDir = ctx.sshDir ?? join(homedir(), ".ssh");
-  if (existsSync(sshDir)) {
+  if (ctx.sshDir) {
     mounts.push({
-      hostPath: sshDir,
+      hostPath: ctx.sshDir,
       containerPath: "/home/agent/.ssh",
       readOnly: true,
     });

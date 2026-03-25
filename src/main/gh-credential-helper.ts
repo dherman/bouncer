@@ -8,8 +8,10 @@
  *   [credential "https://github.com"]
  *       helper = !node /usr/local/lib/bouncer/gh-credential-helper.js
  *
- * Git invokes credential helpers with "get", "store", or "erase" as argv[1].
- * We only respond to "get" and only when the input includes host=github.com.
+ * Git invokes credential helpers with "get", "store", or "erase" as the
+ * first argument. For this Node-based helper (run as `node <script> <action>`),
+ * the action is process.argv[2]. We only respond to "get" and only when
+ * the parsed input has host=github.com and protocol=https.
  */
 
 function readStdin(): Promise<string> {
@@ -21,6 +23,18 @@ function readStdin(): Promise<string> {
   });
 }
 
+function parseCredentialInput(input: string): Record<string, string> {
+  const kv: Record<string, string> = {};
+  for (const line of input.split(/\r?\n/)) {
+    const idx = line.indexOf("=");
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key) kv[key] = value;
+  }
+  return kv;
+}
+
 async function main(): Promise<void> {
   // Only respond to "get" requests
   if (process.argv[2] !== "get") {
@@ -28,13 +42,21 @@ async function main(): Promise<void> {
   }
 
   const input = await readStdin();
-  if (!input.includes("host=github.com")) {
+  const kv = parseCredentialInput(input);
+
+  // Exact host match — prevent github.com.evil.com from matching
+  if (kv["host"] !== "github.com") {
+    process.exit(0);
+  }
+  if (kv["protocol"] && kv["protocol"] !== "https") {
     process.exit(0);
   }
 
   const token = process.env.GH_TOKEN;
   if (!token) {
-    process.exit(1);
+    // Exit 0 with no output so git can fall back to other helpers
+    process.stderr.write("gh-credential-helper: GH_TOKEN is not set\n");
+    process.exit(0);
   }
 
   process.stdout.write(
