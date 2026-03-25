@@ -281,6 +281,15 @@ export class SessionManager {
           await writePolicyState(id, githubPolicy);
           await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
 
+          // Configure the worktree for HTTPS push with gh credential helper.
+          // SSH push fails in the sandbox (SSH_AUTH_SOCK socket is blocked),
+          // so switch the remote to HTTPS and use gh as the credential helper.
+          const { execFile: execFileCb } = await import("node:child_process");
+          const { promisify: pfy } = await import("node:util");
+          const execFileP = pfy(execFileCb);
+          const httpsUrl = `https://github.com/${repo}.git`;
+          await execFileP("git", ["-C", workingDir, "remote", "set-url", "origin", httpsUrl]).catch(() => {});
+
           // Install gh shim and set up environment (only if gh is available)
           const realGhPath = await findRealGh();
           if (realGhPath) {
@@ -290,17 +299,40 @@ export class SessionManager {
             // Use "node" (not process.execPath which is Electron) since the
             // shim runs as a standalone subprocess invoked by the agent.
             const shimDir = await installGhShim(id, ghShimPath, "node");
+            // Resolve GH_TOKEN for the agent — gh uses keyring auth which
+            // the sandbox may block, so provide the token via env var.
+            let ghToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+            if (!ghToken) {
+              try {
+                const { execFile: execFileCb } = await import("node:child_process");
+                const { promisify: pfy } = await import("node:util");
+                const execFileP = pfy(execFileCb);
+                const { stdout } = await execFileP("gh", ["auth", "token"]);
+                ghToken = stdout.trim();
+              } catch {
+                console.warn("Could not resolve gh auth token — gh commands may fail in sandbox");
+              }
+            }
+
             shimEnv = {
               BOUNCER_GITHUB_POLICY: policyStatePath(id),
               BOUNCER_REAL_GH: realGhPath,
               PATH: `${shimDir}:${process.env.PATH ?? ""}`,
+              ...(ghToken ? { GH_TOKEN: ghToken } : {}),
             };
-            // Ensure safehouse forwards the shim env vars to the agent
+            // Ensure safehouse forwards the shim env vars and GitHub
+            // auth/network vars to the agent
             if (sandboxConfig) {
               sandboxConfig.envPassthrough.push(
                 "BOUNCER_GITHUB_POLICY",
                 "BOUNCER_REAL_GH",
                 "PATH",
+                // Git push via SSH needs the auth socket
+                "SSH_AUTH_SOCK",
+                "GIT_SSH_COMMAND",
+                // gh CLI auth
+                "GH_TOKEN",
+                "GITHUB_TOKEN",
               );
             }
           } else {
