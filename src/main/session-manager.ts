@@ -37,11 +37,22 @@ import type {
   AgentType,
   GitHubPolicy,
   Message,
+  SandboxBackend,
   SandboxViolationInfo,
   SessionSummary,
   SessionUpdate,
   ToolCallInfo,
 } from "./types.js";
+import {
+  isDockerAvailable,
+  ensureAgentImage,
+  buildDockerRunArgs,
+  spawnContainer,
+  removeContainer,
+  cleanupOrphanContainers,
+  type ContainerConfig,
+  type ContainerHandle,
+} from "./container.js";
 
 interface SpawnConfig {
   cmd: string;
@@ -140,10 +151,14 @@ function resolveAgentCommand(
   agentType: AgentType,
   cwd: string,
   sandboxConfig: SandboxConfig | null,
+  containerConfig: ContainerConfig | null,
   worktreePath?: string,
 ): SpawnConfig {
   if (agentType === "echo") {
-    return resolveEchoAgentCommand(); // no sandbox for echo agent
+    if (containerConfig) {
+      return { cmd: "docker", args: buildDockerRunArgs(containerConfig) };
+    }
+    return resolveEchoAgentCommand();
   }
   if (agentType === "replay") {
     return resolveReplayAgentCommand(cwd, sandboxConfig, worktreePath ?? cwd);
@@ -162,9 +177,11 @@ interface SessionState {
   agentType: AgentType;
   projectDir: string;
   worktree: WorktreeInfo | null;
+  sandboxBackend: SandboxBackend;
   sandboxConfig: SandboxConfig | null;
   sandboxMonitor: SandboxMonitor | null;
   sandboxViolations: SandboxViolationInfo[];
+  containerHandle: ContainerHandle | null;
   policyId: string | null;
   githubPolicy: GitHubPolicy | null;
 }
@@ -217,9 +234,11 @@ export class SessionManager {
       agentType,
       projectDir,
       worktree,
+      sandboxBackend: "none",
       sandboxConfig,
       sandboxMonitor: null,
       sandboxViolations: [],
+      containerHandle: null,
       policyId: resolvedPolicyId,
       githubPolicy: null,
     };
@@ -350,18 +369,58 @@ export class SessionManager {
         }
       }
 
-      // Spawn the agent (sandboxed via safehouse if config present)
+      // Select sandbox backend: Docker container > safehouse > none
+      const dockerAvailable = await isDockerAvailable();
+      let containerConfig: ContainerConfig | null = null;
+
+      if (agentType === "echo" && dockerAvailable) {
+        // Build container config for echo agent
+        const imageTag = await ensureAgentImage();
+        const echoAgentHost = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
+        const appNodeModules = join(app.getAppPath(), "node_modules");
+        const tsxBin = createRequire(app.getAppPath() + "/").resolve("tsx/cli");
+        const tsxDir = join(tsxBin, "..", "..");
+
+        containerConfig = {
+          sessionId: id,
+          image: imageTag,
+          command: ["npx", "tsx", "/app/agents/echo-agent.ts"],
+          workdir: "/workspace",
+          mounts: [
+            { hostPath: echoAgentHost, containerPath: "/app/agents/echo-agent.ts", readOnly: true },
+            { hostPath: appNodeModules, containerPath: "/app/node_modules", readOnly: true },
+          ],
+          env: { NODE_PATH: "/app/node_modules" },
+          networkMode: "bridge",
+        };
+        session.sandboxBackend = "container";
+      } else if (sandboxConfig) {
+        session.sandboxBackend = "safehouse";
+      } else {
+        session.sandboxBackend = "none";
+      }
+
+      // Spawn the agent
       const { cmd, args, env, cwd } = resolveAgentCommand(
         agentType,
         workingDir,
         sandboxConfig,
+        containerConfig,
         worktree?.path,
       );
-      const agentProcess = spawn(cmd, args, {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, ...env, ...shimEnv },
-        cwd,
-      });
+
+      let agentProcess: ChildProcess;
+      if (containerConfig) {
+        const handle = spawnContainer(containerConfig);
+        session.containerHandle = handle;
+        agentProcess = handle.process;
+      } else {
+        agentProcess = spawn(cmd, args, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: { ...process.env, ...env, ...shimEnv },
+          cwd,
+        });
+      }
       session.agentProcess = agentProcess;
 
       // Capture stderr for error reporting and parse policy events.
@@ -605,7 +664,12 @@ export class SessionManager {
       });
     } catch (err) {
       console.error(`Failed to create session ${id}:`, err);
-      session.agentProcess?.kill();
+      if (session.containerHandle) {
+        session.containerHandle.kill();
+      } else {
+        session.agentProcess?.kill();
+      }
+      await removeContainer(id).catch(() => {});
       if (worktree) {
         try {
           await this.worktreeManager.remove(worktree);
@@ -691,7 +755,18 @@ export class SessionManager {
 
     session.status = "closed";
     session.sandboxMonitor?.stop();
-    session.agentProcess?.kill();
+    if (session.containerHandle) {
+      session.containerHandle.kill();
+    } else {
+      session.agentProcess?.kill();
+    }
+
+    // Clean up container
+    if (session.sandboxBackend === "container") {
+      await removeContainer(sessionId).catch((err) =>
+        console.warn(`Failed to remove container for session ${sessionId}:`, err)
+      );
+    }
 
     // Clean up application-layer policy artifacts
     if (session.githubPolicy) {
@@ -742,12 +817,15 @@ export class SessionManager {
     );
   }
 
-  /** Remove orphan worktree directories and sandbox policies left behind by a previous crash. */
+  /** Remove orphan worktree directories, sandbox policies, and containers left behind by a previous crash. */
   async cleanupOrphans(): Promise<void> {
     const activeIds = new Set(this.sessions.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
     await cleanupOrphanPolicies(activeIds);
     await cleanupOrphanGitHubArtifacts(activeIds);
+    await cleanupOrphanContainers(activeIds).catch((err) =>
+      console.warn("Failed to clean up orphan containers:", err)
+    );
   }
 
   getSandboxViolations(sessionId: string): SandboxViolationInfo[] {
@@ -788,8 +866,8 @@ export class SessionManager {
       messageCount: session.messages.length,
       agentType: session.agentType,
       projectDir: session.projectDir,
-      sandboxed: session.sandboxConfig !== null,
-      sandboxBackend: session.sandboxConfig !== null ? "safehouse" : "none",
+      sandboxed: session.sandboxBackend !== "none",
+      sandboxBackend: session.sandboxBackend,
       policyId: session.policyId,
       policyName,
       githubRepo,
