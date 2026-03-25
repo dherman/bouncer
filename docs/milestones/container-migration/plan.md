@@ -18,13 +18,13 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 2.2 Implement `removeContainer` and `cleanupOrphanContainers`
   - [x] 2.3 Add `SandboxBackend` type and `sandboxBackend` to `SessionSummary`
   - [x] 2.4 Test: bidirectional stdio through `docker run -i`
-- [ ] **[Phase 3: Echo Agent in Container](#phase-3-echo-agent-in-container-session-manager-integration)**
-  - [ ] 3.1 Add backend selection logic to `createSession`
-  - [ ] 3.2 Add container path to `resolveAgentCommand` for echo agent
-  - [ ] 3.3 Update `closeSession` and `cleanupOrphans` for container backend
-  - [ ] 3.4 Populate `sandboxBackend` in `summarize`
-  - [ ] 3.5 Call `ensureAgentImage()` before first session creation
-  - [ ] 3.6 Test: echo agent ACP round-trip in container
+- [x] **[Phase 3: Echo Agent in Container](#phase-3-echo-agent-in-container-session-manager-integration)**
+  - [x] 3.1 Add backend selection logic to `createSession`
+  - [x] 3.2 Add container path to `resolveAgentCommand` for echo agent
+  - [x] 3.3 Update `closeSession` and `cleanupOrphans` for container backend
+  - [x] 3.4 Populate `sandboxBackend` in `summarize`
+  - [x] 3.5 Call `ensureAgentImage()` before first session creation
+  - [x] 3.6 Test: echo agent ACP round-trip in container
 - [ ] **[Phase 4: Bind Mount Strategy + Git Configuration](#phase-4-bind-mount-strategy--git-configuration)**
   - [ ] 4.1 Create `policy-container.ts` with `policyToContainerConfig()`
   - [ ] 4.2 Implement `generateGitconfig()` for system gitconfig
