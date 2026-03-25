@@ -32,7 +32,10 @@ import {
   findRealGh,
   cleanupOrphanGitHubArtifacts,
 } from "./github-policy.js";
-import { installHooks, cleanupHooks } from "./hooks.js";
+import { installHooks, cleanupHooks, generatePrePushHookForContainer, allowedRefsPath } from "./hooks.js";
+import { policyToContainerConfig, generateGitconfig, type ContainerSessionContext } from "./policy-container.js";
+import { writeFile, mkdir, rm, chmod } from "node:fs/promises";
+import { POLICY_DIR } from "./sandbox.js";
 import type {
   AgentType,
   GitHubPolicy,
@@ -370,57 +373,181 @@ export class SessionManager {
       const dockerAvailable = await isDockerAvailable();
       let containerConfig: ContainerConfig | null = null;
 
-      if (agentType === "echo" && dockerAvailable) {
-        // Build container config for echo agent
+      if (dockerAvailable) {
         const imageTag = await ensureAgentImage();
-        const appNodeModules = join(app.getAppPath(), "node_modules");
 
-        let echoAgentHost: string;
-        let echoAgentContainerPath: string;
-        let echoCommand: string[];
-        if (app.isPackaged) {
-          echoAgentHost = join(app.getAppPath(), "dist", "agents", "echo-agent.js");
-          echoAgentContainerPath = "/app/agents/echo-agent.js";
-          echoCommand = ["node", echoAgentContainerPath];
-        } else {
-          echoAgentHost = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
-          echoAgentContainerPath = "/app/agents/echo-agent.ts";
-          echoCommand = ["npx", "tsx", echoAgentContainerPath];
+        if (agentType === "echo") {
+          // Echo agent: simple container with agent script mounted
+          const appNodeModules = join(app.getAppPath(), "node_modules");
+          let echoAgentHost: string;
+          let echoAgentContainerPath: string;
+          let echoCommand: string[];
+          if (app.isPackaged) {
+            echoAgentHost = join(app.getAppPath(), "dist", "agents", "echo-agent.js");
+            echoAgentContainerPath = "/app/agents/echo-agent.js";
+            echoCommand = ["node", echoAgentContainerPath];
+          } else {
+            echoAgentHost = join(app.getAppPath(), "src", "agents", "echo-agent.ts");
+            echoAgentContainerPath = "/app/agents/echo-agent.ts";
+            echoCommand = ["npx", "tsx", echoAgentContainerPath];
+          }
+          containerConfig = {
+            sessionId: id,
+            image: imageTag,
+            command: echoCommand,
+            workdir: "/workspace",
+            mounts: [
+              { hostPath: echoAgentHost, containerPath: echoAgentContainerPath, readOnly: true },
+              { hostPath: appNodeModules, containerPath: "/app/node_modules", readOnly: true },
+            ],
+            env: { NODE_PATH: "/app/node_modules" },
+            networkMode: "bridge",
+          };
+        } else if (template && (agentType === "claude-code" || agentType === "replay")) {
+          // Claude Code / replay: full container config via policyToContainerConfig
+          const appRequire = createRequire(app.getAppPath() + "/");
+          // Resolve to the agent package root (not dist/) so the mount includes package.json
+          // which ESM needs for bare-specifier resolution.
+          const agentPkgDir = join(appRequire.resolve("@zed-industries/claude-agent-acp/package.json"), "..");
+          const appNodeModules = join(app.getAppPath(), "node_modules");
+
+          // Build container-specific artifacts on the host
+          await mkdir(POLICY_DIR, { recursive: true });
+
+          // Container gh wrapper script
+          let containerShimScript: string | undefined;
+          let containerGitconfigFile: string | undefined;
+          let containerHooksDir: string | undefined;
+          let containerCredHelper: string | undefined;
+
+          if (template.github && session.githubPolicy) {
+            // Write container gh wrapper (points to container paths)
+            const wrapperPath = join(POLICY_DIR, `${id}-container-gh-wrapper`);
+            await writeFile(wrapperPath, `#!/bin/bash\nexec node /usr/local/lib/bouncer/gh-shim.js "$@"\n`, "utf-8");
+            await chmod(wrapperPath, 0o755);
+            containerShimScript = wrapperPath;
+
+            // Write container-mode hooks (with container path for allowed-refs)
+            containerHooksDir = join(POLICY_DIR, `${id}-container-hooks`);
+            await mkdir(containerHooksDir, { recursive: true });
+            const hookContent = generatePrePushHookForContainer();
+            const hookPath = join(containerHooksDir, "pre-push");
+            await writeFile(hookPath, hookContent, "utf-8");
+            await chmod(hookPath, 0o755);
+
+            // Write gitconfig
+            const gitconfigContent = generateGitconfig({
+              hooksPath: "/etc/bouncer/hooks",
+              credentialHelperPath: "/usr/local/lib/bouncer/gh-credential-helper.js",
+              userName: process.env.GIT_AUTHOR_NAME,
+              userEmail: process.env.GIT_AUTHOR_EMAIL,
+            });
+            containerGitconfigFile = join(POLICY_DIR, `${id}-gitconfig`);
+            await writeFile(containerGitconfigFile, gitconfigContent, "utf-8");
+
+            // Credential helper script path
+            containerCredHelper = app.isPackaged
+              ? join(app.getAppPath(), "dist", "main", "gh-credential-helper.js")
+              : join(app.getAppPath(), "src", "main", "gh-credential-helper.ts");
+          }
+
+          // Resolve the shim bundle — mount whenever GitHub policy is active,
+          // independent of whether a host gh binary was found.
+          const shimBundlePath = (template.github && session.githubPolicy)
+            ? join(POLICY_DIR, "gh-shim-bundle.js")
+            : undefined;
+
+          // Container env — only explicit vars, no process.env inheritance.
+          // The container runs Linux, where the Claude CLI reads credentials
+          // from ~/.claude/.credentials.json (not the macOS keychain).
+          // Extract from macOS keychain and write a credentials file for the container.
+          const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
+          let claudeCredentialsPath: string | undefined;
+          if (!anthropicKey && process.platform === "darwin") {
+            try {
+              const { execFile: execFileCb2 } = await import("node:child_process");
+              const { promisify: pfy2 } = await import("node:util");
+              const execFileP2 = pfy2(execFileCb2);
+              const { stdout: credJson } = await execFileP2("security", [
+                "find-generic-password", "-s", "Claude Code-credentials", "-w",
+              ]);
+              claudeCredentialsPath = join(POLICY_DIR, `${id}-claude-credentials.json`);
+              await writeFile(claudeCredentialsPath, credJson.trim(), { mode: 0o600 });
+              console.log("[container] Wrote Claude credentials file from macOS keychain");
+            } catch (err) {
+              console.warn("[container] Could not extract Claude credentials from keychain:", err);
+              claudeCredentialsPath = undefined;
+            }
+          }
+          const ghToken = shimEnv.GH_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
+          const containerEnv: Record<string, string> = {
+            ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
+            ...(ghToken ? { GH_TOKEN: ghToken } : {}),
+            ...(process.env.GIT_AUTHOR_NAME ? { GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME } : {}),
+            ...(process.env.GIT_AUTHOR_EMAIL ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL } : {}),
+            ...(process.env.GIT_COMMITTER_NAME ? { GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME } : {}),
+            ...(process.env.GIT_COMMITTER_EMAIL ? { GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL } : {}),
+          };
+
+          const ctx: ContainerSessionContext = {
+            sessionId: id,
+            worktreePath: workingDir,
+            gitCommonDir: worktree?.gitCommonDir,
+            agentBinPath: agentPkgDir,
+            nodeModulesPath: appNodeModules,
+            shimBundlePath: shimBundlePath && containerShimScript ? shimBundlePath : undefined,
+            shimScriptPath: containerShimScript,
+            hooksDir: containerHooksDir,
+            allowedRefsPath: allowedRefsPath(id),
+            policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
+            gitconfigPath: containerGitconfigFile,
+            credentialHelperPath: containerCredHelper,
+            claudeConfigDir: join((await import("node:os")).homedir(), ".claude"),
+            claudeCredentialsPath,
+          };
+
+          containerConfig = policyToContainerConfig(
+            template,
+            ctx,
+            containerEnv,
+            imageTag,
+            ["node", "/usr/local/lib/agent/dist/index.js"],
+          );
         }
 
-        containerConfig = {
-          sessionId: id,
-          image: imageTag,
-          command: echoCommand,
-          workdir: "/workspace",
-          mounts: [
-            { hostPath: echoAgentHost, containerPath: echoAgentContainerPath, readOnly: true },
-            { hostPath: appNodeModules, containerPath: "/app/node_modules", readOnly: true },
-          ],
-          env: { NODE_PATH: "/app/node_modules" },
-          networkMode: "bridge",
-        };
-        session.sandboxBackend = "container";
-      } else if (sandboxConfig) {
+        if (containerConfig) {
+          session.sandboxBackend = "container";
+          // Unset repo-level core.hooksPath so the system gitconfig
+          // (/etc/gitconfig) takes effect inside the container.
+          // installHooks() set it earlier for the safehouse path.
+          if (worktree) {
+            const { execFile: execFileCb3 } = await import("node:child_process");
+            const { promisify: pfy3 } = await import("node:util");
+            const execFileP3 = pfy3(execFileCb3);
+            await execFileP3("git", ["-C", workingDir, "config", "--unset", "core.hooksPath"]).catch(() => {});
+          }
+        }
+      }
+
+      if (!containerConfig && sandboxConfig) {
         session.sandboxBackend = "safehouse";
-      } else {
-        session.sandboxBackend = "none";
+      } else if (!containerConfig) {
+        session.sandboxBackend = session.sandboxBackend === "container" ? "container" : "none";
       }
 
       // Spawn the agent
-      const { cmd, args, env, cwd } = resolveAgentCommand(
-        agentType,
-        workingDir,
-        sandboxConfig,
-        worktree?.path,
-      );
-
       let agentProcess: ChildProcess;
       if (containerConfig) {
         const handle = spawnContainer(containerConfig);
         session.containerHandle = handle;
         agentProcess = handle.process;
       } else {
+        const { cmd, args, env, cwd } = resolveAgentCommand(
+          agentType,
+          workingDir,
+          sandboxConfig,
+          worktree?.path,
+        );
         agentProcess = spawn(cmd, args, {
           stdio: ["pipe", "pipe", "pipe"],
           env: { ...process.env, ...env, ...shimEnv },
@@ -636,7 +763,7 @@ export class SessionManager {
       });
 
       const sessionResp = await connection.newSession({
-        cwd: workingDir,
+        cwd: containerConfig ? "/workspace" : workingDir,
         mcpServers: [],
       });
       session.acpSessionId = sessionResp.sessionId;
@@ -767,11 +894,16 @@ export class SessionManager {
       session.agentProcess?.kill();
     }
 
-    // Clean up container
+    // Clean up container and container-specific host artifacts
     if (session.sandboxBackend === "container") {
       await removeContainer(sessionId).catch((err) =>
         console.warn(`Failed to remove container for session ${sessionId}:`, err)
       );
+      // Clean up container-specific files on the host
+      await rm(join(POLICY_DIR, `${sessionId}-container-gh-wrapper`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${sessionId}-container-hooks`), { recursive: true, force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${sessionId}-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${sessionId}-claude-credentials.json`), { force: true }).catch(() => {});
     }
 
     // Clean up application-layer policy artifacts
@@ -823,7 +955,7 @@ export class SessionManager {
     );
   }
 
-  /** Remove orphan worktree directories, sandbox policies, and containers left behind by a previous crash. */
+  /** Remove orphan worktree directories, sandbox policies, containers, and container artifacts left behind by a previous crash. */
   async cleanupOrphans(): Promise<void> {
     const activeIds = new Set(this.sessions.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
@@ -832,6 +964,24 @@ export class SessionManager {
     await cleanupOrphanContainers(activeIds).catch((err) =>
       console.warn("Failed to clean up orphan containers:", err)
     );
+    // Clean up orphan container artifacts (credentials, gitconfig, wrapper, hooks)
+    try {
+      const { readdir } = await import("node:fs/promises");
+      const files = await readdir(POLICY_DIR).catch(() => [] as string[]);
+      const suffixes = ["-container-gh-wrapper", "-container-hooks", "-gitconfig", "-claude-credentials.json"];
+      for (const f of files) {
+        for (const suffix of suffixes) {
+          if (f.endsWith(suffix)) {
+            const sessionId = f.slice(0, -suffix.length);
+            if (sessionId && !activeIds.has(sessionId)) {
+              await rm(join(POLICY_DIR, f), { recursive: true, force: true }).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch {
+      // Best effort
+    }
   }
 
   getSandboxViolations(sessionId: string): SandboxViolationInfo[] {

@@ -51,7 +51,7 @@ function assert(condition: boolean, msg: string): void {
   assert(mountPaths.includes("/workspace"), "worktree mount");
   assert(mountPaths.includes("/tmp/repo/.git"), "git common dir mount (at host path)");
   assert(mountPaths.includes("/usr/local/lib/agent"), "agent bin mount");
-  assert(mountPaths.includes("/usr/local/lib/node_modules"), "node_modules mount");
+  assert(mountPaths.includes("/usr/local/lib/agent/node_modules"), "node_modules mount");
   assert(mountPaths.includes("/etc/bouncer/hooks"), "hooks mount");
   assert(mountPaths.includes("/etc/bouncer/allowed-refs.txt"), "allowed refs mount");
   assert(mountPaths.includes("/usr/local/bin/gh"), "shim script mount");
@@ -74,7 +74,7 @@ function assert(condition: boolean, msg: string): void {
 
   // Env
   assert(config.env.BOUNCER_GITHUB_POLICY === "/etc/bouncer/github-policy.json", "BOUNCER_GITHUB_POLICY env");
-  assert(config.env.NODE_PATH === "/usr/local/lib/node_modules", "NODE_PATH env");
+  assert(config.env.NODE_PATH === "/usr/local/lib/agent/node_modules", "NODE_PATH env");
   assert(config.env.ANTHROPIC_API_KEY === "test-key", "ANTHROPIC_API_KEY passthrough");
 
   // SSH should NOT be mounted (not provided in ctx)
@@ -155,6 +155,53 @@ function assert(condition: boolean, msg: string): void {
   });
 
   assert(!content.includes("[user]"), "gitconfig omits [user] when not provided");
+}
+
+// --- Test policyToContainerConfig: Claude config and credentials mounts ---
+{
+  const config = policyToContainerConfig(
+    researchOnlyTemplate,
+    {
+      sessionId: "test-claude",
+      worktreePath: "/tmp/wt-claude",
+      agentBinPath: "/app/agent",
+      nodeModulesPath: "/app/node_modules",
+      claudeConfigDir: "/home/testuser/.claude",
+      claudeCredentialsPath: "/tmp/creds.json",
+    },
+    {},
+    "glitterball-agent:claude",
+    ["node", "/usr/local/lib/agent/dist/index.js"],
+  );
+
+  const mountPaths = config.mounts.map((m) => m.containerPath);
+  assert(mountPaths.includes("/home/agent/.claude"), "claude config dir mounted");
+  assert(mountPaths.includes("/home/agent/.claude/.credentials.json"), "claude credentials file mounted");
+
+  const configMount = config.mounts.find((m) => m.containerPath === "/home/agent/.claude");
+  assert(configMount?.readOnly === false, "claude config dir is rw");
+  const credsMount = config.mounts.find((m) => m.containerPath === "/home/agent/.claude/.credentials.json");
+  assert(credsMount?.readOnly === true, "claude credentials file is ro");
+}
+
+// --- Test policyToContainerConfig: no Claude mounts when not provided ---
+{
+  const config = policyToContainerConfig(
+    researchOnlyTemplate,
+    {
+      sessionId: "test-no-claude",
+      worktreePath: "/tmp/wt-no-claude",
+      agentBinPath: "/app/agent",
+      nodeModulesPath: "/app/node_modules",
+    },
+    {},
+    "glitterball-agent:no-claude",
+    ["node", "/usr/local/lib/agent/dist/index.js"],
+  );
+
+  const mountPaths = config.mounts.map((m) => m.containerPath);
+  assert(!mountPaths.includes("/home/agent/.claude"), "no claude config mount when not provided");
+  assert(!mountPaths.includes("/home/agent/.claude/.credentials.json"), "no claude creds mount when not provided");
 }
 
 // --- Results ---

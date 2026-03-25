@@ -21,6 +21,10 @@ export interface ContainerSessionContext {
   gitconfigPath?: string;
   /** Mount ~/.ssh into the container. Only set when SSH access is needed. */
   sshDir?: string;
+  /** Mount ~/.claude into the container for agent authentication. */
+  claudeConfigDir?: string;
+  /** Credentials file extracted from macOS keychain for Linux-mode auth. */
+  claudeCredentialsPath?: string;
 }
 
 /**
@@ -80,17 +84,21 @@ export function policyToContainerConfig(
     });
   }
 
-  // Agent binary dir → /usr/local/lib/agent/
+  // Agent package dir → /usr/local/lib/agent/
+  // Must include package.json so ESM resolution works (the agent uses "type": "module").
+  // Not read-only because Docker needs to create the node_modules mountpoint inside it.
   mounts.push({
     hostPath: ctx.agentBinPath,
     containerPath: "/usr/local/lib/agent",
-    readOnly: true,
+    readOnly: false,
   });
 
-  // App node_modules → /usr/local/lib/node_modules/
+  // App node_modules → /usr/local/lib/agent/node_modules/
+  // Mounted as a child of the agent dir so ESM bare-specifier resolution
+  // finds dependencies by walking up from the agent's package.json.
   mounts.push({
     hostPath: ctx.nodeModulesPath,
-    containerPath: "/usr/local/lib/node_modules",
+    containerPath: "/usr/local/lib/agent/node_modules",
     readOnly: true,
   });
 
@@ -155,7 +163,25 @@ export function policyToContainerConfig(
     }
   }
 
-  // --- Auth mounts (opt-in only — SSH keys are sensitive) ---
+  // --- Auth mounts (opt-in only) ---
+
+  // Claude Code config/state — the CLI reads and writes session state here.
+  // The base image already has the claude binary; we only mount config dirs.
+  if (ctx.claudeConfigDir) {
+    mounts.push(
+      { hostPath: ctx.claudeConfigDir, containerPath: "/home/agent/.claude", readOnly: false },
+    );
+  }
+
+  // Credentials file extracted from macOS keychain — mounted into .claude dir
+  // so the Claude CLI (Linux mode) can read OAuth tokens.
+  if (ctx.claudeCredentialsPath) {
+    mounts.push({
+      hostPath: ctx.claudeCredentialsPath,
+      containerPath: "/home/agent/.claude/.credentials.json",
+      readOnly: true,
+    });
+  }
 
   if (ctx.sshDir) {
     mounts.push({
@@ -176,7 +202,7 @@ export function policyToContainerConfig(
   // --- Build env ---
 
   const containerEnv: Record<string, string> = {
-    NODE_PATH: "/usr/local/lib/node_modules",
+    NODE_PATH: "/usr/local/lib/agent/node_modules",
     ...env,
   };
 
