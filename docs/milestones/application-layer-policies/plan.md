@@ -41,10 +41,10 @@ This plan breaks the [design](design.md) into concrete, sequenced implementation
   - [x] 6.2 Extend `SandboxLog` component
   - [x] 6.3 Show GitHub session info in the session list
   - [x] 6.4 Visual verification
-- [ ] **[Phase 7: End-to-End Validation](#phase-7-end-to-end-validation)**
-  - [ ] 7.1 Create a test repository
-  - [ ] 7.2 Manual end-to-end test
-  - [ ] 7.3 Test git hook enforcement
+- [x] **[Phase 7: End-to-End Validation](#phase-7-end-to-end-validation)**
+  - [x] 7.1 Create a test repository
+  - [x] 7.2 Manual end-to-end test
+  - [x] 7.3 Test git hook enforcement
   - [x] 7.4 Document findings
 
 ## Prerequisites

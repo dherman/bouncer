@@ -95,11 +95,26 @@ The esbuild bundle step at session creation handles dev mode. For production, th
 
 All tests pass in CI (Ubuntu) and locally (macOS).
 
+## Additional Runtime Issues (discovered during full E2E testing)
+
+### Issue 7: Renderer crash — ACP rawOutput is an object
+
+- **Symptom**: Window goes black, React error "Objects are not valid as a React child"
+- **Cause**: ACP's `rawOutput` field is `{type, text}` (an object), not a string as the type declaration claimed. `ToolCallBlock` rendered it directly in a `<pre>` tag.
+- **Fix**: Stringify `rawOutput` in the session manager if not already a string; add defensive `typeof` check in the renderer.
+
+### Issue 8: SSH and keyring auth blocked by sandbox
+
+- **Symptom**: Agent can't `git push` or use `gh pr create` — "SSH is blocked by the sandbox"
+- **Cause**: The Seatbelt sandbox blocks SSH socket access (`SSH_AUTH_SOCK`) and macOS keyring access. Both SSH push and `gh` keyring-based auth fail.
+- **Fix**: (a) Resolve `GH_TOKEN` via `gh auth token` in the main process (outside sandbox) and inject into agent env. (b) Switch worktree remote to HTTPS. (c) Configure git credential helper to use `gh auth git-credential` (reads `GH_TOKEN`). (d) Add auth env vars to safehouse passthrough.
+
 ## Manual Verification
 
 - Live session with `standard-pr` policy against a GitHub repo
 - `gh pr list` returns correct output through the shim
 - `gh pr list --state closed` returns correct output
+- Agent successfully creates commits, pushes to session branch, and creates a PR
 - Policy event log panel appears in the UI
 - GitHub repo badge appears in the session list
 - Session creation and teardown clean up all artifacts
