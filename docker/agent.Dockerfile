@@ -4,17 +4,24 @@
 
 FROM docker/sandbox-templates:claude-code
 
+# Switch to root for system-level changes
+USER root
+
 # Remove the real gh binary so agents must use the Bouncer shim
 RUN rm -f $(which gh 2>/dev/null) || true && \
     rm -f /usr/bin/gh /usr/local/bin/gh 2>/dev/null || true
 
+# Install C toolchain (needed by Rust as a linker)
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Switch to agent user for Rust install (rustup installs per-user)
+USER agent
+
 # Install Rust toolchain (stable) with common components
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain stable --component rust-analyzer,rustfmt,clippy && \
-    echo 'source $HOME/.cargo/env' >> /etc/profile.d/rust.sh
+    sh -s -- -y --default-toolchain stable --component rust-analyzer,rustfmt,clippy
 
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PATH="/home/agent/.cargo/bin:${PATH}"
 
-# Switch to non-root agent user (created in base image)
-USER agent
 WORKDIR /workspace
