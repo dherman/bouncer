@@ -432,7 +432,7 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.sandbox-log-op {
+.sandbox-log-op-violation {
   color: #d9534f;
   font-weight: 600;
   flex-shrink: 0;
@@ -464,8 +464,14 @@ body {
   flex-shrink: 0;
 }
 
+.sandbox-log-op-allow {
+  color: #aaa;
+  font-weight: 400;
+}
+
 .sandbox-log-op-deny {
   color: #d9534f;
+  font-weight: 600;
 }
 
 .sandbox-log-reason {
