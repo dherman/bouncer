@@ -457,10 +457,28 @@ export class SessionManager {
             : undefined;
 
           // Container env — only explicit vars, no process.env inheritance.
-          // Auth is handled by mounting ~/.claude into the container.
-          const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
+          // The container can't access the macOS keychain, so we extract the
+          // Claude auth token on the host and pass it via env var.
+          const { execFile: execFileCb2 } = await import("node:child_process");
+          const { promisify: pfy2 } = await import("node:util");
+          const execFileP2 = pfy2(execFileCb2);
+          let anthropicAuthToken = process.env.ANTHROPIC_API_KEY ?? "";
+          if (!anthropicAuthToken) {
+            try {
+              const { stdout: credJson } = await execFileP2("security", [
+                "find-generic-password", "-s", "Claude Code-credentials", "-w",
+              ]);
+              const creds = JSON.parse(credJson.trim());
+              anthropicAuthToken = creds?.claudeAiOauth?.accessToken ?? "";
+              if (anthropicAuthToken) {
+                console.log("[container] Resolved auth token from macOS keychain");
+              }
+            } catch {
+              console.warn("[container] Could not read Claude auth from keychain — set ANTHROPIC_API_KEY");
+            }
+          }
           const containerEnv: Record<string, string> = {
-            ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
+            ...(anthropicAuthToken ? { ANTHROPIC_AUTH_TOKEN: anthropicAuthToken } : {}),
             ...(shimEnv.GH_TOKEN ? { GH_TOKEN: shimEnv.GH_TOKEN } : {}),
             ...(process.env.GIT_AUTHOR_NAME ? { GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME } : {}),
             ...(process.env.GIT_AUTHOR_EMAIL ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL } : {}),
