@@ -55,6 +55,12 @@ export interface PolicyEvent {
 
 // --- Policy Template Types ---
 
+export interface ContainerPolicy {
+  image?: string;
+  additionalMounts?: Array<{ hostPath: string; containerPath: string; readOnly: boolean }>;
+  networkMode?: "none" | "bridge";
+}
+
 export interface PolicyTemplate {
   id: string;
   name: string;
@@ -65,6 +71,7 @@ export interface PolicyTemplate {
   safehouseIntegrations: string[];
   appendProfile?: string;
   github?: GitHubPolicy;
+  container?: ContainerPolicy;
 }
 
 export interface FilesystemPolicy {

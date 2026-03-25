@@ -28,6 +28,7 @@ export const standardPrTemplate: PolicyTemplate = {
     ownedPrNumber: null,
     canCreatePr: true,
   },
+  container: {},           // Use defaults: bridge network, standard mounts
 };
 
 /**
