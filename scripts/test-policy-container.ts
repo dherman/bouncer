@@ -51,7 +51,7 @@ function assert(condition: boolean, msg: string): void {
   assert(mountPaths.includes("/workspace"), "worktree mount");
   assert(mountPaths.includes("/tmp/repo/.git"), "git common dir mount (at host path)");
   assert(mountPaths.includes("/usr/local/lib/agent"), "agent bin mount");
-  assert(mountPaths.includes("/usr/local/lib/node_modules"), "node_modules mount");
+  assert(mountPaths.includes("/usr/local/lib/agent/node_modules"), "node_modules mount");
   assert(mountPaths.includes("/etc/bouncer/hooks"), "hooks mount");
   assert(mountPaths.includes("/etc/bouncer/allowed-refs.txt"), "allowed refs mount");
   assert(mountPaths.includes("/usr/local/bin/gh"), "shim script mount");
@@ -74,7 +74,7 @@ function assert(condition: boolean, msg: string): void {
 
   // Env
   assert(config.env.BOUNCER_GITHUB_POLICY === "/etc/bouncer/github-policy.json", "BOUNCER_GITHUB_POLICY env");
-  assert(config.env.NODE_PATH === "/usr/local/lib/node_modules", "NODE_PATH env");
+  assert(config.env.NODE_PATH === "/usr/local/lib/agent/node_modules", "NODE_PATH env");
   assert(config.env.ANTHROPIC_API_KEY === "test-key", "ANTHROPIC_API_KEY passthrough");
 
   // SSH should NOT be mounted (not provided in ctx)

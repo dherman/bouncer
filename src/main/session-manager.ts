@@ -406,7 +406,9 @@ export class SessionManager {
         } else if (template && (agentType === "claude-code" || agentType === "replay")) {
           // Claude Code / replay: full container config via policyToContainerConfig
           const appRequire = createRequire(app.getAppPath() + "/");
-          const agentBinDir = join(appRequire.resolve("@zed-industries/claude-agent-acp/dist/index.js"), "..");
+          // Resolve to the agent package root (not dist/) so the mount includes package.json
+          // which ESM needs for bare-specifier resolution.
+          const agentPkgDir = join(appRequire.resolve("@zed-industries/claude-agent-acp/package.json"), "..");
           const appNodeModules = join(app.getAppPath(), "node_modules");
 
           // Build container-specific artifacts on the host
@@ -468,7 +470,7 @@ export class SessionManager {
             sessionId: id,
             worktreePath: workingDir,
             gitCommonDir: worktree?.gitCommonDir,
-            agentBinPath: agentBinDir,
+            agentBinPath: agentPkgDir,
             nodeModulesPath: appNodeModules,
             shimBundlePath: shimBundlePath && containerShimScript ? shimBundlePath : undefined,
             shimScriptPath: containerShimScript,
@@ -484,7 +486,7 @@ export class SessionManager {
             ctx,
             containerEnv,
             imageTag,
-            ["node", "/usr/local/lib/agent/index.js"],
+            ["node", "/usr/local/lib/agent/dist/index.js"],
           );
         }
 

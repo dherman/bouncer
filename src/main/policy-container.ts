@@ -80,17 +80,20 @@ export function policyToContainerConfig(
     });
   }
 
-  // Agent binary dir → /usr/local/lib/agent/
+  // Agent package dir → /usr/local/lib/agent/
+  // Must include package.json so ESM resolution works (the agent uses "type": "module").
   mounts.push({
     hostPath: ctx.agentBinPath,
     containerPath: "/usr/local/lib/agent",
     readOnly: true,
   });
 
-  // App node_modules → /usr/local/lib/node_modules/
+  // App node_modules → /usr/local/lib/agent/node_modules/
+  // Mounted as a child of the agent dir so ESM bare-specifier resolution
+  // finds dependencies by walking up from the agent's package.json.
   mounts.push({
     hostPath: ctx.nodeModulesPath,
-    containerPath: "/usr/local/lib/node_modules",
+    containerPath: "/usr/local/lib/agent/node_modules",
     readOnly: true,
   });
 
@@ -176,7 +179,7 @@ export function policyToContainerConfig(
   // --- Build env ---
 
   const containerEnv: Record<string, string> = {
-    NODE_PATH: "/usr/local/lib/node_modules",
+    NODE_PATH: "/usr/local/lib/agent/node_modules",
     ...env,
   };
 
