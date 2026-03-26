@@ -18,12 +18,12 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 2.3 Add selective TLS MITM for inspected domains
   - [x] 2.4 Implement `domainMatches()` with exact, wildcard, and `*` patterns
   - [x] 2.5 Test: allowed domain tunnels through; denied domain gets 403; inspected domain is MITM'd
-- [ ] **[Phase 3: Container Networking](#phase-3-container-networking)**
-  - [ ] 3.1 Implement `createSessionNetwork()` and `cleanup()` in `proxy-network.ts`
-  - [ ] 3.2 Update `docker/agent.Dockerfile` with entrypoint for CA cert installation
-  - [ ] 3.3 Create `docker/entrypoint.sh`
-  - [ ] 3.4 Add `"proxy"` to `ContainerConfig.networkMode` and `buildDockerRunArgs()`
-  - [ ] 3.5 Test: container on internal network can reach proxy, cannot reach internet directly
+- [x] **[Phase 3: Container Networking](#phase-3-container-networking)**
+  - [x] 3.1 Implement `createSessionNetwork()` and `cleanup()` in `proxy-network.ts`
+  - [x] 3.2 Update `docker/agent.Dockerfile` with entrypoint for CA cert installation
+  - [x] 3.3 Create `docker/entrypoint.sh`
+  - [x] 3.4 Add `"proxy"` to `ContainerConfig.networkMode` and `buildDockerRunArgs()`
+  - [x] 3.5 Test: container on session network routes traffic through proxy, proxy blocks denied domains
 - [ ] **[Phase 4: GitHub Policy Engine Extraction](#phase-4-github-policy-engine-extraction)** *(parallel with Phases 1-3)*
   - [ ] 4.1 Create `github-policy-engine.ts` with `evaluateGitHubRequest()`
   - [ ] 4.2 Extract `parseApiEndpoint()` and REST allowlist logic from `gh-shim.ts`

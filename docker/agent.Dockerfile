@@ -24,4 +24,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 
 ENV PATH="/home/agent/.cargo/bin:${PATH}"
 
+# Prepare CA trust store directory for runtime injection
+USER root
+RUN mkdir -p /usr/local/share/ca-certificates/bouncer
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER agent
 WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
