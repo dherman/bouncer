@@ -152,6 +152,8 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
       );
     }
     args.push("--network", config.networkName);
+    // Ensure host.docker.internal resolves on Linux Docker engines
+    args.push("--add-host=host.docker.internal:host-gateway");
   } else {
     args.push("--network", config.networkMode);
   }

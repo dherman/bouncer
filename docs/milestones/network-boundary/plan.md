@@ -40,13 +40,13 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 6.2 Implement `evaluateGitPush()` ref-name checker
   - [x] 6.3 Wire MITM handler for `github.com` `git-receive-pack` requests
   - [x] 6.4 Test: push to allowed branch passes; push to `main` blocked; `--no-verify` still blocked
-- [ ] **[Phase 7: Session Manager Integration](#phase-7-session-manager-integration)**
-  - [ ] 7.1 Update `createSession` to start proxy + create network before spawning container
-  - [ ] 7.2 Update `policyToContainerConfig()` to inject proxy env vars, CA cert mount, git proxy config
-  - [ ] 7.3 Update `generateGitconfig()` to add `[http] proxy` setting
-  - [ ] 7.4 Update `closeSession` to stop proxy + remove network
-  - [ ] 7.5 Update orphan cleanup for networks
-  - [ ] 7.6 Wire proxy policy events to ACP session event stream
+- [x] **[Phase 7: Session Manager Integration](#phase-7-session-manager-integration)**
+  - [x] 7.1 Update `createSession` to start proxy + create network before spawning container
+  - [x] 7.2 Update `policyToContainerConfig()` to inject proxy env vars, CA cert mount, git proxy config
+  - [x] 7.3 Update `generateGitconfig()` to add `[http] proxy` setting
+  - [x] 7.4 Update `closeSession` to stop proxy + remove network
+  - [x] 7.5 Update orphan cleanup for networks
+  - [x] 7.6 Wire proxy policy events to ACP session event stream
   - [ ] 7.7 Test: end-to-end PR workflow through proxy
 - [ ] **[Phase 8: Policy Templates, UI, and Validation](#phase-8-policy-templates-ui-and-validation)**
   - [ ] 8.1 Update `NetworkPolicy` type with `inspectedDomains`
