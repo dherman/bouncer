@@ -41,6 +41,7 @@ import type {
   AgentType,
   GitHubPolicy,
   Message,
+  PolicyEvent,
   SandboxBackend,
   SandboxViolationInfo,
   SessionSummary,
@@ -57,7 +58,7 @@ import {
   type ContainerHandle,
 } from "./container.js";
 import { ensureCA } from "./proxy-tls.js";
-import { startProxy, type ProxyHandle } from "./proxy.js";
+import { startProxy, type ProxyConfig, type ProxyHandle } from "./proxy.js";
 import { createGitHubMitmHandler } from "./proxy-github.js";
 import { createSessionNetwork, cleanupOrphanNetworks, type SessionNetwork } from "./proxy-network.js";
 
@@ -506,23 +507,24 @@ export class SessionManager {
           // --- Network proxy (M7) ---
           // Start the proxy and create a session network when the template
           // uses filtered network access and Docker is available.
+          let proxyCaCertPath: string | undefined;
           if (template.network.access === "filtered") {
             const ca = await ensureCA();
-            const proxyUrl = `http://host.docker.internal:0`; // port filled after start
+            proxyCaCertPath = ca.certPath;
 
-            // Determine inspected domains (GitHub domains when policy is active)
-            const inspectedDomains = template.github
+            // Only inspect GitHub domains when a GitHub policy is active
+            const inspectedDomains = session.githubPolicy
               ? ["api.github.com", "github.com"]
               : [];
 
-            const proxyConfig = {
+            const proxyConfig: ProxyConfig = {
               sessionId: id,
               port: 0,
               allowedDomains: template.network.allowedDomains,
               inspectedDomains,
               githubPolicy: session.githubPolicy,
               ca,
-              onPolicyEvent: (event: import("./types.js").PolicyEvent) => {
+              onPolicyEvent: (event: PolicyEvent) => {
                 this.emit("session-update", {
                   sessionId: id,
                   type: "policy-event",
@@ -536,23 +538,37 @@ export class SessionManager {
             };
 
             // Wire the GitHub MITM handler if GitHub policy is active
-            if (template.github && session.githubPolicy) {
-              (proxyConfig as any).onMitmRequest = createGitHubMitmHandler(proxyConfig as any);
+            if (session.githubPolicy) {
+              proxyConfig.onMitmRequest = createGitHubMitmHandler(proxyConfig);
             }
 
-            const proxyHandle = await startProxy(proxyConfig);
-            session.proxyHandle = proxyHandle;
+            try {
+              const proxyHandle = await startProxy(proxyConfig);
+              session.proxyHandle = proxyHandle;
 
-            const sessionNetwork = await createSessionNetwork(id);
-            session.sessionNetwork = sessionNetwork;
+              const sessionNetwork = await createSessionNetwork(id);
+              session.sessionNetwork = sessionNetwork;
+            } catch (err) {
+              // Best-effort cleanup if proxy started but network failed
+              if (session.proxyHandle) {
+                await session.proxyHandle.stop().catch(() => {});
+              }
+              if (session.sessionNetwork) {
+                await session.sessionNetwork.cleanup().catch(() => {});
+              }
+              session.proxyHandle = null;
+              session.sessionNetwork = null;
+              throw err;
+            }
 
             // Add proxy env vars to container env
-            const proxyEnvUrl = `http://host.docker.internal:${proxyHandle.port}`;
+            const proxyEnvUrl = `http://host.docker.internal:${session.proxyHandle.port}`;
             containerEnv.HTTP_PROXY = proxyEnvUrl;
             containerEnv.HTTPS_PROXY = proxyEnvUrl;
             containerEnv.http_proxy = proxyEnvUrl;
             containerEnv.https_proxy = proxyEnvUrl;
-            containerEnv.NO_PROXY = "localhost,127.0.0.1";
+            containerEnv.NO_PROXY = "localhost,127.0.0.1,::1";
+            containerEnv.no_proxy = "localhost,127.0.0.1,::1";
 
             // Regenerate gitconfig with proxy setting if it was already created
             if (containerGitconfigFile) {
@@ -566,7 +582,7 @@ export class SessionManager {
               await writeFile(containerGitconfigFile, gitconfigContent, "utf-8");
             }
 
-            console.log(`[session] Proxy started on port ${proxyHandle.port} for session ${id}`);
+            console.log(`[session] Proxy started on port ${session.proxyHandle.port} for session ${id}`);
           }
 
           const ctx: ContainerSessionContext = {
@@ -582,7 +598,7 @@ export class SessionManager {
             policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
-            caCertPath: session.proxyHandle ? (await ensureCA()).certPath : undefined,
+            caCertPath: proxyCaCertPath,
             userGitconfigPath: await (async () => {
               // Sanitize the user's gitconfig: remove credential helpers that
               // reference host-only paths (e.g. /opt/homebrew/bin/gh).
