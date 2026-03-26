@@ -31,34 +31,33 @@ export interface ContainerSessionContext {
 
 /**
  * Sanitize a user's gitconfig for container use.
- * Removes credential helper entries that reference host-only paths
- * (e.g. /opt/homebrew/bin/gh) which don't exist inside the container.
- * Our /etc/gitconfig provides the correct credential configuration.
+ * Removes [credential] sections entirely — these often reference
+ * host-only binaries (e.g. /opt/homebrew/bin/gh) that don't exist
+ * in the container. Our /etc/gitconfig provides the correct
+ * credential helper configuration.
  */
 export function sanitizeGitconfig(content: string): string {
   const lines = content.split("\n");
   const result: string[] = [];
-  let skipSection = false;
+  let inCredentialSection = false;
 
   for (const line of lines) {
-    // Check for [credential ...] section headers
-    if (/^\[credential\b/.test(line.trim())) {
-      skipSection = true;
-      continue;
+    const trimmed = line.trim();
+
+    // Section headers: [section] or [section "subsection"]
+    if (/^\[/.test(trimmed)) {
+      inCredentialSection = /^\[credential\b/.test(trimmed);
+      if (inCredentialSection) continue;
     }
-    // New section header ends the skip
-    if (/^\[/.test(line.trim()) && skipSection) {
-      skipSection = false;
-    }
-    // Skip indented lines in credential sections
-    if (skipSection && (line.startsWith("\t") || line.startsWith(" "))) {
-      continue;
-    }
-    // Also skip standalone credential.helper lines
-    if (/^\s*credential\./.test(line.trim())) {
-      continue;
-    }
-    skipSection = false;
+
+    // Skip all lines inside a [credential] section (including blank
+    // lines, comments, and non-indented keys) until the next section.
+    if (inCredentialSection) continue;
+
+    // Outside credential sections, also skip standalone credential.helper
+    // lines (rare but possible in older gitconfig formats).
+    if (/^\s*credential\.helper\b/.test(trimmed)) continue;
+
     result.push(line);
   }
   return result.join("\n");

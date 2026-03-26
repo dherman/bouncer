@@ -519,7 +519,7 @@ export class SessionManager {
                 const { sanitizeGitconfig } = await import("./policy-container.js");
                 const sanitized = sanitizeGitconfig(raw);
                 const sanitizedPath = join(POLICY_DIR, `${id}-user-gitconfig`);
-                await writeFile(sanitizedPath, sanitized, "utf-8");
+                await writeFile(sanitizedPath, sanitized, { encoding: "utf-8", mode: 0o600 });
                 return sanitizedPath;
               } catch {
                 return undefined;
