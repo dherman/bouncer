@@ -10,7 +10,6 @@ import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
-import { app } from "electron";
 
 const execFileAsync = promisify(execFile);
 
@@ -34,7 +33,9 @@ export interface ContainerConfig {
   workdir: string;
   mounts: ContainerMount[];
   env: Record<string, string>;
-  networkMode: "none" | "bridge";
+  networkMode: "none" | "bridge" | "proxy";
+  /** Docker network name (required when networkMode is "proxy") */
+  networkName?: string;
 }
 
 export interface ContainerHandle {
@@ -75,7 +76,8 @@ export async function isDockerAvailable(): Promise<boolean> {
 // Image build (Phase 1)
 // ---------------------------------------------------------------------------
 
-function resolveDockerfilePath(): string {
+async function resolveDockerfilePath(): Promise<string> {
+  const { app } = await import("electron");
   if (app.isPackaged) {
     return join(process.resourcesPath, "docker", "agent.Dockerfile");
   }
@@ -83,7 +85,7 @@ function resolveDockerfilePath(): string {
 }
 
 export async function ensureAgentImage(): Promise<string> {
-  const dockerfilePath = resolveDockerfilePath();
+  const dockerfilePath = await resolveDockerfilePath();
   const content = await readFile(dockerfilePath, "utf-8");
   const hash = createHash("sha256").update(content).digest("hex").slice(0, 12);
   const imageTag = `${AGENT_IMAGE_PREFIX}:${hash}`;
@@ -143,7 +145,16 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
   }
 
   args.push("-w", config.workdir);
-  args.push("--network", config.networkMode);
+  if (config.networkMode === "proxy") {
+    if (!config.networkName) {
+      throw new Error(
+        'ContainerConfig.networkName is required when networkMode is "proxy"',
+      );
+    }
+    args.push("--network", config.networkName);
+  } else {
+    args.push("--network", config.networkMode);
+  }
   args.push(config.image);
   args.push(...config.command);
 

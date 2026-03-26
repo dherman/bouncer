@@ -59,7 +59,7 @@ export interface PolicyEvent {
 export interface ContainerPolicy {
   image?: string;
   additionalMounts?: Array<{ hostPath: string; containerPath: string; readOnly: boolean }>;
-  networkMode?: "none" | "bridge";
+  networkMode?: "none" | "bridge" | "proxy";
 }
 
 export interface PolicyTemplate {

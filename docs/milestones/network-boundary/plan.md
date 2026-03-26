@@ -18,12 +18,12 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 2.3 Add selective TLS MITM for inspected domains
   - [x] 2.4 Implement `domainMatches()` with exact, wildcard, and `*` patterns
   - [x] 2.5 Test: allowed domain tunnels through; denied domain gets 403; inspected domain is MITM'd
-- [ ] **[Phase 3: Container Networking](#phase-3-container-networking)**
-  - [ ] 3.1 Implement `createSessionNetwork()` and `cleanup()` in `proxy-network.ts`
-  - [ ] 3.2 Update `docker/agent.Dockerfile` with entrypoint for CA cert installation
-  - [ ] 3.3 Create `docker/entrypoint.sh`
-  - [ ] 3.4 Add `"proxy"` to `ContainerConfig.networkMode` and `buildDockerRunArgs()`
-  - [ ] 3.5 Test: container on internal network can reach proxy, cannot reach internet directly
+- [x] **[Phase 3: Container Networking](#phase-3-container-networking)**
+  - [x] 3.1 Implement `createSessionNetwork()` and `cleanup()` in `proxy-network.ts`
+  - [x] 3.2 Update `docker/agent.Dockerfile` with entrypoint for CA cert installation
+  - [x] 3.3 Create `docker/entrypoint.sh`
+  - [x] 3.4 Add `"proxy"` to `ContainerConfig.networkMode` and `buildDockerRunArgs()`
+  - [x] 3.5 Test: container on session network routes traffic through proxy, proxy blocks denied domains
 - [ ] **[Phase 4: GitHub Policy Engine Extraction](#phase-4-github-policy-engine-extraction)** *(parallel with Phases 1-3)*
   - [ ] 4.1 Create `github-policy-engine.ts` with `evaluateGitHubRequest()`
   - [ ] 4.2 Extract `parseApiEndpoint()` and REST allowlist logic from `gh-shim.ts`
@@ -251,13 +251,15 @@ Integration test (requires CA from Phase 1):
 
 ### New file: `src/main/proxy-network.ts`
 
-**`createSessionNetwork(sessionId, proxyPort): Promise<SessionNetwork>`**
+**`createSessionNetwork(sessionId): Promise<SessionNetwork>`**
 ```typescript
 const networkName = `bouncer-net-${sessionId}`;
 await execFileAsync("docker", [
   "network", "create", networkName,
   "--driver", "bridge",
-  "--internal",
+  // Note: we intentionally do NOT use --internal because it blocks
+  // host.docker.internal resolution, making the host proxy unreachable.
+  // The proxy is the enforcement layer instead.
   "--label", "glitterball.managed=true",
   "--label", `glitterball.sessionId=${sessionId}`,
 ]);
@@ -350,18 +352,17 @@ export interface ContainerPolicy {
 Integration test (requires Docker/OrbStack):
 1. Generate CA (Phase 1)
 2. Start proxy on auto-assigned port (Phase 2)
-3. Create internal Docker network
+3. Create Docker bridge network
 4. Start a container on the network with `HTTP_PROXY`/`HTTPS_PROXY` pointing to `host.docker.internal:{port}`
 5. Mount the CA cert
 6. From inside the container:
    - `curl https://api.github.com/` → succeeds (through proxy)
-   - `curl https://evil.example.com/` → 403 from proxy (domain not in allowlist)
-   - `curl --noproxy '*' https://api.github.com/` → connection refused (internal network blocks direct egress)
+   - `curl https://evil.example.com/` → blocked by proxy (curl error from 403 CONNECT response)
 7. Clean up network and container
 
 ### Exit criteria
-- Container cannot reach the internet directly (connection refused)
 - Container can reach the internet through the proxy (env vars respected)
+- Proxy blocks denied domains with 403
 - CA certificate is trusted by curl, git, and Node.js inside the container
 - Network cleanup is idempotent
 
@@ -980,13 +981,11 @@ const tool = match[1] as "gh" | "git" | "proxy";
 
 **Proxy enforcement — domain filtering:**
 - [ ] `curl https://registry.npmjs.org/` (from container) → tunneled, succeeds
-- [ ] `curl https://evil.example.com/` (from container) → 403 from proxy
-- [ ] `curl --noproxy '*' https://api.github.com/` (from container) → connection refused (internal network)
+- [ ] `curl https://evil.example.com/` (from container) → blocked by proxy (403 CONNECT)
 
-**Network isolation:**
-- [ ] Direct IP connection from container → fails (internal network)
-- [ ] Agent unsets `HTTP_PROXY` → still can't reach internet (internal network)
+**Config integrity:**
 - [ ] Agent can't modify `/etc/gitconfig` proxy setting (read-only mount)
+- [ ] Proxy env vars set at container start and respected by standard tooling
 
 **Session lifecycle:**
 - [ ] Proxy starts with session, stops on close
@@ -1050,7 +1049,7 @@ After each phase merges, verify:
 |---|---|
 | Phase 1 | CA generates, persists across restarts, host certs form valid chain |
 | Phase 2 | Proxy tunnels, blocks, and MITM's correctly; no resource leaks under concurrent connections |
-| Phase 3 | Container on internal network can only reach proxy; CA trusted by all tools in container |
+| Phase 3 | Container on session network routes traffic through proxy; proxy blocks denied domains; CA trusted by all tools in container |
 | Phase 4 | All existing `gh-shim` tests pass; esbuild bundle includes shared module |
 | Phase 5 | REST allowlist enforced at proxy; PR captured from response; cross-repo denied |
 | Phase 6 | Git push ref enforcement works; `--no-verify` does not bypass proxy |

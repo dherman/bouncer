@@ -24,4 +24,14 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 
 ENV PATH="/home/agent/.cargo/bin:${PATH}"
 
+# Prepare CA trust store and entrypoint
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && \
+    rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /usr/local/share/ca-certificates/bouncer
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Entrypoint runs as root to install CA cert, then drops to agent user
 WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

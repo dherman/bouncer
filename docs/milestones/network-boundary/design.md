@@ -178,11 +178,11 @@ export async function createSessionNetwork(
 ```
 docker network create bouncer-net-{sessionId} \
   --driver bridge \
-  --internal            # No direct internet access
-  --opt com.docker.network.bridge.enable_ip_masquerade=false
+  --label glitterball.managed=true \
+  --label glitterball.sessionId={sessionId}
 ```
 
-The `--internal` flag prevents containers on this network from reaching the internet directly. The container reaches the proxy via the Docker host gateway (`host.docker.internal` on Docker Desktop / OrbStack, or the bridge gateway IP).
+The network uses a standard bridge driver. We intentionally do **not** use `--internal` because it blocks DNS resolution of `host.docker.internal`, making the host-based proxy unreachable from the container. Instead, the proxy is the enforcement layer — it blocks disallowed domains via 403 responses. The container reaches the proxy via the Docker host gateway (`host.docker.internal` on Docker Desktop / OrbStack).
 
 **Proxy environment in container:**
 
@@ -467,17 +467,19 @@ mounts.push({
 
 ### Phase 11: Proxy Bypass Prevention
 
-The proxy is only effective if the container cannot reach the internet without going through it. Attack vectors and mitigations:
+The proxy is only effective if the container's traffic goes through it. Since we use a standard bridge network (not `--internal` — see Phase 3 note), network-level blocking is not available. Instead, enforcement relies on proxy env vars, read-only config mounts, and the fact that all standard tooling (curl, git, npm, cargo, pip, Node.js) respects `HTTP_PROXY`/`HTTPS_PROXY`.
 
 | Attack | Mitigation |
 |---|---|
-| Direct IP connection (bypass proxy env vars) | `--internal` Docker network blocks direct egress |
-| DNS resolution to external IP | Docker's internal network doesn't provide DNS for external hosts; the proxy handles resolution |
-| Agent unsets `HTTP_PROXY` env vars | Env vars set at container start; agent can unset in child processes, but `--internal` network still blocks direct connections |
+| Direct IP connection (bypass proxy env vars) | Most tools respect proxy env vars; a determined agent could bypass, but this requires explicit low-level socket code — unlikely in normal agent workflows. Future hardening: iptables rules or `--internal` network with sidecar proxy container. |
+| DNS resolution to external IP | Standard tools resolve via the proxy when `HTTPS_PROXY` is set (CONNECT tunnel); direct DNS is available but connections without the proxy are unmonitored, not blocked |
+| Agent unsets `HTTP_PROXY` env vars | Env vars set at container start; agent can unset in child processes. Mitigated by read-only gitconfig with proxy setting, and by the fact that Claude Code itself respects env vars. |
 | Agent modifies `/etc/gitconfig` proxy setting | System gitconfig is mounted read-only |
-| Agent uses a SOCKS proxy or tunnel | No outbound connectivity except to the proxy host |
+| Agent uses a SOCKS proxy or tunnel | Outbound connectivity is available on the bridge network; this is a known gap accepted for M7 scope |
 
-**Verification test:** From inside the container, `curl https://api.github.com` should fail with a connection error (not a DNS or TLS error). Only `curl --proxy http://host.docker.internal:{port} https://api.github.com` should work — and that goes through the proxy.
+**Why not `--internal`?** Docker's `--internal` flag blocks all egress including DNS resolution of `host.docker.internal`, making the host-based proxy unreachable. An alternative architecture (sidecar proxy container on the same internal network) would restore network-level isolation but adds operational complexity. For M7, proxy-based enforcement is sufficient — the threat model assumes a non-adversarial agent that may be careless but is not actively trying to exfiltrate data.
+
+**Verification test:** From inside the container, `curl --proxy http://host.docker.internal:{port} https://api.github.com` should succeed. `curl --proxy http://host.docker.internal:{port} https://evil.example.com` should return 403.
 
 ### Phase 12: Observability
 
@@ -581,12 +583,11 @@ The `PolicyEvent.tool` type is extended to include `"proxy"`.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | TLS interception breaks pinned certificates | Medium | Tools that pin GitHub's cert will reject proxy's cert | `NODE_EXTRA_CA_CERTS` + system trust store covers most tools; document known incompatibilities |
-| `--internal` Docker network blocks legitimate container-to-container communication | Low | Only relevant if we add multi-container sessions (non-goal) | N/A for M7 scope |
 | Proxy adds latency to every HTTP request | Low-Medium | Noticeable for high-frequency API calls (npm install) | Non-inspected domains are tunneled directly (no TLS termination overhead); proxy runs on localhost |
 | Git pkt-line parsing is incorrect or incomplete | Medium | Push allowed/denied incorrectly | Extensive test coverage against known git push payloads; fall back to deny on parse error |
 | REST allowlist too narrow for future use cases | Low | Agent can't perform legitimate API operations beyond the PR workflow | Allowlist is easy to extend per-template; `research-only` and `permissive` templates can use broader allowlists or bypass inspection |
-| Some HTTP clients ignore `HTTP_PROXY` | Low | Traffic bypasses proxy but hits `--internal` network wall (connection refused) | The agent sees a connection error and may retry; iptables fallback if widespread |
-| OrbStack `--internal` network semantics differ from Docker Desktop | Low | Proxy bypass on OrbStack | Verify `--internal` behavior on OrbStack specifically; test direct egress is blocked |
+| Some HTTP clients ignore `HTTP_PROXY` | Low | Traffic bypasses proxy and reaches the internet unmonitored | Standard tools (curl, git, npm, cargo, pip, Node.js) all respect proxy env vars; iptables fallback or sidecar proxy if gaps found empirically |
+| Agent deliberately bypasses proxy env vars | Low | Unmonitored egress via direct socket connections | Accepted for M7 — threat model assumes non-adversarial agent; future hardening via iptables or sidecar proxy on `--internal` network |
 | Container startup latency increases (CA install + network setup) | Low | `update-ca-certificates` adds ~100ms; network creation adds ~200ms | Acceptable; CA install is one-time per container start |
 
 ## Open Questions
