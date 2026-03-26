@@ -33,6 +33,7 @@ export interface SessionSummary {
   policyName: string | null;
   githubRepo: string | null;
   ownedPrNumber: number | null;
+  networkAccess: "full" | "none" | "filtered" | null;
 }
 
 // --- GitHub Application-Layer Policy Types (M5) ---
@@ -84,7 +85,7 @@ export interface FilesystemPolicy {
 export type NetworkPolicy =
   | { access: "full" }
   | { access: "none" }
-  | { access: "filtered"; allowedDomains: string[] };
+  | { access: "filtered"; allowedDomains: string[]; inspectedDomains: string[] };
 
 export interface EnvPolicy {
   additional: string[];

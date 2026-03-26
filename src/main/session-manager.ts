@@ -512,10 +512,11 @@ export class SessionManager {
             const ca = await ensureCA();
             proxyCaCertPath = ca.certPath;
 
-            // Only inspect GitHub domains when a GitHub policy is active
-            const inspectedDomains = session.githubPolicy
-              ? ["api.github.com", "github.com"]
-              : [];
+            // Use inspected domains from the template
+            const inspectedDomains =
+              template.network.access === "filtered"
+                ? template.network.inspectedDomains
+                : [];
 
             const proxyConfig: ProxyConfig = {
               sessionId: id,
@@ -1200,6 +1201,7 @@ export class SessionManager {
       policyName,
       githubRepo,
       ownedPrNumber,
+      networkAccess: session.proxyHandle ? "filtered" : null,
     };
   }
 }
