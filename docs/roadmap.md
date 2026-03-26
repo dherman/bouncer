@@ -223,7 +223,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **Goal**: Migrate the sandbox primitive from Seatbelt to containers (OrbStack), strengthening application-layer policy enforcement and enabling native network isolation.
 
-**Status**: Complete. See [design](milestones/container-migration/design.md) and [implementation plan](milestones/container-migration/plan.md).
+**Status**: Complete. See [design](history/container-migration/design.md) and [implementation plan](history/container-migration/plan.md).
 
 **What was built:**
 - `docker/agent.Dockerfile`: agent container image based on `docker/sandbox-templates:claude-code`, with Rust toolchain and no real `gh` binary
