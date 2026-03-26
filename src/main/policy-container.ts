@@ -19,12 +19,82 @@ export interface ContainerSessionContext {
   allowedRefsPath?: string;
   policyStatePath?: string;
   gitconfigPath?: string;
+  /** Mount user's ~/.gitconfig for git identity (name, email, etc.). */
+  userGitconfigPath?: string;
   /** Mount ~/.ssh into the container. Only set when SSH access is needed. */
   sshDir?: string;
   /** Mount ~/.claude into the container for agent authentication. */
   claudeConfigDir?: string;
   /** Credentials file extracted from macOS keychain for Linux-mode auth. */
   claudeCredentialsPath?: string;
+}
+
+/**
+ * Sanitize a user's gitconfig for container use.
+ * Removes [credential] sections entirely — these often reference
+ * host-only binaries (e.g. /opt/homebrew/bin/gh) that don't exist
+ * in the container. Our /etc/gitconfig provides the correct
+ * credential helper configuration.
+ */
+export function sanitizeGitconfig(content: string): string {
+  const lines = content.split("\n");
+  const result: string[] = [];
+  let inCredentialSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Section headers: [section] or [section "subsection"]
+    if (/^\[/.test(trimmed)) {
+      inCredentialSection = /^\[credential\b/.test(trimmed);
+      if (inCredentialSection) continue;
+    }
+
+    // Skip all lines inside a [credential] section (including blank
+    // lines, comments, and non-indented keys) until the next section.
+    if (inCredentialSection) continue;
+
+    // Outside credential sections, also skip standalone credential.helper
+    // lines (rare but possible in older gitconfig formats).
+    if (/^\s*credential\.helper\b/.test(trimmed)) continue;
+
+    result.push(line);
+  }
+  return result.join("\n");
+}
+
+/**
+ * Generate a plain JS credential helper script that can be run with `node`
+ * inside the container. We can't mount the TypeScript source directly.
+ */
+export function generateCredentialHelperJs(): string {
+  return `#!/usr/bin/env node
+"use strict";
+function readStdin() {
+  return new Promise((resolve) => {
+    let data = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("end", () => resolve(data));
+  });
+}
+async function main() {
+  if (process.argv[2] !== "get") process.exit(0);
+  const input = await readStdin();
+  const kv = {};
+  for (const line of input.split(/\\r?\\n/)) {
+    const idx = line.indexOf("=");
+    if (idx === -1) continue;
+    kv[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  if (kv["host"] !== "github.com") process.exit(0);
+  if (kv["protocol"] && kv["protocol"] !== "https") process.exit(0);
+  const token = process.env.GH_TOKEN;
+  if (!token) { process.stderr.write("gh-credential-helper: GH_TOKEN is not set\\n"); process.exit(0); }
+  process.stdout.write("protocol=https\\nhost=github.com\\nusername=x-access-token\\npassword=" + token + "\\n\\n");
+}
+main().catch(() => process.exit(1));
+`;
 }
 
 /**
@@ -163,7 +233,18 @@ export function policyToContainerConfig(
     }
   }
 
-  // --- Auth mounts (opt-in only) ---
+  // --- User config mounts ---
+
+  // User's ~/.gitconfig — sanitized copy with credential helpers removed.
+  // The host gitconfig may reference host-only binaries (e.g. /opt/homebrew/bin/gh)
+  // that don't exist in the container. Our /etc/gitconfig handles credentials.
+  if (ctx.userGitconfigPath) {
+    mounts.push({
+      hostPath: ctx.userGitconfigPath,
+      containerPath: "/home/agent/.gitconfig",
+      readOnly: true,
+    });
+  }
 
   // Claude Code config/state — the CLI reads and writes session state here.
   // The base image already has the claude binary; we only mount config dirs.

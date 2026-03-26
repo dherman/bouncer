@@ -2,7 +2,7 @@
  * Test policyToContainerConfig(), generateGitconfig(), and the credential helper.
  */
 
-import { policyToContainerConfig, generateGitconfig } from "../src/main/policy-container.js";
+import { policyToContainerConfig, generateGitconfig, sanitizeGitconfig, generateCredentialHelperJs } from "../src/main/policy-container.js";
 import { standardPrTemplate, researchOnlyTemplate } from "../src/main/policy-templates.js";
 import type { PolicyTemplate } from "../src/main/types.js";
 
@@ -202,6 +202,79 @@ function assert(condition: boolean, msg: string): void {
   const mountPaths = config.mounts.map((m) => m.containerPath);
   assert(!mountPaths.includes("/home/agent/.claude"), "no claude config mount when not provided");
   assert(!mountPaths.includes("/home/agent/.claude/.credentials.json"), "no claude creds mount when not provided");
+}
+
+// --- Test sanitizeGitconfig ---
+{
+  // Basic: removes [credential] section
+  const input = `[user]
+    name = Test User
+    email = test@example.com
+[credential "https://github.com"]
+    helper = !/opt/homebrew/bin/gh auth git-credential
+[core]
+    editor = vim
+`;
+  const result = sanitizeGitconfig(input);
+  assert(result.includes("name = Test User"), "sanitize keeps [user] section");
+  assert(result.includes("editor = vim"), "sanitize keeps [core] section");
+  assert(!result.includes("credential"), "sanitize removes credential section");
+  assert(!result.includes("/opt/homebrew"), "sanitize removes host path");
+}
+
+{
+  // Blank lines and comments inside credential section
+  const input = `[user]
+    name = Test
+[credential]
+    # This is a comment
+    helper = some-helper
+
+    useHttpPath = true
+[alias]
+    co = checkout
+`;
+  const result = sanitizeGitconfig(input);
+  assert(result.includes("name = Test"), "sanitize keeps user with blank lines in cred");
+  assert(result.includes("co = checkout"), "sanitize keeps alias after cred section");
+  assert(!result.includes("helper"), "sanitize removes helper in cred section");
+  assert(!result.includes("useHttpPath"), "sanitize removes all keys in cred section");
+}
+
+{
+  // Standalone credential.helper line (no section header)
+  const input = `[user]
+    name = Test
+credential.helper = store
+[core]
+    editor = vim
+`;
+  const result = sanitizeGitconfig(input);
+  assert(!result.includes("credential.helper"), "sanitize removes standalone credential.helper");
+  assert(result.includes("editor = vim"), "sanitize keeps core after standalone cred line");
+}
+
+{
+  // No credential sections — should be unchanged
+  const input = `[user]
+    name = Test
+[core]
+    editor = vim
+`;
+  const result = sanitizeGitconfig(input);
+  assert(result.includes("name = Test"), "no-op sanitize keeps user");
+  assert(result.includes("editor = vim"), "no-op sanitize keeps core");
+}
+
+// --- Test generateCredentialHelperJs ---
+{
+  const js = generateCredentialHelperJs();
+  assert(js.includes("#!/usr/bin/env node"), "cred helper has shebang");
+  assert(js.includes("GH_TOKEN"), "cred helper reads GH_TOKEN");
+  assert(js.includes("github.com"), "cred helper checks github.com");
+  assert(js.includes("x-access-token"), "cred helper uses x-access-token username");
+  assert(!js.includes(": Promise"), "cred helper has no TypeScript syntax");
+  assert(!js.includes(": string"), "cred helper has no TypeScript type annotations");
 }
 
 // --- Results ---
