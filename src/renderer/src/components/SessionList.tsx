@@ -43,6 +43,15 @@ export function SessionList({ sessions, activeSessionId, violationCounts, policy
           <span className="session-label">
             {projectLabel(s)}
             {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
+            {s.sandboxBackend === 'container' && (
+              <span className="sandbox-badge sandbox-container" title={s.containerName ?? 'Container'}>Container</span>
+            )}
+            {s.sandboxBackend === 'safehouse' && (
+              <span className="sandbox-badge sandbox-seatbelt" title="macOS Seatbelt sandbox">Seatbelt</span>
+            )}
+            {s.sandboxBackend === 'none' && s.status !== 'closed' && (
+              <span className="sandbox-badge sandbox-none" title="No sandbox — agent runs with full host access">Unsandboxed</span>
+            )}
             {s.policyName && (
               <span
                 className={`policy-badge policy-${s.policyId ?? 'default'}`}

@@ -371,6 +371,30 @@ body {
   color: #f0ad4e;
 }
 
+/* Sandbox backend badge */
+.sandbox-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+.sandbox-container {
+  background-color: rgba(0, 120, 212, 0.25);
+  color: #6cb6ff;
+}
+
+.sandbox-seatbelt {
+  background-color: rgba(92, 184, 92, 0.2);
+  color: #7ee787;
+}
+
+.sandbox-none {
+  background-color: rgba(217, 83, 79, 0.2);
+  color: #f08080;
+}
+
 .violation-count {
   font-size: 10px;
   background-color: #d9534f;

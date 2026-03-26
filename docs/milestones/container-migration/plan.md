@@ -48,12 +48,12 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 6.5 Implement flag extraction for `--title`, `--body`, `--base`, `--head`
   - [x] 6.6 Handle `allow-and-capture-pr` via API response
   - [x] 6.7 Test: shim API mode for each supported command
-- [ ] **[Phase 7: Sandbox Monitor + UI Updates](#phase-7-sandbox-monitor--ui-updates)**
-  - [ ] 7.1 Create `ContainerMonitor` class
-  - [ ] 7.2 Start `ContainerMonitor` for container sessions in session manager
-  - [ ] 7.3 Add `containerId` to `SessionSummary`
-  - [ ] 7.4 Update `SessionList.tsx` with sandbox backend badge
-  - [ ] 7.5 Verify `SandboxLog.tsx` works unchanged for both backends
+- [x] **[Phase 7: Sandbox Monitor + UI Updates](#phase-7-sandbox-monitor--ui-updates)**
+  - [x] 7.1 Create `ContainerMonitor` class
+  - [x] 7.2 Start `ContainerMonitor` for container sessions in session manager
+  - [x] 7.3 Add `containerId` to `SessionSummary`
+  - [x] 7.4 Update `SessionList.tsx` with sandbox backend badge
+  - [x] 7.5 Verify `SandboxLog.tsx` works unchanged for both backends
 - [ ] **[Phase 8: End-to-End Validation + Cleanup](#phase-8-end-to-end-validation--cleanup)**
   - [ ] 8.1 Claude Code PR workflow in container (full checklist)
   - [ ] 8.2 Replay agent regression suite in container

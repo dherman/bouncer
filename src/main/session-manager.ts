@@ -17,6 +17,7 @@ import {
   writeAppendProfile,
 } from "./sandbox.js";
 import { SandboxMonitor } from "./sandbox-monitor.js";
+import { ContainerMonitor } from "./container-monitor.js";
 import { PolicyTemplateRegistry } from "./policy-registry.js";
 import { policyToSandboxConfig } from "./policy-sandbox.js";
 import { parsePolicyEvent } from "./policy-event-parser.js";
@@ -180,10 +181,13 @@ interface SessionState {
   sandboxBackend: SandboxBackend;
   sandboxConfig: SandboxConfig | null;
   sandboxMonitor: SandboxMonitor | null;
+  containerMonitor: ContainerMonitor | null;
   sandboxViolations: SandboxViolationInfo[];
   containerHandle: ContainerHandle | null;
   policyId: string | null;
   githubPolicy: GitHubPolicy | null;
+  /** Flush any batched stream-chunk events. Called before stream-end. */
+  flushChunks: () => void;
 }
 
 export class SessionManager {
@@ -237,10 +241,12 @@ export class SessionManager {
       sandboxBackend: "none",
       sandboxConfig,
       sandboxMonitor: null,
+      containerMonitor: null,
       sandboxViolations: [],
       containerHandle: null,
       policyId: resolvedPolicyId,
       githubPolicy: null,
+      flushChunks: () => {},
     };
     this.sessions.set(id, session);
     this.emit("session-update", {
@@ -641,7 +647,10 @@ export class SessionManager {
       const pendingChunks = new Map<string, { messageId: string; text: string }>();
       let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
       const flushChunks = (): void => {
-        chunkFlushTimer = null;
+        if (chunkFlushTimer) {
+          clearTimeout(chunkFlushTimer);
+          chunkFlushTimer = null;
+        }
         for (const [, chunk] of pendingChunks) {
           emitUpdate("session-update", {
             sessionId: id,
@@ -652,6 +661,7 @@ export class SessionManager {
         }
         pendingChunks.clear();
       };
+      session.flushChunks = flushChunks;
       const scheduleChunkFlush = (): void => {
         if (!chunkFlushTimer) {
           chunkFlushTimer = setTimeout(flushChunks, 50);
@@ -768,8 +778,8 @@ export class SessionManager {
       });
       session.acpSessionId = sessionResp.sessionId;
 
-      // Start sandbox monitor if sandboxed
-      if (sandboxConfig && agentProcess.pid) {
+      // Start sandbox monitor if sandboxed via safehouse
+      if (sandboxConfig && !containerConfig && agentProcess.pid) {
         const monitor = new SandboxMonitor();
         monitor.on("violation", (violation) => {
           const info: SandboxViolationInfo = {
@@ -787,6 +797,27 @@ export class SessionManager {
         });
         monitor.start(agentProcess.pid);
         session.sandboxMonitor = monitor;
+      }
+
+      // Start container monitor for container sessions
+      if (session.containerHandle) {
+        const cMonitor = new ContainerMonitor();
+        cMonitor.on("violation", (violation) => {
+          const info: SandboxViolationInfo = {
+            timestamp: violation.timestamp.getTime(),
+            operation: violation.operation,
+            path: violation.path,
+            processName: violation.processName,
+          };
+          session.sandboxViolations.push(info);
+          this.emit("session-update", {
+            sessionId: id,
+            type: "sandbox-violation",
+            violation: info,
+          });
+        });
+        cMonitor.start(session.containerHandle.containerName);
+        session.containerMonitor = cMonitor;
       }
 
       session.status = "ready";
@@ -867,6 +898,9 @@ export class SessionManager {
       console.error(`Prompt failed for session ${sessionId}:`, err);
     }
 
+    // Flush any batched chunks before finalizing
+    session.flushChunks();
+
     // Finalize the agent message
     agentMsg.streaming = false;
     this.emit("session-update", {
@@ -887,7 +921,9 @@ export class SessionManager {
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
     session.status = "closed";
+    session.flushChunks();
     session.sandboxMonitor?.stop();
+    session.containerMonitor?.stop();
     if (session.containerHandle) {
       session.containerHandle.kill();
     } else {
@@ -1024,6 +1060,7 @@ export class SessionManager {
       projectDir: session.projectDir,
       sandboxed: session.sandboxBackend !== "none",
       sandboxBackend: session.sandboxBackend,
+      containerName: session.containerHandle?.containerName ?? null,
       policyId: session.policyId,
       policyName,
       githubRepo,
