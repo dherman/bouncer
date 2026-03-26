@@ -54,11 +54,11 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 7.3 Add `containerId` to `SessionSummary`
   - [x] 7.4 Update `SessionList.tsx` with sandbox backend badge
   - [x] 7.5 Verify `SandboxLog.tsx` works unchanged for both backends
-- [ ] **[Phase 8: End-to-End Validation + Cleanup](#phase-8-end-to-end-validation--cleanup)**
+- [x] **[Phase 8: End-to-End Validation + Cleanup](#phase-8-end-to-end-validation--cleanup)**
   - [x] 8.1 Claude Code PR workflow in container (full checklist)
   - [x] 8.2 ~~Replay agent regression suite in container~~ (skipped — container migration doesn't change tool-level policy enforcement, validated via 8.1 PR workflow)
   - [x] 8.3 Safehouse fallback verification
-  - [ ] 8.4 Orphan cleanup for both backends
+  - [x] 8.4 Orphan cleanup for both backends
   - [x] 8.5 Remove stale TODO comments (none found)
   - [x] 8.6 Update `docs/roadmap.md` — mark M6 complete, update architecture diagram
 
