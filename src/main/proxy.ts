@@ -21,6 +21,8 @@ export interface ProxyConfig {
   sessionId: string;
   /** Port to listen on (0 = auto-assign) */
   port: number;
+  /** Host to bind to (default: "0.0.0.0" for container access) */
+  listenHost?: string;
   /** Domains allowed through the proxy */
   allowedDomains: string[];
   /** Domains requiring TLS interception for content inspection */
@@ -33,6 +35,8 @@ export interface ProxyConfig {
   onPolicyEvent: (event: PolicyEvent) => void;
   /** Optional MITM request handler — wired up in Phase 5 for policy enforcement */
   onMitmRequest?: MitmRequestHandler;
+  /** Disable upstream TLS verification (for testing only) */
+  insecureUpstreamTls?: boolean;
 }
 
 export type MitmRequestHandler = (
@@ -58,19 +62,28 @@ export interface ProxyHandle {
 // Domain matching
 // ---------------------------------------------------------------------------
 
+function normalize(s: string): string {
+  const lower = s.toLowerCase();
+  return lower.endsWith(".") ? lower.slice(0, -1) : lower;
+}
+
 /**
  * Check if `hostname` matches a domain `pattern`.
  * - `"*"` matches everything
  * - `"*.example.com"` matches `foo.example.com` but not `example.com`
  * - `"example.com"` matches only `example.com`
+ *
+ * Matching is case-insensitive and ignores trailing dots.
  */
 export function domainMatches(hostname: string, pattern: string): boolean {
   if (pattern === "*") return true;
-  if (pattern.startsWith("*.")) {
-    const suffix = pattern.slice(1); // ".example.com"
-    return hostname.endsWith(suffix) && hostname.length > suffix.length;
+  const h = normalize(hostname);
+  const p = normalize(pattern);
+  if (p.startsWith("*.")) {
+    const suffix = p.slice(1); // ".example.com"
+    return h.endsWith(suffix) && h.length > suffix.length;
   }
-  return hostname === pattern;
+  return h === p;
 }
 
 function domainAllowed(hostname: string, allowedDomains: string[]): boolean {
@@ -98,6 +111,9 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
 
   const server = http.createServer();
 
+  // Track all incoming connections for clean shutdown
+  server.on("connection", trackSocket);
+
   // --- Plain HTTP requests ---
   server.on("request", (req, res) => {
     if (!req.url) {
@@ -108,7 +124,19 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
 
     let url: URL;
     try {
-      url = new URL(req.url);
+      // Proxy clients typically send absolute URLs (http://host/path).
+      // Some may send origin-form (/path) with a Host header instead.
+      if (req.url.startsWith("/")) {
+        const host = req.headers.host;
+        if (!host) {
+          res.writeHead(400);
+          res.end("Bad request: origin-form URL without Host header\n");
+          return;
+        }
+        url = new URL(req.url, `http://${host}`);
+      } else {
+        url = new URL(req.url);
+      }
     } catch {
       res.writeHead(400);
       res.end("Bad request URL\n");
@@ -133,9 +161,10 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
 
     if (!host || !domainAllowed(host, config.allowedDomains)) {
       emitDenyEvent(config, host ?? "unknown", `CONNECT ${req.url}`);
-      clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
-      clientSocket.write(formatDenyMessage(host ?? "unknown"));
-      clientSocket.destroy();
+      clientSocket.end(
+        "HTTP/1.1 403 Forbidden\r\n\r\n" +
+          formatDenyMessage(host ?? "unknown"),
+      );
       return;
     }
 
@@ -158,7 +187,7 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
 
   // Start listening
   await new Promise<void>((resolve) => {
-    server.listen(config.port, "0.0.0.0", resolve);
+    server.listen(config.port, config.listenHost ?? "0.0.0.0", resolve);
   });
 
   const addr = server.address() as net.AddressInfo;
@@ -209,7 +238,7 @@ function handleMitm(
       inReq: http.IncomingMessage,
       inRes: http.ServerResponse,
     ) => {
-      forwardToUpstream(hostname, port, inReq, inRes);
+      forwardToUpstream(hostname, port, inReq, inRes, config.insecureUpstreamTls);
     };
 
     if (config.onMitmRequest) {
@@ -225,6 +254,10 @@ function handleMitm(
   if (head.length > 0) {
     tlsSocket.unshift(head);
   }
+
+  // Clean up the per-connection MITM server when the socket closes
+  const closeMitm = () => mitmServer.close();
+  tlsSocket.on("close", closeMitm);
 
   tlsSocket.on("error", () => {
     clientSocket.destroy();
@@ -269,6 +302,7 @@ function forwardToUpstream(
   port: number,
   clientReq: http.IncomingMessage,
   clientRes: http.ServerResponse,
+  insecureUpstreamTls: boolean = false,
 ): void {
   const options: https.RequestOptions = {
     hostname,
@@ -276,10 +310,7 @@ function forwardToUpstream(
     path: clientReq.url,
     method: clientReq.method,
     headers: { ...clientReq.headers, host: hostname },
-    // The proxy is the trust boundary — don't verify upstream TLS since we
-    // MITM the connection to enforce policy, and the upstream cert may be
-    // self-signed in test environments.
-    rejectUnauthorized: false,
+    ...(insecureUpstreamTls ? { rejectUnauthorized: false } : {}),
   };
 
   const proxyReq = https.request(options, (proxyRes) => {

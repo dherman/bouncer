@@ -49,11 +49,13 @@ function makeConfig(overrides: Partial<ProxyConfig> = {}): ProxyConfig {
   return {
     sessionId: "test-session",
     port: 0,
+    listenHost: "127.0.0.1",
     allowedDomains: ["*"],
     inspectedDomains: [],
     githubPolicy: null,
     ca,
     onPolicyEvent: (e) => events.push(e),
+    insecureUpstreamTls: true,
     ...overrides,
   };
 }
@@ -143,6 +145,16 @@ await test("wildcard *.example.com does NOT match bare domain", () => {
 await test("no match returns false", () => {
   assert.ok(!domainMatches("evil.com", "example.com"));
   assert.ok(!domainMatches("evil.com", "*.example.com"));
+});
+
+await test("matching is case-insensitive", () => {
+  assert.ok(domainMatches("Example.COM", "example.com"));
+  assert.ok(domainMatches("FOO.example.com", "*.Example.COM"));
+});
+
+await test("trailing dots are ignored", () => {
+  assert.ok(domainMatches("example.com.", "example.com"));
+  assert.ok(domainMatches("example.com", "example.com."));
 });
 
 // --- Proxy: plain HTTP domain filtering ---
