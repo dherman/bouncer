@@ -451,10 +451,10 @@ export class SessionManager {
             containerGitconfigFile = join(POLICY_DIR, `${id}-gitconfig`);
             await writeFile(containerGitconfigFile, gitconfigContent, "utf-8");
 
-            // Credential helper script path
-            containerCredHelper = app.isPackaged
-              ? join(app.getAppPath(), "dist", "main", "gh-credential-helper.js")
-              : join(app.getAppPath(), "src", "main", "gh-credential-helper.ts");
+            // Write a compiled JS credential helper (can't mount TS source directly)
+            const { generateCredentialHelperJs } = await import("./policy-container.js");
+            containerCredHelper = join(POLICY_DIR, `${id}-credential-helper.js`);
+            await writeFile(containerCredHelper, generateCredentialHelperJs(), { mode: 0o755 });
           }
 
           // Resolve the shim bundle — mount whenever GitHub policy is active,
@@ -508,7 +508,23 @@ export class SessionManager {
             policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
-            userGitconfigPath: join((await import("node:os")).homedir(), ".gitconfig"),
+            userGitconfigPath: await (async () => {
+              // Sanitize the user's gitconfig: remove credential helpers that
+              // reference host-only paths (e.g. /opt/homebrew/bin/gh).
+              const home = (await import("node:os")).homedir();
+              const hostGitconfig = join(home, ".gitconfig");
+              try {
+                const { readFile: rf } = await import("node:fs/promises");
+                const raw = await rf(hostGitconfig, "utf-8");
+                const { sanitizeGitconfig } = await import("./policy-container.js");
+                const sanitized = sanitizeGitconfig(raw);
+                const sanitizedPath = join(POLICY_DIR, `${id}-user-gitconfig`);
+                await writeFile(sanitizedPath, sanitized, "utf-8");
+                return sanitizedPath;
+              } catch {
+                return undefined;
+              }
+            })(),
             claudeConfigDir: join((await import("node:os")).homedir(), ".claude"),
             claudeCredentialsPath,
           };
@@ -532,6 +548,10 @@ export class SessionManager {
             const { promisify: pfy3 } = await import("node:util");
             const execFileP3 = pfy3(execFileCb3);
             await execFileP3("git", ["-C", workingDir, "config", "--unset", "core.hooksPath"]).catch(() => {});
+            // Also unset repo-level credential helpers that reference host-only paths.
+            // Our /etc/gitconfig provides the correct credential helper for the container.
+            await execFileP3("git", ["-C", workingDir, "config", "--unset", "credential.helper"]).catch(() => {});
+            await execFileP3("git", ["-C", workingDir, "config", "--unset", "credential.https://github.com.helper"]).catch(() => {});
           }
         }
       }
@@ -941,6 +961,8 @@ export class SessionManager {
       await rm(join(POLICY_DIR, `${sessionId}-container-hooks`), { recursive: true, force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${sessionId}-gitconfig`), { force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${sessionId}-claude-credentials.json`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${sessionId}-credential-helper.js`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${sessionId}-user-gitconfig`), { force: true }).catch(() => {});
     }
 
     // Clean up application-layer policy artifacts
@@ -1005,7 +1027,7 @@ export class SessionManager {
     try {
       const { readdir } = await import("node:fs/promises");
       const files = await readdir(POLICY_DIR).catch(() => [] as string[]);
-      const suffixes = ["-container-gh-wrapper", "-container-hooks", "-gitconfig", "-claude-credentials.json"];
+      const suffixes = ["-container-gh-wrapper", "-container-hooks", "-gitconfig", "-claude-credentials.json", "-credential-helper.js", "-user-gitconfig"];
       for (const f of files) {
         for (const suffix of suffixes) {
           if (f.endsWith(suffix)) {

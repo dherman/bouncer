@@ -30,6 +30,75 @@ export interface ContainerSessionContext {
 }
 
 /**
+ * Sanitize a user's gitconfig for container use.
+ * Removes credential helper entries that reference host-only paths
+ * (e.g. /opt/homebrew/bin/gh) which don't exist inside the container.
+ * Our /etc/gitconfig provides the correct credential configuration.
+ */
+export function sanitizeGitconfig(content: string): string {
+  const lines = content.split("\n");
+  const result: string[] = [];
+  let skipSection = false;
+
+  for (const line of lines) {
+    // Check for [credential ...] section headers
+    if (/^\[credential\b/.test(line.trim())) {
+      skipSection = true;
+      continue;
+    }
+    // New section header ends the skip
+    if (/^\[/.test(line.trim()) && skipSection) {
+      skipSection = false;
+    }
+    // Skip indented lines in credential sections
+    if (skipSection && (line.startsWith("\t") || line.startsWith(" "))) {
+      continue;
+    }
+    // Also skip standalone credential.helper lines
+    if (/^\s*credential\./.test(line.trim())) {
+      continue;
+    }
+    skipSection = false;
+    result.push(line);
+  }
+  return result.join("\n");
+}
+
+/**
+ * Generate a plain JS credential helper script that can be run with `node`
+ * inside the container. We can't mount the TypeScript source directly.
+ */
+export function generateCredentialHelperJs(): string {
+  return `#!/usr/bin/env node
+"use strict";
+function readStdin() {
+  return new Promise((resolve) => {
+    let data = "";
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("end", () => resolve(data));
+  });
+}
+async function main() {
+  if (process.argv[2] !== "get") process.exit(0);
+  const input = await readStdin();
+  const kv = {};
+  for (const line of input.split(/\\r?\\n/)) {
+    const idx = line.indexOf("=");
+    if (idx === -1) continue;
+    kv[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  if (kv["host"] !== "github.com") process.exit(0);
+  if (kv["protocol"] && kv["protocol"] !== "https") process.exit(0);
+  const token = process.env.GH_TOKEN;
+  if (!token) { process.stderr.write("gh-credential-helper: GH_TOKEN is not set\\n"); process.exit(0); }
+  process.stdout.write("protocol=https\\nhost=github.com\\nusername=x-access-token\\npassword=" + token + "\\n\\n");
+}
+main().catch(() => process.exit(1));
+`;
+}
+
+/**
  * Generate the content for a system gitconfig mounted at /etc/gitconfig
  * inside the container. Sets core.hooksPath and the credential helper
  * so git push authenticates via GH_TOKEN.
@@ -167,7 +236,9 @@ export function policyToContainerConfig(
 
   // --- User config mounts ---
 
-  // User's ~/.gitconfig for git identity (name, email, aliases, etc.)
+  // User's ~/.gitconfig — sanitized copy with credential helpers removed.
+  // The host gitconfig may reference host-only binaries (e.g. /opt/homebrew/bin/gh)
+  // that don't exist in the container. Our /etc/gitconfig handles credentials.
   if (ctx.userGitconfigPath) {
     mounts.push({
       hostPath: ctx.userGitconfigPath,
