@@ -54,7 +54,7 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 7.3 Add `containerId` to `SessionSummary`
   - [x] 7.4 Update `SessionList.tsx` with sandbox backend badge
   - [x] 7.5 Verify `SandboxLog.tsx` works unchanged for both backends
-- [x] **[Phase 8: End-to-End Validation + Cleanup](#phase-8-end-to-end-validation--cleanup)**
+- [ ] **[Phase 8: End-to-End Validation + Cleanup](#phase-8-end-to-end-validation--cleanup)**
   - [ ] 8.1 Claude Code PR workflow in container (full checklist)
   - [ ] 8.2 Replay agent regression suite in container
   - [x] 8.3 Safehouse fallback verification
