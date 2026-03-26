@@ -32,16 +32,24 @@ export function createGitHubMitmHandler(
   apiHostname: string = "api.github.com",
   gitHostname: string = "github.com",
 ): MitmRequestHandler {
+  const apiNorm = normalizeHost(apiHostname);
+  const gitNorm = normalizeHost(gitHostname);
   return (req, res, hostname, upstream, upstreamPort) => {
-    if (hostname === apiHostname && config.githubPolicy) {
+    const h = normalizeHost(hostname);
+    if (h === apiNorm && config.githubPolicy) {
       handleGitHubApiRequest(req, res, hostname, upstreamPort, config, upstream);
-    } else if (hostname === gitHostname && config.githubPolicy) {
+    } else if (h === gitNorm && config.githubPolicy) {
       handleGitSmartHttp(req, res, hostname, upstreamPort, config, upstream);
     } else {
       // Non-GitHub inspected domain — forward without policy check
       upstream(req, res);
     }
   };
+}
+
+function normalizeHost(h: string): string {
+  const lower = h.toLowerCase();
+  return lower.endsWith(".") ? lower.slice(0, -1) : lower;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,8 +114,11 @@ function handleGitSmartHttp(
   upstream: (req: http.IncomingMessage, res: http.ServerResponse) => void,
 ): void {
   const method = req.method ?? "GET";
-  const path = req.url ?? "/";
+  const rawPath = req.url ?? "/";
   const policy = config.githubPolicy!;
+
+  // Strip query string before matching to prevent bypass via ?x=y
+  const path = rawPath.split("?")[0];
 
   // Only inspect git-receive-pack (push) requests
   const pushMatch = path.match(GIT_RECEIVE_PACK_RE);
@@ -128,34 +139,53 @@ function handleGitSmartHttp(
       decision: "deny",
       reason: `cross-repo push denied (session repo: ${policy.repo})`,
     });
+    req.resume(); // drain the request body to avoid tying up the connection
     res.writeHead(403, { "Content-Type": "text/plain" });
     res.end(`[bouncer:proxy] DENY push to ${repo} — cross-repo access denied\n`);
     return;
   }
 
-  // Buffer the request body to inspect ref updates
-  const chunks: Buffer[] = [];
-  req.on("data", (chunk: Buffer) => chunks.push(chunk));
+  // Buffer the pkt-line ref header section. The ref updates are small
+  // (typically under 1 KB), followed by a flush packet "0000", then the
+  // potentially large packfile. We buffer up to MAX_HEADER_BYTES to find
+  // the complete ref section, evaluate policy, then stream everything
+  // (buffered prefix + remaining body) to upstream if allowed.
+  const MAX_HEADER_BYTES = 64 * 1024;
+  const headerChunks: Buffer[] = [];
+  let headerSize = 0;
+  let decided = false;
+
+  req.on("data", (chunk: Buffer) => {
+    if (decided) return;
+    headerChunks.push(chunk);
+    headerSize += chunk.length;
+
+    if (headerSize > MAX_HEADER_BYTES) {
+      decided = true;
+      denyPush(req, res, config, "git push", "pkt-line header exceeded size limit");
+    }
+  });
+
   req.on("end", () => {
-    const body = Buffer.concat(chunks);
+    if (decided) return;
+    decided = true;
+
+    const body = Buffer.concat(headerChunks);
     const parseResult = parseGitReceivePack(body);
     const result = evaluateGitPush(parseResult, policy);
 
     if (!result.allowed) {
       const reason = result.reason ?? `ref ${result.deniedRef} not in allowed list`;
-      config.onPolicyEvent({
-        timestamp: Date.now(),
-        tool: "proxy",
-        operation: `git push ${result.deniedRef ?? "unknown"}`,
-        decision: "deny",
-        reason,
-      });
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end(`[bouncer:proxy] DENY push to ${result.deniedRef ?? "unknown"} — ${reason}\n`);
+      denyPush(req, res, config, `git push ${result.deniedRef ?? "unknown"}`, reason);
       return;
     }
 
-    // Push allowed — log and forward with the buffered body
+    if (parseResult.refs.length === 0) {
+      denyPush(req, res, config, "git push (no refs)", "push contained no ref updates");
+      return;
+    }
+
+    // Push allowed — log and forward the buffered body
     config.onPolicyEvent({
       timestamp: Date.now(),
       tool: "proxy",
@@ -164,6 +194,25 @@ function handleGitSmartHttp(
     });
     forwardWithBody(req, res, hostname, upstreamPort, config, body);
   });
+}
+
+function denyPush(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ProxyConfig,
+  operation: string,
+  reason: string,
+): void {
+  config.onPolicyEvent({
+    timestamp: Date.now(),
+    tool: "proxy",
+    operation,
+    decision: "deny",
+    reason,
+  });
+  req.resume(); // drain remaining body
+  res.writeHead(403, { "Content-Type": "text/plain" });
+  res.end(`[bouncer:proxy] DENY push to ${operation.replace("git push ", "")} — ${reason}\n`);
 }
 
 /**
@@ -178,8 +227,6 @@ function forwardWithBody(
   config: ProxyConfig,
   body: Buffer,
 ): void {
-  // Build headers: copy originals but replace transfer-encoding with
-  // content-length since we're sending the pre-buffered body as a whole.
   const { "transfer-encoding": _te, ...forwardHeaders } = clientReq.headers;
   const options: https.RequestOptions = {
     hostname,
