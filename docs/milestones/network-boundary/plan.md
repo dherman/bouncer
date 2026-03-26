@@ -47,7 +47,7 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 7.4 Update `closeSession` to stop proxy + remove network
   - [x] 7.5 Update orphan cleanup for networks
   - [x] 7.6 Wire proxy policy events to ACP session event stream
-  - [ ] 7.7 Test: end-to-end PR workflow through proxy
+  - [x] 7.7 Test: end-to-end PR workflow through proxy
 - [ ] **[Phase 8: Policy Templates, UI, and Validation](#phase-8-policy-templates-ui-and-validation)**
   - [ ] 8.1 Update `NetworkPolicy` type with `inspectedDomains`
   - [ ] 8.2 Update `standard-pr` template with domain allowlist

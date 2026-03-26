@@ -6,7 +6,7 @@ set -e
 # has permission to write to /etc/ssl/certs.
 CA_CERT="/usr/local/share/ca-certificates/bouncer/bouncer-ca.crt"
 if [ -f "$CA_CERT" ]; then
-  update-ca-certificates 2>/dev/null || true
+  update-ca-certificates >/dev/null 2>&1 || true
   export NODE_EXTRA_CA_CERTS="$CA_CERT"
 fi
 
