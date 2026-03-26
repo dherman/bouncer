@@ -1,21 +1,37 @@
 import type { PolicyTemplate } from "./types.js";
 
 /**
- * Standard PR implementation: read-write worktree, network deny intended.
+ * Standard PR implementation: read-write worktree, filtered network via proxy.
  * The tightest practical boundary for coding tasks.
- * Network deny is declared but not yet enforced — requires app-layer proxy (M6).
+ * Network traffic routes through the M7 proxy with domain allowlisting and
+ * GitHub API/git push enforcement.
  */
 export const standardPrTemplate: PolicyTemplate = {
   id: "standard-pr",
   name: "Standard PR",
-  description: "Read-write worktree, standard toolchains (network deny planned)",
+  description: "Read-write worktree, filtered network via proxy, GitHub policy enforcement",
   filesystem: {
     worktreeAccess: "read-write",
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "none",
+    access: "filtered",
+    allowedDomains: [
+      "github.com",
+      "api.github.com",
+      "uploads.github.com",
+      "registry.npmjs.org",
+      "crates.io",
+      "static.crates.io",
+      "index.crates.io",
+      "pypi.org",
+      "files.pythonhosted.org",
+    ],
+    inspectedDomains: [
+      "api.github.com",
+      "github.com",
+    ],
   },
   env: {
     additional: [],
@@ -28,7 +44,7 @@ export const standardPrTemplate: PolicyTemplate = {
     ownedPrNumber: null,
     canCreatePr: true,
   },
-  container: {},           // Use defaults: bridge network, standard mounts
+  container: {},
 };
 
 /**

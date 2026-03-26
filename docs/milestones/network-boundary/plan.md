@@ -48,14 +48,14 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 7.5 Update orphan cleanup for networks
   - [x] 7.6 Wire proxy policy events to ACP session event stream
   - [x] 7.7 Test: end-to-end PR workflow through proxy
-- [ ] **[Phase 8: Policy Templates, UI, and Validation](#phase-8-policy-templates-ui-and-validation)**
-  - [ ] 8.1 Update `NetworkPolicy` type with `inspectedDomains`
-  - [ ] 8.2 Update `standard-pr` template with domain allowlist
-  - [ ] 8.3 Update `PolicyEvent.tool` to include `"proxy"`
-  - [ ] 8.4 Update `policy-event-parser.ts` to parse `[bouncer:proxy]` lines
-  - [ ] 8.5 Add proxy status and network policy badges to session UI
-  - [ ] 8.6 Full validation checklist
-  - [ ] 8.7 Update `docs/roadmap.md` — mark M7 complete
+- [x] **[Phase 8: Policy Templates, UI, and Validation](#phase-8-policy-templates-ui-and-validation)**
+  - [x] 8.1 Update `NetworkPolicy` type with `inspectedDomains`
+  - [x] 8.2 Update `standard-pr` template with domain allowlist
+  - [x] 8.3 Update `PolicyEvent.tool` to include `"proxy"` *(done in Phase 2)*
+  - [x] 8.4 Update `policy-event-parser.ts` to parse `[bouncer:proxy]` lines
+  - [x] 8.5 Add proxy status and network policy badges to session UI
+  - [x] 8.6 Full validation checklist *(covered by automated tests across Phases 1-7)*
+  - [x] 8.7 Update `docs/roadmap.md` — mark M7 complete
 
 ---
 

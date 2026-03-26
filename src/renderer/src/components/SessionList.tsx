@@ -52,6 +52,9 @@ export function SessionList({ sessions, activeSessionId, violationCounts, policy
             {s.sandboxBackend === 'none' && s.status !== 'closed' && (
               <span className="sandbox-badge sandbox-none" title="No sandbox — agent runs with full host access">Unsandboxed</span>
             )}
+            {s.networkAccess === 'filtered' && (
+              <span className="sandbox-badge sandbox-seatbelt" title="Network filtered via proxy">Filtered</span>
+            )}
             {s.policyName && (
               <span
                 className={`policy-badge policy-${s.policyId ?? 'default'}`}

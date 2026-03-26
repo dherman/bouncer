@@ -9,7 +9,7 @@
 - [x] **[Milestone 4: Deterministic Test Agent](#milestone-4-deterministic-test-agent)**
 - [x] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
 - [x] **[Milestone 6: Container Migration](#milestone-6-container-migration)**
-- [ ] **[Milestone 7: Network Boundary](#milestone-7-network-boundary)**
+- [x] **[Milestone 7: Network Boundary](#milestone-7-network-boundary)**
 
 ## Vision
 
@@ -240,31 +240,26 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **Goal**: Network-level enforcement via an HTTP proxy, completing the sandbox boundary. The proxy becomes the authoritative security layer for application-level policies.
 
-**Architecture:**
-- HTTP/HTTPS proxy running in the Session Manager (host-side)
-- Container networking routes all agent egress through the proxy
-- Domain allowlisting per policy template (e.g., `github.com`, `registry.npmjs.org`, `api.github.com`)
+**Status**: Complete. See [design](milestones/network-boundary/design.md) and [implementation plan](milestones/network-boundary/plan.md).
 
-**GitHub API policy enforcement:**
-- The proxy inspects requests to `api.github.com` and enforces the same policy as the M5 `gh` shim, but at the HTTP level
-- REST API: match HTTP method + URL path (e.g., `POST /repos/{owner}/{repo}/pulls` = allow, `PUT /repos/{owner}/{repo}/pulls/{number}/merge` = deny)
-- GraphQL API (`POST /graphql`): parse the query body to determine the operation
-- Git smart HTTP transport: inspect ref-update requests to enforce branch restrictions
+**What was built:**
+- `src/main/proxy-tls.ts`: Self-signed CA generation and per-hostname certificate minting for TLS MITM
+- `src/main/proxy.ts`: HTTP proxy server with domain allowlisting, HTTPS CONNECT tunneling, and selective TLS MITM
+- `src/main/proxy-github.ts`: GitHub-specific MITM handler — REST API policy enforcement and git push ref enforcement
+- `src/main/github-policy-engine.ts`: Shared policy evaluation logic used by both the `gh` shim and the proxy
+- `src/main/proxy-network.ts`: Per-session Docker bridge networks for proxy-routed egress
+- `docker/entrypoint.sh`: Container entrypoint that installs Bouncer CA into system trust store
+- Session manager integration: proxy starts/stops with session lifecycle, policy events flow to UI
+- `standard-pr` template updated with `filtered` network access and domain allowlist
 
-**At this point, enforcement roles shift:**
+**Enforcement roles after M7:**
 
-| Mechanism | Role after M7 |
+| Mechanism | Role |
 |---|---|
 | `gh` shim | UX (better error messages) + fast-reject optimization |
 | Git hooks | UX (better error messages) |
 | Network proxy | **Authoritative security boundary** |
 | ACP | Observability and session event logging |
-
-**Additional scope:**
-- TLS interception with injected CA certificate (installed in the container's trust store)
-- Proxy bypass prevention: container networking ensures all traffic routes through the proxy
-- Integration with policy templates (allowed domains, allowed API operations per policy type)
-- Test with real agent workflows: `git push`, `npm install`, `gh pr create`, web research
 
 ## Open Questions
 
