@@ -1201,7 +1201,7 @@ export class SessionManager {
       policyName,
       githubRepo,
       ownedPrNumber,
-      networkAccess: session.proxyHandle ? "filtered" : null,
+      networkAccess: session.proxyHandle ? "filtered" : "full",
     };
   }
 }

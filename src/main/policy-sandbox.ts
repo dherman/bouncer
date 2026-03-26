@@ -48,10 +48,12 @@ export function policyToSandboxConfig(
   let appendProfileContent: string | undefined;
   const profileParts: string[] = [];
 
-  // Network filtering is handled by the M7 proxy layer in container mode.
-  // On the Seatbelt fallback path, "filtered" is treated as "full" since
-  // Seatbelt can't enforce proxy-based domain filtering. SBPL network deny
-  // is all-or-nothing and would block the agent's own API traffic.
+  // On the Seatbelt fallback path, no network restrictions are currently
+  // enforced by this policy translation, regardless of template.network.access.
+  // SBPL network deny is effectively all-or-nothing and would also block the
+  // agent's own API traffic, so any finer-grained network control must be
+  // implemented outside of Seatbelt (e.g., via the M7 proxy layer in
+  // container mode).
 
   if (template.appendProfile) {
     profileParts.push(template.appendProfile.trim());
