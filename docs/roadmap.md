@@ -8,7 +8,7 @@
 - [x] **[Milestone 3: Policy Templates](#milestone-3-policy-templates)**
 - [x] **[Milestone 4: Deterministic Test Agent](#milestone-4-deterministic-test-agent)**
 - [x] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
-- [ ] **[Milestone 6: Container Migration](#milestone-6-container-migration)**
+- [x] **[Milestone 6: Container Migration](#milestone-6-container-migration)**
 - [ ] **[Milestone 7: Network Boundary](#milestone-7-network-boundary)**
 
 ## Vision
@@ -79,7 +79,7 @@ The project is structured as an **Electron app** (codename: **Glitter Ball**) th
 │  │                                                   │   │
 │  │  • Manages worktrees (git worktree add/remove)    │   │
 │  │  • Builds sandbox config per session              │   │
-│  │  • Spawns agent via safehouse (or containers)     │   │
+│  │  • Spawns agent via containers (safehouse fallback) │   │
 │  │  • ACP ClientSideConnection per session           │   │
 │  │  • Monitors sandbox violations (log stream)       │   │
 │  └───────────────────┬───────────────────────────────┘   │
@@ -105,8 +105,8 @@ The project is structured as an **Electron app** (codename: **Glitter Ball**) th
 | UI | React + TypeScript | Chat interface + session management |
 | Agent protocol | ACP (`@agentclientprotocol/sdk`) | JSON-RPC over stdio; sessions, streaming, tool calls, permission requests |
 | Claude Code adapter | `@zed-industries/claude-agent-acp` | Official ACP adapter for Claude Code |
-| OS sandbox (current) | [agent-safehouse](https://agent-safehouse.dev) | Curated Seatbelt profiles, macOS only; see [sandbox primitive discussion](#sandbox-primitive-seatbelt-vs-containers) |
-| OS sandbox (future) | Containers (Docker/OrbStack) | Cross-platform, isolated filesystem; planned migration |
+| OS sandbox (primary) | Containers (Docker/OrbStack) | Isolated filesystem, read-only policy mounts, cross-platform |
+| OS sandbox (fallback) | [agent-safehouse](https://agent-safehouse.dev) | Curated Seatbelt profiles, macOS only; used when Docker unavailable |
 | Worktree management | git CLI | `git worktree add/remove` per session |
 | App-layer policy (M5) | CLI wrappers (`gh` shim, git hooks) | Policy enforcement at the tool level |
 | Container sandbox (M6) | OrbStack (Docker-compatible) | Isolated filesystem, read-only policy mounts |
@@ -134,9 +134,9 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **OrbStack bind-mount performance (validated 2026-03-24):** Performance testing with OrbStack on this repo (6,500+ files, 462MB `node_modules`) showed bind-mount performance at parity with native macOS — some operations were actually faster due to Linux kernel IO scheduling. See [OrbStack performance investigation](reference/orbstack-perf-investigation.md) for details. This eliminates the key container migration risk.
 
-**Current approach:** Use safehouse for Milestones 2-3 to get to the policy design questions quickly. The policy learnings transfer directly to containers — "the agent needs write access to the worktree, read access to toolchains, and restricted network" is the same policy whether expressed as SBPL rules or as Dockerfile + bind mounts + network config.
+**Current state (post-M6):** Containers are the primary sandbox backend. When Docker is available, agents run inside `glitterball-agent` containers with the full mount table (worktree, git hooks, gh shim, policy state, gitconfig, credential helper). When Docker is unavailable, the system falls back to safehouse (Seatbelt). The policy template system generates configs for both backends from the same template definitions.
 
-**Migration plan:** Milestone 5 implements application-layer policies on Seatbelt to iterate on policy semantics quickly. Milestone 6 migrates to containers (OrbStack), which strengthens the CLI wrapper enforcement model (the real `gh` binary simply doesn't exist in the container) and provides native network isolation for Milestone 7. See the [M5 design investigation](reference/m5-app-layer-design.md) for the analysis behind this sequencing.
+**Migration path:** Milestones 2-5 used safehouse to iterate on policy semantics quickly. Milestone 6 migrated to containers, which strengthened the CLI wrapper enforcement model (the real `gh` binary doesn't exist in the container) and provides native network isolation for Milestone 7. See the [M5 design investigation](reference/m5-app-layer-design.md) for the analysis behind this sequencing.
 
 ---
 
@@ -223,22 +223,18 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **Goal**: Migrate the sandbox primitive from Seatbelt to containers (OrbStack), strengthening application-layer policy enforcement and enabling native network isolation.
 
-**Why now**: Application-layer policies (M5) rely on CLI wrappers and git hooks that can be bypassed on a host filesystem the agent partially controls. Containers close several of these gaps:
-- The real `gh` binary doesn't exist in the container — the shim *is* `gh`, with no bypass via absolute paths
-- Git hooks can be mounted read-only, preventing agent tampering
-- Container networking provides the foundation for M7's network proxy
+**Status**: Complete. See [design](milestones/container-migration/design.md) and [implementation plan](milestones/container-migration/plan.md).
 
-**Performance**: OrbStack bind-mount performance has been [validated](reference/orbstack-perf-investigation.md) at parity with native macOS filesystem performance (tested 2026-03-24).
-
-**Scope:**
-- Dockerfile(s) for the agent environment: Node.js, git, the `gh` shim, git hooks, standard toolchains
-- Session Manager spawns agent containers via OrbStack's Docker-compatible API
-- Worktree bind-mounted read-write into the container
-- Git hooks directory and `gh` shim mounted read-only
-- User's git config and SSH keys mounted read-only (or copied) for authentication
-- GitHub auth token injected via environment variable
-- Policy templates (M3) updated to generate container configs instead of (or in addition to) Seatbelt profiles
-- Port the sandbox violation detection from Seatbelt log parsing to container-appropriate mechanisms
+**What was built:**
+- `docker/agent.Dockerfile`: agent container image based on `docker/sandbox-templates:claude-code`, with Rust toolchain and no real `gh` binary
+- `src/main/container.ts`: Docker availability detection, content-hash-tagged image builds, container spawn/teardown/orphan cleanup with label-based discovery
+- `src/main/policy-container.ts`: converts PolicyTemplate + session context into ContainerConfig with the full mount table (worktree, git common dir, agent binary, node_modules, hooks, shim, policy state, gitconfig, credential helper, Claude config)
+- `src/main/gh-shim.ts`: direct API mode — when `BOUNCER_REAL_GH` is unset, the shim calls the GitHub REST API directly via `fetch` instead of proxying to a real `gh` binary
+- `src/main/gh-credential-helper.ts`: standalone git credential helper for container use (echoes GH_TOKEN for github.com)
+- `src/main/container-monitor.ts`: watches Docker events for OOM kills and unexpected exits
+- Container auth: OAuth credentials extracted from macOS keychain and written to `~/.claude/.credentials.json` inside the container (Linux credential storage path)
+- UI: sandbox backend badges (Container/Seatbelt/Unsandboxed) in session list
+- Safehouse fallback: automatic when Docker is unavailable
 
 ### Milestone 7: Network Boundary
 
