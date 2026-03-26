@@ -186,6 +186,8 @@ interface SessionState {
   containerHandle: ContainerHandle | null;
   policyId: string | null;
   githubPolicy: GitHubPolicy | null;
+  /** Flush any batched stream-chunk events. Called before stream-end. */
+  flushChunks: () => void;
 }
 
 export class SessionManager {
@@ -244,6 +246,7 @@ export class SessionManager {
       containerHandle: null,
       policyId: resolvedPolicyId,
       githubPolicy: null,
+      flushChunks: () => {},
     };
     this.sessions.set(id, session);
     this.emit("session-update", {
@@ -644,7 +647,10 @@ export class SessionManager {
       const pendingChunks = new Map<string, { messageId: string; text: string }>();
       let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
       const flushChunks = (): void => {
-        chunkFlushTimer = null;
+        if (chunkFlushTimer) {
+          clearTimeout(chunkFlushTimer);
+          chunkFlushTimer = null;
+        }
         for (const [, chunk] of pendingChunks) {
           emitUpdate("session-update", {
             sessionId: id,
@@ -655,6 +661,7 @@ export class SessionManager {
         }
         pendingChunks.clear();
       };
+      session.flushChunks = flushChunks;
       const scheduleChunkFlush = (): void => {
         if (!chunkFlushTimer) {
           chunkFlushTimer = setTimeout(flushChunks, 50);
@@ -890,6 +897,9 @@ export class SessionManager {
     } catch (err) {
       console.error(`Prompt failed for session ${sessionId}:`, err);
     }
+
+    // Flush any batched chunks before finalizing
+    session.flushChunks();
 
     // Finalize the agent message
     agentMsg.streaming = false;
