@@ -218,10 +218,14 @@ await test("denied domain: plain HTTP request gets 403", async () => {
 console.log("\n  CONNECT filtering:");
 
 await test("CONNECT to allowed non-inspected domain: tunnel established", async () => {
-  // Start a plain TCP echo server as the "upstream"
+  // Start a TCP server that echoes back what it receives.
+  // Using echo (wait for data) instead of immediate write avoids a race
+  // where the server sends before the proxy tunnel is fully piped.
   const echo = net.createServer((socket) => {
-    socket.write("hello from upstream");
-    socket.end();
+    socket.on("data", (chunk) => {
+      socket.write(`echo: ${chunk.toString()}`);
+      socket.end();
+    });
   });
   await new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve));
   const echoPort = (echo.address() as net.AddressInfo).port;
@@ -237,12 +241,14 @@ await test("CONNECT to allowed non-inspected domain: tunnel established", async 
     );
     assert.equal(status, 200);
 
+    // Send data through the tunnel and wait for the echo
+    socket.write("ping");
     const data = await new Promise<string>((resolve) => {
       let buf = "";
       socket.on("data", (chunk: Buffer) => (buf += chunk.toString()));
       socket.on("end", () => resolve(buf));
     });
-    assert.equal(data, "hello from upstream");
+    assert.equal(data, "echo: ping");
   } finally {
     await proxy.stop();
     echo.close();
