@@ -9,21 +9,19 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { createInterface } from "node:readline";
+import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import type { SandboxMonitorEvents } from "./sandbox-monitor.js";
 
 export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
   private dockerProcess: ChildProcess | null = null;
+  private rl: ReadlineInterface | null = null;
 
   /**
    * Start monitoring Docker events for a container.
    * Watches for OOM kills, unexpected exits, and other lifecycle events.
    */
   start(containerName: string): void {
-    if (this.dockerProcess) {
-      this.dockerProcess.kill();
-      this.dockerProcess = null;
-    }
+    this.stop();
 
     this.dockerProcess = spawn(
       "docker",
@@ -35,8 +33,8 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
       { stdio: ["ignore", "pipe", "ignore"] },
     );
 
-    const rl = createInterface({ input: this.dockerProcess.stdout! });
-    rl.on("line", (line) => {
+    this.rl = createInterface({ input: this.dockerProcess.stdout! });
+    this.rl.on("line", (line) => {
       this.parseEvent(line, containerName);
     });
 
@@ -52,6 +50,10 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
   }
 
   stop(): void {
+    if (this.rl) {
+      this.rl.close();
+      this.rl = null;
+    }
     if (this.dockerProcess) {
       this.dockerProcess.kill();
       this.dockerProcess = null;
@@ -63,15 +65,21 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
       const event = JSON.parse(line) as {
         status?: string;
         Action?: string;
+        time?: number;
+        timeNano?: string;
         Actor?: { Attributes?: Record<string, string> };
       };
 
       const action = event.Action ?? event.status ?? "";
+      // Use event timestamp from Docker when available
+      const timestamp = event.time
+        ? new Date(event.time * 1000)
+        : new Date();
 
       // OOM kill
       if (action === "oom") {
         this.emit("violation", {
-          timestamp: new Date(),
+          timestamp,
           pid: 0,
           processName: containerName,
           operation: "oom-kill",
@@ -85,7 +93,7 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
         const exitCode = event.Actor?.Attributes?.exitCode;
         if (exitCode && exitCode !== "0") {
           this.emit("violation", {
-            timestamp: new Date(),
+            timestamp,
             pid: 0,
             processName: containerName,
             operation: `container-exit(${exitCode})`,

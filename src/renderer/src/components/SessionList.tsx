@@ -44,7 +44,7 @@ export function SessionList({ sessions, activeSessionId, violationCounts, policy
             {projectLabel(s)}
             {s.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
             {s.sandboxBackend === 'container' && (
-              <span className="sandbox-badge sandbox-container" title={s.containerId ?? 'Container'}>Container</span>
+              <span className="sandbox-badge sandbox-container" title={s.containerName ?? 'Container'}>Container</span>
             )}
             {s.sandboxBackend === 'safehouse' && (
               <span className="sandbox-badge sandbox-seatbelt" title="macOS Seatbelt sandbox">Seatbelt</span>

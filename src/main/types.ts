@@ -28,7 +28,7 @@ export interface SessionSummary {
   projectDir: string;
   sandboxed: boolean;
   sandboxBackend: SandboxBackend;
-  containerId: string | null;
+  containerName: string | null;
   policyId: string | null;
   policyName: string | null;
   githubRepo: string | null;

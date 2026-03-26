@@ -921,6 +921,7 @@ export class SessionManager {
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
     session.status = "closed";
+    session.flushChunks();
     session.sandboxMonitor?.stop();
     session.containerMonitor?.stop();
     if (session.containerHandle) {
@@ -1059,7 +1060,7 @@ export class SessionManager {
       projectDir: session.projectDir,
       sandboxed: session.sandboxBackend !== "none",
       sandboxBackend: session.sandboxBackend,
-      containerId: session.containerHandle?.containerName ?? null,
+      containerName: session.containerHandle?.containerName ?? null,
       policyId: session.policyId,
       policyName,
       githubRepo,
