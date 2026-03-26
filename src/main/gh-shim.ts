@@ -16,7 +16,6 @@ import { readPolicyState, writePolicyState } from "./github-policy.js";
 import type { GitHubPolicy } from "./types.js";
 import {
   parseApiEndpoint,
-  expandPlaceholder,
   evaluateApiPulls,
   evaluateApiIssues,
   type ApiEndpointMatch,

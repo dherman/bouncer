@@ -40,8 +40,14 @@ export function parseApiEndpoint(
     method = "POST";
   }
 
+  // Normalize: strip query string, hash, and trailing slash
+  let path = endpoint.split("?")[0].split("#")[0];
+  if (path.length > 1 && path.endsWith("/")) {
+    path = path.slice(0, -1);
+  }
+
   // GraphQL
-  if (endpoint === "graphql" || endpoint === "/graphql") {
+  if (path === "graphql" || path === "/graphql") {
     return {
       resource: "graphql",
       method,
@@ -53,7 +59,7 @@ export function parseApiEndpoint(
   }
 
   // Parse /repos/{owner}/{repo}/... paths
-  const reposMatch = endpoint.match(
+  const reposMatch = path.match(
     /^\/repos\/([^/]+\/[^/]+)(?:\/([^/]+))?(?:\/(\d+))?(?:\/(.+))?$/,
   );
 
@@ -74,7 +80,7 @@ export function parseApiEndpoint(
 
   // Unrecognized endpoint
   return {
-    resource: endpoint,
+    resource: path,
     method,
     ownerRepo: null,
     number: null,
@@ -217,6 +223,12 @@ export interface RefUpdate {
   refName: string;
 }
 
+export interface ReceivePackResult {
+  refs: RefUpdate[];
+  /** True if the pkt-line stream was parsed successfully (terminated by flush packet). */
+  ok: boolean;
+}
+
 /**
  * Parse git pkt-line format to extract ref updates from a git-receive-pack body.
  *
@@ -226,22 +238,37 @@ export interface RefUpdate {
  *
  * Each ref update line has the format:
  *   {old-sha} {new-sha} {ref-name}[\0{capabilities}]
+ *
+ * Returns `{ refs, ok }`. If `ok` is false, the stream was malformed or
+ * truncated — callers should deny the push (fail-closed).
  */
-export function parseGitReceivePack(body: Buffer): RefUpdate[] {
+export function parseGitReceivePack(body: Buffer): ReceivePackResult {
   const refs: RefUpdate[] = [];
   let offset = 0;
+  let sawFlush = false;
 
   while (offset < body.length) {
     // Read the 4-hex-digit length
-    if (offset + 4 > body.length) break;
+    if (offset + 4 > body.length) {
+      return { refs, ok: false };
+    }
     const lenHex = body.subarray(offset, offset + 4).toString("ascii");
     const len = parseInt(lenHex, 16);
 
+    if (isNaN(len)) {
+      return { refs, ok: false };
+    }
+
     // Flush packet
-    if (len === 0) break;
+    if (len === 0) {
+      sawFlush = true;
+      break;
+    }
 
     // Length includes the 4-byte prefix itself
-    if (len < 4 || offset + len > body.length) break;
+    if (len < 4 || offset + len > body.length) {
+      return { refs, ok: false };
+    }
 
     const payload = body
       .subarray(offset + 4, offset + len)
@@ -264,18 +291,24 @@ export function parseGitReceivePack(body: Buffer): RefUpdate[] {
     offset += len;
   }
 
-  return refs;
+  // A well-formed stream must end with a flush packet
+  return { refs, ok: sawFlush };
 }
 
 /**
  * Check if a git push is allowed by the session policy.
  * Each ref update is checked against the allowed push refs.
+ * Fails closed: if parsing failed or the body is non-empty but yields
+ * no refs, the push is denied.
  */
 export function evaluateGitPush(
-  refs: RefUpdate[],
+  parseResult: ReceivePackResult,
   policy: GitHubPolicy,
-): { allowed: boolean; deniedRef?: string } {
-  for (const ref of refs) {
+): { allowed: boolean; deniedRef?: string; reason?: string } {
+  if (!parseResult.ok) {
+    return { allowed: false, reason: "malformed pkt-line stream" };
+  }
+  for (const ref of parseResult.refs) {
     // Extract the branch name from refs/heads/{branch}
     const branch = ref.refName.replace(/^refs\/heads\//, "");
     if (!policy.allowedPushRefs.includes(branch)) {

@@ -11,6 +11,7 @@ import {
   parseGitReceivePack,
   evaluateGitPush,
   type RefUpdate,
+  type ReceivePackResult,
 } from "../src/main/github-policy-engine.js";
 import type { GitHubPolicy } from "../src/main/types.js";
 
@@ -115,6 +116,16 @@ await test("PATCH /repos/owner/repo/pulls/99 (not owned) → deny", () => {
   assert.equal(d.action, "deny");
 });
 
+await test("GET /repos/owner/repo/pulls?per_page=100 → allow (query string stripped)", () => {
+  const d = evaluateGitHubRequest("GET", "/repos/owner/repo/pulls?per_page=100", makePolicy());
+  assert.equal(d.action, "allow");
+});
+
+await test("GET /repos/owner/repo/pulls/ → allow (trailing slash stripped)", () => {
+  const d = evaluateGitHubRequest("GET", "/repos/owner/repo/pulls/", makePolicy());
+  assert.equal(d.action, "allow");
+});
+
 // =========================================================================
 // parseGitReceivePack
 // =========================================================================
@@ -134,11 +145,12 @@ await test("parse a single ref update", () => {
     makePktLine("0000000000000000000000000000000000000000 abc123abc123abc123abc123abc123abc123abc1 refs/heads/feature-branch"),
     FLUSH,
   ]);
-  const refs = parseGitReceivePack(body);
-  assert.equal(refs.length, 1);
-  assert.equal(refs[0].oldSha, "0000000000000000000000000000000000000000");
-  assert.equal(refs[0].newSha, "abc123abc123abc123abc123abc123abc123abc1");
-  assert.equal(refs[0].refName, "refs/heads/feature-branch");
+  const result = parseGitReceivePack(body);
+  assert.equal(result.ok, true);
+  assert.equal(result.refs.length, 1);
+  assert.equal(result.refs[0].oldSha, "0000000000000000000000000000000000000000");
+  assert.equal(result.refs[0].newSha, "abc123abc123abc123abc123abc123abc123abc1");
+  assert.equal(result.refs[0].refName, "refs/heads/feature-branch");
 });
 
 await test("parse multiple ref updates", () => {
@@ -147,28 +159,43 @@ await test("parse multiple ref updates", () => {
     makePktLine("cccc000000000000000000000000000000000000 dddd000000000000000000000000000000000000 refs/heads/branch-b"),
     FLUSH,
   ]);
-  const refs = parseGitReceivePack(body);
-  assert.equal(refs.length, 2);
-  assert.equal(refs[0].refName, "refs/heads/branch-a");
-  assert.equal(refs[1].refName, "refs/heads/branch-b");
+  const result = parseGitReceivePack(body);
+  assert.equal(result.ok, true);
+  assert.equal(result.refs.length, 2);
+  assert.equal(result.refs[0].refName, "refs/heads/branch-a");
+  assert.equal(result.refs[1].refName, "refs/heads/branch-b");
 });
 
 await test("handle capabilities appended to first line", () => {
   const line = "0000000000000000000000000000000000000000 abc123abc123abc123abc123abc123abc123abc1 refs/heads/main\0 report-status side-band-64k";
   const body = Buffer.concat([makePktLine(line), FLUSH]);
-  const refs = parseGitReceivePack(body);
-  assert.equal(refs.length, 1);
-  assert.equal(refs[0].refName, "refs/heads/main");
+  const result = parseGitReceivePack(body);
+  assert.equal(result.ok, true);
+  assert.equal(result.refs.length, 1);
+  assert.equal(result.refs[0].refName, "refs/heads/main");
 });
 
-await test("handle flush packet with no data", () => {
-  const refs = parseGitReceivePack(FLUSH);
-  assert.equal(refs.length, 0);
+await test("flush packet with no data → ok with empty refs", () => {
+  const result = parseGitReceivePack(FLUSH);
+  assert.equal(result.ok, true);
+  assert.equal(result.refs.length, 0);
 });
 
-await test("handle empty buffer", () => {
-  const refs = parseGitReceivePack(Buffer.alloc(0));
-  assert.equal(refs.length, 0);
+await test("empty buffer → not ok (no flush packet)", () => {
+  const result = parseGitReceivePack(Buffer.alloc(0));
+  assert.equal(result.ok, false);
+});
+
+await test("truncated pkt-line → not ok", () => {
+  const body = Buffer.from("00ff", "ascii"); // claims 255 bytes but only 4 present
+  const result = parseGitReceivePack(body);
+  assert.equal(result.ok, false);
+});
+
+await test("malformed length → not ok", () => {
+  const body = Buffer.from("zzzz", "ascii");
+  const result = parseGitReceivePack(body);
+  assert.equal(result.ok, false);
 });
 
 // =========================================================================
@@ -177,45 +204,59 @@ await test("handle empty buffer", () => {
 
 console.log("\n  evaluateGitPush:");
 
+function okRefs(refs: RefUpdate[]): ReceivePackResult {
+  return { refs, ok: true };
+}
+
 await test("push to allowed ref → allowed", () => {
-  const refs: RefUpdate[] = [
-    { oldSha: "aaa", newSha: "bbb", refName: "refs/heads/feature-branch" },
-  ];
-  const result = evaluateGitPush(refs, makePolicy());
+  const result = evaluateGitPush(
+    okRefs([{ oldSha: "aaa", newSha: "bbb", refName: "refs/heads/feature-branch" }]),
+    makePolicy(),
+  );
   assert.equal(result.allowed, true);
 });
 
 await test("push to refs/heads/main with allowedPushRefs: ['feature-branch'] → denied", () => {
-  const refs: RefUpdate[] = [
-    { oldSha: "aaa", newSha: "bbb", refName: "refs/heads/main" },
-  ];
-  const result = evaluateGitPush(refs, makePolicy());
+  const result = evaluateGitPush(
+    okRefs([{ oldSha: "aaa", newSha: "bbb", refName: "refs/heads/main" }]),
+    makePolicy(),
+  );
   assert.equal(result.allowed, false);
   assert.equal(result.deniedRef, "refs/heads/main");
 });
 
 await test("push to multiple refs — one denied → denied", () => {
-  const refs: RefUpdate[] = [
-    { oldSha: "aaa", newSha: "bbb", refName: "refs/heads/feature-branch" },
-    { oldSha: "ccc", newSha: "ddd", refName: "refs/heads/main" },
-  ];
-  const result = evaluateGitPush(refs, makePolicy());
+  const result = evaluateGitPush(
+    okRefs([
+      { oldSha: "aaa", newSha: "bbb", refName: "refs/heads/feature-branch" },
+      { oldSha: "ccc", newSha: "ddd", refName: "refs/heads/main" },
+    ]),
+    makePolicy(),
+  );
   assert.equal(result.allowed, false);
   assert.equal(result.deniedRef, "refs/heads/main");
 });
 
 await test("push to multiple allowed refs → allowed", () => {
-  const refs: RefUpdate[] = [
-    { oldSha: "aaa", newSha: "bbb", refName: "refs/heads/feature-branch" },
-    { oldSha: "ccc", newSha: "ddd", refName: "refs/heads/dev" },
-  ];
-  const result = evaluateGitPush(refs, makePolicy({ allowedPushRefs: ["feature-branch", "dev"] }));
+  const result = evaluateGitPush(
+    okRefs([
+      { oldSha: "aaa", newSha: "bbb", refName: "refs/heads/feature-branch" },
+      { oldSha: "ccc", newSha: "ddd", refName: "refs/heads/dev" },
+    ]),
+    makePolicy({ allowedPushRefs: ["feature-branch", "dev"] }),
+  );
   assert.equal(result.allowed, true);
 });
 
-await test("empty refs → allowed", () => {
-  const result = evaluateGitPush([], makePolicy());
+await test("empty refs (ok parse) → allowed", () => {
+  const result = evaluateGitPush(okRefs([]), makePolicy());
   assert.equal(result.allowed, true);
+});
+
+await test("malformed parse result → denied (fail-closed)", () => {
+  const result = evaluateGitPush({ refs: [], ok: false }, makePolicy());
+  assert.equal(result.allowed, false);
+  assert.ok(result.reason?.includes("malformed"));
 });
 
 // --- Summary ---
