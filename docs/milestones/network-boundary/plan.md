@@ -7,11 +7,11 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
 
 ## Progress
 
-- [ ] **[Phase 1: CA Generation + TLS Primitives](#phase-1-ca-generation--tls-primitives)**
-  - [ ] 1.1 Implement `ensureCA()` in `proxy-tls.ts`
-  - [ ] 1.2 Implement `generateHostCert()` with in-memory caching
-  - [ ] 1.3 Store CA in `app.getPath("userData")/bouncer-ca/`
-  - [ ] 1.4 Test: generate CA, mint host cert, verify chain with `tls.connect`
+- [x] **[Phase 1: CA Generation + TLS Primitives](#phase-1-ca-generation--tls-primitives)**
+  - [x] 1.1 Implement `ensureCA()` in `proxy-tls.ts`
+  - [x] 1.2 Implement `generateHostCert()` with in-memory caching
+  - [x] 1.3 Store CA in `app.getPath("userData")/bouncer-ca/`
+  - [x] 1.4 Test: generate CA, mint host cert, verify chain with `tls.connect`
 - [ ] **[Phase 2: HTTP Proxy with Domain Filtering](#phase-2-http-proxy-with-domain-filtering)**
   - [ ] 2.1 Implement `startProxy()` in `proxy.ts` — HTTP CONNECT handler + domain allowlist
   - [ ] 2.2 Add plain HTTP request forwarding with domain check
