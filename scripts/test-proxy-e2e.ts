@@ -3,11 +3,10 @@
 // End-to-end integration test for M7 Phase 7.7: simulates the full session
 // manager proxy lifecycle without Electron. Exercises:
 //   - CA generation → proxy startup → network creation → container spawn
-//   - Allowed domain tunneling (api.github.com)
+//   - Allowed domain tunneling (registry.npmjs.org, non-inspected)
 //   - Denied domain blocking (evil.example.com)
 //   - GitHub REST API enforcement (MITM'd api.github.com)
-//   - Git push ref enforcement (MITM'd github.com)
-//   - CA trust inside the container (NODE_EXTRA_CA_CERTS via entrypoint)
+//   - CA trust inside the container (entrypoint installs cert)
 //   - Clean teardown (proxy stop, network remove)
 //
 // Requires Docker. Uses the bouncer agent image (builds if needed).
@@ -59,9 +58,13 @@ async function isDockerAvailable(): Promise<boolean> {
 // --- Resolve agent image (same logic as container.ts but without Electron) ---
 
 async function resolveAgentImage(): Promise<string> {
-  const dockerfilePath = join(process.cwd(), "docker", "agent.Dockerfile");
-  const content = readFileSync(dockerfilePath, "utf-8");
-  const hash = createHash("sha256").update(content).digest("hex").slice(0, 12);
+  const dockerDir = join(process.cwd(), "docker");
+  const dockerfilePath = join(dockerDir, "agent.Dockerfile");
+  // Hash all build-context files so image is rebuilt when any input changes
+  const hasher = createHash("sha256");
+  hasher.update(readFileSync(dockerfilePath, "utf-8"));
+  hasher.update(readFileSync(join(dockerDir, "entrypoint.sh"), "utf-8"));
+  const hash = hasher.digest("hex").slice(0, 12);
   const imageTag = `glitterball-agent:${hash}`;
 
   try {
@@ -91,11 +94,11 @@ if (!dockerAvailable) {
 
 const tempDir = mkdtempSync(join(tmpdir(), "bouncer-e2e-"));
 let ca: BouncerCA;
-let proxy: ProxyHandle;
-let network: SessionNetwork;
+let proxy: ProxyHandle | undefined;
+let network: SessionNetwork | undefined;
 let imageTag: string;
 const events: PolicyEvent[] = [];
-const sessionId = "e2e-test";
+const sessionId = `e2e-${Date.now().toString(36)}`;
 
 try {
   // --- Setup: replicate what session-manager.ts does ---
@@ -207,11 +210,12 @@ try {
       ],
       { timeout: 30_000 },
     );
-    // Proxy forwarded (allow) → GitHub returned 404 for non-existent repo
+    // Proxy forwarded (allow) → GitHub responds (status varies: 200, 404, 403 rate limit)
     assert.ok(
-      ["200", "404"].includes(stdout.trim()),
-      `expected forwarded response, got ${stdout.trim()}`,
+      /^[0-9]{3}$/.test(stdout.trim()),
+      `expected HTTP status code, got: ${stdout.trim()}`,
     );
+    // The definitive check: proxy logged an allow event (not a deny)
     assert.ok(
       events.slice(prevLen).some((e) => e.decision === "allow" && e.operation.includes("GET")),
       "should have logged an allow event",
@@ -261,11 +265,11 @@ try {
       ],
       { timeout: 30_000 },
     );
-    // If CA trust works: curl accepts the MITM cert, proxy forwards, GitHub returns 404
-    // If CA trust fails: curl exits with error code (wouldn't get here)
+    // If CA trust works: curl accepts the MITM cert, proxy forwards, GitHub responds.
+    // If CA trust fails: curl exits with a TLS error (wouldn't reach this point).
     assert.ok(
-      ["200", "404"].includes(stdout.trim()),
-      `curl should trust the Bouncer CA, got ${stdout.trim()}`,
+      /^[0-9]{3}$/.test(stdout.trim()),
+      `curl should trust the Bouncer CA (got: ${stdout.trim()})`,
     );
   });
 
@@ -279,12 +283,17 @@ try {
   });
 
   await test("teardown: proxy stops and network is removed cleanly", async () => {
+    assert.ok(proxy, "proxy should have been started");
+    assert.ok(network, "network should have been created");
+    const networkName = network.networkName;
     await proxy.stop();
     await network.cleanup();
+    proxy = undefined;
+    network = undefined;
 
     // Verify network is gone
     try {
-      await execFileAsync("docker", ["network", "inspect", network.networkName]);
+      await execFileAsync("docker", ["network", "inspect", networkName]);
       assert.fail("network should have been removed");
     } catch (err: any) {
       const msg = (err.message ?? "") + (err.stderr ?? "");
@@ -296,8 +305,8 @@ try {
   });
 } finally {
   // Best-effort cleanup in case tests failed before teardown test
-  try { await proxy!?.stop(); } catch {}
-  try { await network!?.cleanup(); } catch {}
+  try { await proxy?.stop(); } catch {}
+  try { await network?.cleanup(); } catch {}
   rmSync(tempDir, { recursive: true, force: true });
 }
 
