@@ -40,7 +40,8 @@
     "test:proxy": "tsx scripts/test-proxy.ts",
     "test:proxy-network": "tsx scripts/test-proxy-network.ts",
     "test:github-policy-engine": "tsx scripts/test-github-policy-engine.ts",
-    "test:proxy-github": "tsx scripts/test-proxy-github.ts"
+    "test:proxy-github": "tsx scripts/test-proxy-github.ts",
+    "test:proxy-e2e": "tsx scripts/test-proxy-e2e.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
