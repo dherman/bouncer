@@ -508,6 +508,7 @@ export class SessionManager {
             policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
+            userGitconfigPath: join((await import("node:os")).homedir(), ".gitconfig"),
             claudeConfigDir: join((await import("node:os")).homedir(), ".claude"),
             claudeCredentialsPath,
           };

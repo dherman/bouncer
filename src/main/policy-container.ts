@@ -19,6 +19,8 @@ export interface ContainerSessionContext {
   allowedRefsPath?: string;
   policyStatePath?: string;
   gitconfigPath?: string;
+  /** Mount user's ~/.gitconfig for git identity (name, email, etc.). */
+  userGitconfigPath?: string;
   /** Mount ~/.ssh into the container. Only set when SSH access is needed. */
   sshDir?: string;
   /** Mount ~/.claude into the container for agent authentication. */
@@ -163,7 +165,16 @@ export function policyToContainerConfig(
     }
   }
 
-  // --- Auth mounts (opt-in only) ---
+  // --- User config mounts ---
+
+  // User's ~/.gitconfig for git identity (name, email, aliases, etc.)
+  if (ctx.userGitconfigPath) {
+    mounts.push({
+      hostPath: ctx.userGitconfigPath,
+      containerPath: "/home/agent/.gitconfig",
+      readOnly: true,
+    });
+  }
 
   // Claude Code config/state — the CLI reads and writes session state here.
   // The base image already has the claude binary; we only mount config dirs.
