@@ -24,11 +24,11 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 3.3 Create `docker/entrypoint.sh`
   - [x] 3.4 Add `"proxy"` to `ContainerConfig.networkMode` and `buildDockerRunArgs()`
   - [x] 3.5 Test: container on session network routes traffic through proxy, proxy blocks denied domains
-- [ ] **[Phase 4: GitHub Policy Engine Extraction](#phase-4-github-policy-engine-extraction)** *(parallel with Phases 1-3)*
-  - [ ] 4.1 Create `github-policy-engine.ts` with `evaluateGitHubRequest()`
-  - [ ] 4.2 Extract `parseApiEndpoint()` and REST allowlist logic from `gh-shim.ts`
-  - [ ] 4.3 Update `gh-shim.ts` to import from shared module
-  - [ ] 4.4 Test: all existing `gh-shim` policy tests pass with shared engine
+- [x] **[Phase 4: GitHub Policy Engine Extraction](#phase-4-github-policy-engine-extraction)** *(parallel with Phases 1-3)*
+  - [x] 4.1 Create `github-policy-engine.ts` with `evaluateGitHubRequest()`
+  - [x] 4.2 Extract `parseApiEndpoint()` and REST allowlist logic from `gh-shim.ts`
+  - [x] 4.3 Update `gh-shim.ts` to import from shared module
+  - [x] 4.4 Test: all existing `gh-shim` policy tests pass with shared engine
 - [ ] **[Phase 5: GitHub REST API Enforcement in Proxy](#phase-5-github-rest-api-enforcement-in-proxy)**
   - [ ] 5.1 Wire MITM request handler for `api.github.com` to `evaluateGitHubRequest()`
   - [ ] 5.2 Implement PR capture from `POST /pulls` response body

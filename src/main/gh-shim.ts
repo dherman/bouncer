@@ -14,6 +14,16 @@
 import { execFileSync } from "node:child_process";
 import { readPolicyState, writePolicyState } from "./github-policy.js";
 import type { GitHubPolicy } from "./types.js";
+import {
+  parseApiEndpoint,
+  evaluateApiPulls,
+  evaluateApiIssues,
+  type ApiEndpointMatch,
+  type PolicyDecision,
+} from "./github-policy-engine.js";
+
+// Re-export types and functions that tests import from this module
+export { parseApiEndpoint, type ApiEndpointMatch, type PolicyDecision };
 
 // --- Subcommand Parser ---
 
@@ -215,11 +225,6 @@ function extractFlag(result: ParsedGhCommand, flag: string, value: string): void
 
 // --- Policy Evaluation ---
 
-export type PolicyDecision =
-  | { action: "allow" }
-  | { action: "allow-and-capture-pr" }
-  | { action: "deny"; reason: string };
-
 /**
  * Evaluate a parsed gh command against the session policy.
  */
@@ -400,60 +405,6 @@ function evaluateWorkflowPolicy(subcommand: string | null): PolicyDecision {
 
 // --- API Policy ---
 
-export interface ApiEndpointMatch {
-  resource: string;
-  method: string;
-  ownerRepo: string | null;
-  number: number | null;
-  subResource: string | null;
-  isGraphQL: boolean;
-}
-
-/**
- * Parse and match a gh api endpoint path.
- */
-export function parseApiEndpoint(
-  endpoint: string,
-  flags: ParsedGhCommand["flags"],
-): ApiEndpointMatch {
-  // Determine HTTP method
-  let method = (flags.method ?? "GET").toUpperCase();
-  if (method === "GET" && flags.hasBodyParams) {
-    method = "POST";
-  }
-
-  // GraphQL
-  if (endpoint === "graphql" || endpoint === "/graphql") {
-    return { resource: "graphql", method, ownerRepo: null, number: null, subResource: null, isGraphQL: true };
-  }
-
-  // Parse /repos/{owner}/{repo}/... paths
-  const reposMatch = endpoint.match(
-    /^\/repos\/([^/]+\/[^/]+)(?:\/([^/]+))?(?:\/(\d+))?(?:\/(.+))?$/
-  );
-
-  if (reposMatch) {
-    const ownerRepo = expandPlaceholder(reposMatch[1]);
-    const resource = reposMatch[2] ?? "";
-    const number = reposMatch[3] ? parseInt(reposMatch[3], 10) : null;
-    const subResource = reposMatch[4] ?? null;
-    return { resource, method, ownerRepo, number, subResource, isGraphQL: false };
-  }
-
-  // Unrecognized endpoint
-  return { resource: endpoint, method, ownerRepo: null, number: null, subResource: null, isGraphQL: false };
-}
-
-/**
- * Expand {owner}/{repo} placeholders to a recognizable marker.
- * gh CLI expands these at runtime, but we need to handle them in parsing.
- */
-function expandPlaceholder(ownerRepo: string): string | null {
-  // If it contains placeholders like {owner}/{repo}, return null (matches any)
-  if (ownerRepo.includes("{")) return null;
-  return ownerRepo;
-}
-
 function evaluateApiPolicy(
   positionalArgs: string[],
   flags: ParsedGhCommand["flags"],
@@ -498,47 +449,6 @@ function evaluateApiPolicy(
 
   // Unrecognized API endpoint — deny
   return { action: "deny", reason: `API endpoint '${endpoint}' (${match.method}) is not allowed` };
-}
-
-function evaluateApiPulls(match: ApiEndpointMatch, policy: GitHubPolicy): PolicyDecision {
-  // GET /pulls or /pulls/{number} — read-only, allow
-  if (match.method === "GET") {
-    return { action: "allow" };
-  }
-
-  // PUT /pulls/{number}/merge — deny
-  if (match.method === "PUT" && match.subResource === "merge") {
-    return { action: "deny", reason: "merging PRs via API is not allowed" };
-  }
-
-  // POST /pulls — create PR
-  if (match.method === "POST" && match.number === null) {
-    if (!policy.canCreatePr) {
-      return { action: "deny", reason: "PR already created for this session" };
-    }
-    return { action: "allow-and-capture-pr" };
-  }
-
-  // PATCH /pulls/{number} — edit PR
-  if (match.method === "PATCH" && match.number !== null) {
-    if (policy.ownedPrNumber !== null && match.number === policy.ownedPrNumber) {
-      return { action: "allow" };
-    }
-    if (policy.ownedPrNumber === null) {
-      // No PR owned yet — can't edit
-      return { action: "deny", reason: `cannot edit PR #${match.number}: no PR owned by this session` };
-    }
-    return { action: "deny", reason: `cannot edit PR #${match.number}: not owned (owned: #${policy.ownedPrNumber})` };
-  }
-
-  return { action: "deny", reason: `API pulls ${match.method} is not allowed` };
-}
-
-function evaluateApiIssues(match: ApiEndpointMatch): PolicyDecision {
-  if (match.method === "GET") {
-    return { action: "allow" };
-  }
-  return { action: "deny", reason: `API issues ${match.method} is not allowed` };
 }
 
 // --- Direct API Mode (Phase 6) ---
