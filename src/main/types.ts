@@ -45,10 +45,10 @@ export interface GitHubPolicy {
   canCreatePr: boolean;
 }
 
-/** Logged when the gh shim or git hook allows/denies an operation. */
+/** Logged when the gh shim, git hook, or proxy allows/denies an operation. */
 export interface PolicyEvent {
   timestamp: number;
-  tool: "gh" | "git";
+  tool: "gh" | "git" | "proxy";
   operation: string;
   decision: "allow" | "deny";
   reason?: string;

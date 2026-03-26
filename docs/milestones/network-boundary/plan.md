@@ -12,12 +12,12 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 1.2 Implement `generateHostCert()` with in-memory caching
   - [x] 1.3 Store CA in `app.getPath("userData")/bouncer-ca/`
   - [x] 1.4 Test: generate CA, mint host cert, verify chain with `tls.connect`
-- [ ] **[Phase 2: HTTP Proxy with Domain Filtering](#phase-2-http-proxy-with-domain-filtering)**
-  - [ ] 2.1 Implement `startProxy()` in `proxy.ts` — HTTP CONNECT handler + domain allowlist
-  - [ ] 2.2 Add plain HTTP request forwarding with domain check
-  - [ ] 2.3 Add selective TLS MITM for inspected domains
-  - [ ] 2.4 Implement `domainMatches()` with exact, wildcard, and `*` patterns
-  - [ ] 2.5 Test: allowed domain tunnels through; denied domain gets 403; inspected domain is MITM'd
+- [x] **[Phase 2: HTTP Proxy with Domain Filtering](#phase-2-http-proxy-with-domain-filtering)**
+  - [x] 2.1 Implement `startProxy()` in `proxy.ts` — HTTP CONNECT handler + domain allowlist
+  - [x] 2.2 Add plain HTTP request forwarding with domain check
+  - [x] 2.3 Add selective TLS MITM for inspected domains
+  - [x] 2.4 Implement `domainMatches()` with exact, wildcard, and `*` patterns
+  - [x] 2.5 Test: allowed domain tunnels through; denied domain gets 403; inspected domain is MITM'd
 - [ ] **[Phase 3: Container Networking](#phase-3-container-networking)**
   - [ ] 3.1 Implement `createSessionNetwork()` and `cleanup()` in `proxy-network.ts`
   - [ ] 3.2 Update `docker/agent.Dockerfile` with entrypoint for CA cert installation
