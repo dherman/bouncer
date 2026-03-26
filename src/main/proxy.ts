@@ -47,6 +47,8 @@ export type MitmRequestHandler = (
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ) => void,
+  /** The upstream port from the original CONNECT request */
+  upstreamPort: number,
 ) => void;
 
 export interface ProxyHandle {
@@ -242,7 +244,7 @@ function handleMitm(
     };
 
     if (config.onMitmRequest) {
-      config.onMitmRequest(req, res, hostname, doUpstreamForward);
+      config.onMitmRequest(req, res, hostname, doUpstreamForward, port);
     } else {
       // No policy handler wired yet — forward everything
       doUpstreamForward(req, res);
