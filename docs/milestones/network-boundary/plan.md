@@ -35,11 +35,11 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 5.3 Implement cross-repo enforcement (URL repo vs. `policy.repo`)
   - [x] 5.4 Default-deny: unrecognized endpoints return 403
   - [x] 5.5 Test: REST allowlist enforced; `POST /graphql` denied; PR captured
-- [ ] **[Phase 6: Git Smart HTTP Enforcement](#phase-6-git-smart-http-enforcement)**
-  - [ ] 6.1 Implement `parseGitReceivePack()` pkt-line parser in `github-policy-engine.ts`
-  - [ ] 6.2 Implement `evaluateGitPush()` ref-name checker
-  - [ ] 6.3 Wire MITM handler for `github.com` `git-receive-pack` requests
-  - [ ] 6.4 Test: push to allowed branch passes; push to `main` blocked; `--no-verify` still blocked
+- [x] **[Phase 6: Git Smart HTTP Enforcement](#phase-6-git-smart-http-enforcement)**
+  - [x] 6.1 Implement `parseGitReceivePack()` pkt-line parser in `github-policy-engine.ts`
+  - [x] 6.2 Implement `evaluateGitPush()` ref-name checker
+  - [x] 6.3 Wire MITM handler for `github.com` `git-receive-pack` requests
+  - [x] 6.4 Test: push to allowed branch passes; push to `main` blocked; `--no-verify` still blocked
 - [ ] **[Phase 7: Session Manager Integration](#phase-7-session-manager-integration)**
   - [ ] 7.1 Update `createSession` to start proxy + create network before spawning container
   - [ ] 7.2 Update `policyToContainerConfig()` to inject proxy env vars, CA cert mount, git proxy config

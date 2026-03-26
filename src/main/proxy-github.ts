@@ -3,10 +3,15 @@
 // GitHub-specific MITM request handler for the proxy.
 // Wires evaluateGitHubRequest() into the proxy's onMitmRequest hook
 // to enforce REST API policy and capture PR numbers from POST /pulls responses.
+// Also enforces git push ref restrictions on github.com smart HTTP transport.
 
 import http from "node:http";
 import https from "node:https";
-import { evaluateGitHubRequest } from "./github-policy-engine.js";
+import {
+  evaluateGitHubRequest,
+  parseGitReceivePack,
+  evaluateGitPush,
+} from "./github-policy-engine.js";
 import type { ProxyConfig, MitmRequestHandler } from "./proxy.js";
 
 // ---------------------------------------------------------------------------
@@ -15,18 +20,23 @@ import type { ProxyConfig, MitmRequestHandler } from "./proxy.js";
 
 /**
  * Create a MITM request handler that enforces GitHub policy on the GitHub
- * API hostname and forwards all other inspected domains without policy checks.
+ * API hostname (REST API) and GitHub web hostname (git smart HTTP transport).
+ * All other inspected domains are forwarded without policy checks.
  *
  * @param config - Proxy configuration with GitHub policy
- * @param apiHostname - The GitHub API hostname to match (default: "api.github.com")
+ * @param apiHostname - The GitHub API hostname (default: "api.github.com")
+ * @param gitHostname - The GitHub git hostname (default: "github.com")
  */
 export function createGitHubMitmHandler(
   config: ProxyConfig,
   apiHostname: string = "api.github.com",
+  gitHostname: string = "github.com",
 ): MitmRequestHandler {
   return (req, res, hostname, upstream, upstreamPort) => {
     if (hostname === apiHostname && config.githubPolicy) {
       handleGitHubApiRequest(req, res, hostname, upstreamPort, config, upstream);
+    } else if (hostname === gitHostname && config.githubPolicy) {
+      handleGitSmartHttp(req, res, hostname, upstreamPort, config, upstream);
     } else {
       // Non-GitHub inspected domain — forward without policy check
       upstream(req, res);
@@ -78,6 +88,123 @@ function handleGitHubApiRequest(
 
   // Standard allow — forward directly via the proxy's built-in upstream
   upstream(req, res);
+}
+
+// ---------------------------------------------------------------------------
+// Git smart HTTP enforcement (github.com)
+// ---------------------------------------------------------------------------
+
+/** Match POST /{owner}/{repo}.git/git-receive-pack */
+const GIT_RECEIVE_PACK_RE = /^\/([^/]+\/[^/]+)\.git\/git-receive-pack$/;
+
+function handleGitSmartHttp(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  hostname: string,
+  upstreamPort: number,
+  config: ProxyConfig,
+  upstream: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+): void {
+  const method = req.method ?? "GET";
+  const path = req.url ?? "/";
+  const policy = config.githubPolicy!;
+
+  // Only inspect git-receive-pack (push) requests
+  const pushMatch = path.match(GIT_RECEIVE_PACK_RE);
+  if (method !== "POST" || !pushMatch) {
+    // Non-push requests (ref advertisement, clone, fetch) — forward directly
+    upstream(req, res);
+    return;
+  }
+
+  const repo = pushMatch[1];
+
+  // Cross-repo check
+  if (repo !== policy.repo) {
+    config.onPolicyEvent({
+      timestamp: Date.now(),
+      tool: "proxy",
+      operation: `git push to ${repo}`,
+      decision: "deny",
+      reason: `cross-repo push denied (session repo: ${policy.repo})`,
+    });
+    res.writeHead(403, { "Content-Type": "text/plain" });
+    res.end(`[bouncer:proxy] DENY push to ${repo} — cross-repo access denied\n`);
+    return;
+  }
+
+  // Buffer the request body to inspect ref updates
+  const chunks: Buffer[] = [];
+  req.on("data", (chunk: Buffer) => chunks.push(chunk));
+  req.on("end", () => {
+    const body = Buffer.concat(chunks);
+    const parseResult = parseGitReceivePack(body);
+    const result = evaluateGitPush(parseResult, policy);
+
+    if (!result.allowed) {
+      const reason = result.reason ?? `ref ${result.deniedRef} not in allowed list`;
+      config.onPolicyEvent({
+        timestamp: Date.now(),
+        tool: "proxy",
+        operation: `git push ${result.deniedRef ?? "unknown"}`,
+        decision: "deny",
+        reason,
+      });
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end(`[bouncer:proxy] DENY push to ${result.deniedRef ?? "unknown"} — ${reason}\n`);
+      return;
+    }
+
+    // Push allowed — log and forward with the buffered body
+    config.onPolicyEvent({
+      timestamp: Date.now(),
+      tool: "proxy",
+      operation: `git push (${parseResult.refs.map((r) => r.refName).join(", ")})`,
+      decision: "allow",
+    });
+    forwardWithBody(req, res, hostname, upstreamPort, config, body);
+  });
+}
+
+/**
+ * Forward a request to upstream with a pre-buffered body (since we already
+ * consumed the request stream for inspection).
+ */
+function forwardWithBody(
+  clientReq: http.IncomingMessage,
+  clientRes: http.ServerResponse,
+  hostname: string,
+  port: number,
+  config: ProxyConfig,
+  body: Buffer,
+): void {
+  // Build headers: copy originals but replace transfer-encoding with
+  // content-length since we're sending the pre-buffered body as a whole.
+  const { "transfer-encoding": _te, ...forwardHeaders } = clientReq.headers;
+  const options: https.RequestOptions = {
+    hostname,
+    port,
+    path: clientReq.url,
+    method: clientReq.method,
+    headers: {
+      ...forwardHeaders,
+      host: hostname,
+      "content-length": String(body.length),
+    },
+    ...(config.insecureUpstreamTls ? { rejectUnauthorized: false } : {}),
+  };
+
+  const proxyReq = https.request(options, (proxyRes) => {
+    clientRes.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+    proxyRes.pipe(clientRes);
+  });
+
+  proxyReq.on("error", () => {
+    clientRes.writeHead(502);
+    clientRes.end("Bad Gateway\n");
+  });
+
+  proxyReq.end(body);
 }
 
 // ---------------------------------------------------------------------------
