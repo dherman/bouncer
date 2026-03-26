@@ -35,3 +35,8 @@ jobs:
       - run: npm run test:hooks
       - run: npm run test:app-layer-policy
       - run: npm run test:policy-event-parser
+      - run: npm run test:policy-container
+      - run: npm run test:proxy-tls
+      - run: npm run test:proxy
+      - run: npm run test:github-policy-engine
+      - run: npm run test:proxy-github
