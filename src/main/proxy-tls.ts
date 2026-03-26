@@ -36,9 +36,8 @@ const hostCertCache = new Map<string, CachedHostCert>();
  * Return the default CA directory path (requires Electron `app` to be ready).
  * Lazily imports `electron` so this module can be loaded outside Electron for testing.
  */
-export function defaultCADir(): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { app } = require("electron") as typeof import("electron");
+export async function defaultCADir(): Promise<string> {
+  const { app } = await import("electron");
   return join(app.getPath("userData"), "bouncer-ca");
 }
 
@@ -47,8 +46,9 @@ export function defaultCADir(): string {
  * @param caDir - Directory to store the CA. Defaults to `{userData}/bouncer-ca/`.
  */
 export async function ensureCA(
-  caDir: string = defaultCADir(),
+  caDir?: string,
 ): Promise<BouncerCA> {
+  caDir ??= await defaultCADir();
   const certPath = join(caDir, "bouncer-ca.crt");
   const keyPath = join(caDir, "bouncer-ca.key");
 
@@ -61,8 +61,19 @@ export async function ensureCA(
     };
   }
 
-  // Generate new CA
-  const keys = forge.pki.rsa.generateKeyPair(2048);
+  // Generate new CA (async to avoid blocking the event loop)
+  const keys = await new Promise<forge.pki.rsa.KeyPair>((resolve, reject) => {
+    forge.pki.rsa.generateKeyPair(
+      { bits: 2048, workers: -1 },
+      (err, keypair) => {
+        if (err || !keypair) {
+          reject(err ?? new Error("Failed to generate RSA key pair"));
+          return;
+        }
+        resolve(keypair);
+      },
+    );
+  });
   const cert = forge.pki.createCertificate();
 
   cert.publicKey = keys.publicKey;
@@ -117,8 +128,11 @@ export function generateHostCert(
 ): { cert: string; key: string } {
   const now = Date.now();
   const cached = hostCertCache.get(hostname);
-  if (cached && cached.expiresAt > now) {
-    return { cert: cached.cert, key: cached.key };
+  if (cached) {
+    if (cached.expiresAt > now) {
+      return { cert: cached.cert, key: cached.key };
+    }
+    hostCertCache.delete(hostname);
   }
 
   const keys = forge.pki.rsa.generateKeyPair(2048);

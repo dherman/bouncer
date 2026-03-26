@@ -149,10 +149,18 @@ await test("TLS chain verification: tls.connect trusts host cert when CA is prov
           reject(new Error("Expected TLS verification to fail without CA"));
         },
       );
-      socket.on("error", (err) => {
+      socket.on("error", (err: NodeJS.ErrnoException) => {
+        const expectedCodes = [
+          "SELF_SIGNED_CERT_IN_CHAIN",
+          "DEPTH_ZERO_SELF_SIGNED_CERT",
+          "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+          "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+        ];
         assert.ok(
-          err.message.includes("self-signed") || err.message.includes("unable to verify"),
-          `expected cert verification error, got: ${err.message}`,
+          (err.code && expectedCodes.includes(err.code)) ||
+            /self[- ]signed/i.test(err.message) ||
+            /unable to verify/i.test(err.message),
+          `expected cert verification error, got code=${err.code ?? "N/A"} message=${err.message}`,
         );
         resolve();
       });
