@@ -29,12 +29,12 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 4.2 Extract `parseApiEndpoint()` and REST allowlist logic from `gh-shim.ts`
   - [x] 4.3 Update `gh-shim.ts` to import from shared module
   - [x] 4.4 Test: all existing `gh-shim` policy tests pass with shared engine
-- [ ] **[Phase 5: GitHub REST API Enforcement in Proxy](#phase-5-github-rest-api-enforcement-in-proxy)**
-  - [ ] 5.1 Wire MITM request handler for `api.github.com` to `evaluateGitHubRequest()`
-  - [ ] 5.2 Implement PR capture from `POST /pulls` response body
-  - [ ] 5.3 Implement cross-repo enforcement (URL repo vs. `policy.repo`)
-  - [ ] 5.4 Default-deny: unrecognized endpoints return 403
-  - [ ] 5.5 Test: REST allowlist enforced; `POST /graphql` denied; PR captured
+- [x] **[Phase 5: GitHub REST API Enforcement in Proxy](#phase-5-github-rest-api-enforcement-in-proxy)**
+  - [x] 5.1 Wire MITM request handler for `api.github.com` to `evaluateGitHubRequest()`
+  - [x] 5.2 Implement PR capture from `POST /pulls` response body
+  - [x] 5.3 Implement cross-repo enforcement (URL repo vs. `policy.repo`)
+  - [x] 5.4 Default-deny: unrecognized endpoints return 403
+  - [x] 5.5 Test: REST allowlist enforced; `POST /graphql` denied; PR captured
 - [ ] **[Phase 6: Git Smart HTTP Enforcement](#phase-6-git-smart-http-enforcement)**
   - [ ] 6.1 Implement `parseGitReceivePack()` pkt-line parser in `github-policy-engine.ts`
   - [ ] 6.2 Implement `evaluateGitPush()` ref-name checker
