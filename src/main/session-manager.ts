@@ -56,6 +56,10 @@ import {
   type ContainerConfig,
   type ContainerHandle,
 } from "./container.js";
+import { ensureCA } from "./proxy-tls.js";
+import { startProxy, type ProxyHandle } from "./proxy.js";
+import { createGitHubMitmHandler } from "./proxy-github.js";
+import { createSessionNetwork, cleanupOrphanNetworks, type SessionNetwork } from "./proxy-network.js";
 
 interface SpawnConfig {
   cmd: string;
@@ -184,6 +188,8 @@ interface SessionState {
   containerMonitor: ContainerMonitor | null;
   sandboxViolations: SandboxViolationInfo[];
   containerHandle: ContainerHandle | null;
+  proxyHandle: ProxyHandle | null;
+  sessionNetwork: SessionNetwork | null;
   policyId: string | null;
   githubPolicy: GitHubPolicy | null;
   /** Flush any batched stream-chunk events. Called before stream-end. */
@@ -244,6 +250,8 @@ export class SessionManager {
       containerMonitor: null,
       sandboxViolations: [],
       containerHandle: null,
+      proxyHandle: null,
+      sessionNetwork: null,
       policyId: resolvedPolicyId,
       githubPolicy: null,
       flushChunks: () => {},
@@ -495,6 +503,72 @@ export class SessionManager {
             ...(process.env.GIT_COMMITTER_EMAIL ? { GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL } : {}),
           };
 
+          // --- Network proxy (M7) ---
+          // Start the proxy and create a session network when the template
+          // uses filtered network access and Docker is available.
+          if (template.network.access === "filtered") {
+            const ca = await ensureCA();
+            const proxyUrl = `http://host.docker.internal:0`; // port filled after start
+
+            // Determine inspected domains (GitHub domains when policy is active)
+            const inspectedDomains = template.github
+              ? ["api.github.com", "github.com"]
+              : [];
+
+            const proxyConfig = {
+              sessionId: id,
+              port: 0,
+              allowedDomains: template.network.allowedDomains,
+              inspectedDomains,
+              githubPolicy: session.githubPolicy,
+              ca,
+              onPolicyEvent: (event: import("./types.js").PolicyEvent) => {
+                this.emit("session-update", {
+                  sessionId: id,
+                  type: "policy-event",
+                  event,
+                });
+                // Persist policy state if PR was captured
+                if (session.githubPolicy && event.operation.startsWith("captured PR")) {
+                  writePolicyState(id, session.githubPolicy).catch(() => {});
+                }
+              },
+            };
+
+            // Wire the GitHub MITM handler if GitHub policy is active
+            if (template.github && session.githubPolicy) {
+              (proxyConfig as any).onMitmRequest = createGitHubMitmHandler(proxyConfig as any);
+            }
+
+            const proxyHandle = await startProxy(proxyConfig);
+            session.proxyHandle = proxyHandle;
+
+            const sessionNetwork = await createSessionNetwork(id);
+            session.sessionNetwork = sessionNetwork;
+
+            // Add proxy env vars to container env
+            const proxyEnvUrl = `http://host.docker.internal:${proxyHandle.port}`;
+            containerEnv.HTTP_PROXY = proxyEnvUrl;
+            containerEnv.HTTPS_PROXY = proxyEnvUrl;
+            containerEnv.http_proxy = proxyEnvUrl;
+            containerEnv.https_proxy = proxyEnvUrl;
+            containerEnv.NO_PROXY = "localhost,127.0.0.1";
+
+            // Regenerate gitconfig with proxy setting if it was already created
+            if (containerGitconfigFile) {
+              const gitconfigContent = generateGitconfig({
+                hooksPath: "/etc/bouncer/hooks",
+                credentialHelperPath: "/usr/local/lib/bouncer/gh-credential-helper.js",
+                userName: process.env.GIT_AUTHOR_NAME,
+                userEmail: process.env.GIT_AUTHOR_EMAIL,
+                proxyUrl: proxyEnvUrl,
+              });
+              await writeFile(containerGitconfigFile, gitconfigContent, "utf-8");
+            }
+
+            console.log(`[session] Proxy started on port ${proxyHandle.port} for session ${id}`);
+          }
+
           const ctx: ContainerSessionContext = {
             sessionId: id,
             worktreePath: workingDir,
@@ -508,6 +582,7 @@ export class SessionManager {
             policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
+            caCertPath: session.proxyHandle ? (await ensureCA()).certPath : undefined,
             userGitconfigPath: await (async () => {
               // Sanitize the user's gitconfig: remove credential helpers that
               // reference host-only paths (e.g. /opt/homebrew/bin/gh).
@@ -536,6 +611,12 @@ export class SessionManager {
             imageTag,
             ["node", "/usr/local/lib/agent/dist/index.js"],
           );
+
+          // Override network mode when proxy is active
+          if (session.proxyHandle && session.sessionNetwork) {
+            containerConfig.networkMode = "proxy";
+            containerConfig.networkName = session.sessionNetwork.networkName;
+          }
         }
 
         if (containerConfig) {
@@ -965,6 +1046,18 @@ export class SessionManager {
       await rm(join(POLICY_DIR, `${sessionId}-user-gitconfig`), { force: true }).catch(() => {});
     }
 
+    // Stop proxy and remove session network (M7)
+    if (session.proxyHandle) {
+      await session.proxyHandle.stop().catch((err) =>
+        console.warn(`Failed to stop proxy for session ${sessionId}:`, err)
+      );
+    }
+    if (session.sessionNetwork) {
+      await session.sessionNetwork.cleanup().catch((err) =>
+        console.warn(`Failed to remove network for session ${sessionId}:`, err)
+      );
+    }
+
     // Clean up application-layer policy artifacts
     if (session.githubPolicy) {
       if (session.worktree) {
@@ -1022,6 +1115,9 @@ export class SessionManager {
     await cleanupOrphanGitHubArtifacts(activeIds);
     await cleanupOrphanContainers(activeIds).catch((err) =>
       console.warn("Failed to clean up orphan containers:", err)
+    );
+    await cleanupOrphanNetworks(activeIds).catch((err) =>
+      console.warn("Failed to clean up orphan networks:", err)
     );
     // Clean up orphan container artifacts (credentials, gitconfig, wrapper, hooks)
     try {

@@ -27,6 +27,8 @@ export interface ContainerSessionContext {
   claudeConfigDir?: string;
   /** Credentials file extracted from macOS keychain for Linux-mode auth. */
   claudeCredentialsPath?: string;
+  /** Bouncer CA cert path — mounted into the container for proxy TLS interception. */
+  caCertPath?: string;
 }
 
 /**
@@ -107,6 +109,8 @@ export function generateGitconfig(opts: {
   credentialHelperPath: string;
   userName?: string;
   userEmail?: string;
+  /** HTTP proxy URL for git operations (M7 network proxy). */
+  proxyUrl?: string;
 }): string {
   const lines: string[] = [];
   lines.push("[core]");
@@ -117,6 +121,10 @@ export function generateGitconfig(opts: {
     lines.push("[user]");
     if (opts.userName) lines.push(`    name = ${opts.userName}`);
     if (opts.userEmail) lines.push(`    email = ${opts.userEmail}`);
+  }
+  if (opts.proxyUrl) {
+    lines.push("[http]");
+    lines.push(`    proxy = ${opts.proxyUrl}`);
   }
   return lines.join("\n") + "\n";
 }
@@ -268,6 +276,16 @@ export function policyToContainerConfig(
     mounts.push({
       hostPath: ctx.sshDir,
       containerPath: "/home/agent/.ssh",
+      readOnly: true,
+    });
+  }
+
+  // --- Proxy CA cert mount (M7) ---
+
+  if (ctx.caCertPath) {
+    mounts.push({
+      hostPath: ctx.caCertPath,
+      containerPath: "/usr/local/share/ca-certificates/bouncer/bouncer-ca.crt",
       readOnly: true,
     });
   }
