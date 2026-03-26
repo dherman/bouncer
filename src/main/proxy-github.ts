@@ -68,6 +68,9 @@ function handleGitHubApiRequest(
   }
 
   if (decision.action === "allow-and-capture-pr") {
+    // Eagerly reserve PR creation to prevent concurrent requests from
+    // seeing canCreatePr=true before the first response is captured.
+    policy.canCreatePr = false;
     // Forward to upstream, but buffer the response to capture PR number
     forwardWithCapture(req, res, hostname, upstreamPort, config);
     return;
@@ -80,6 +83,11 @@ function handleGitHubApiRequest(
 // ---------------------------------------------------------------------------
 // Upstream forwarding with response capture (for PR creation)
 // ---------------------------------------------------------------------------
+
+// Maximum response body size to buffer for PR capture (1 MB).
+// PR creation responses are typically < 10 KB. If exceeded, the response
+// is still forwarded to the client but capture is skipped.
+const MAX_CAPTURE_BYTES = 1024 * 1024;
 
 function forwardWithCapture(
   clientReq: http.IncomingMessage,
@@ -99,17 +107,38 @@ function forwardWithCapture(
 
   const proxyReq = https.request(options, (proxyRes) => {
     const chunks: Buffer[] = [];
-    proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let totalBytes = 0;
+    let captureLimitExceeded = false;
+
+    proxyRes.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_CAPTURE_BYTES) {
+        captureLimitExceeded = true;
+      }
+    });
     proxyRes.on("end", () => {
-      const body = Buffer.concat(chunks).toString("utf-8");
+      const bodyBuffer = Buffer.concat(chunks);
 
-      // Relay the response to the client
+      // Relay the raw bytes to the client (preserves encoding, binary safety)
       clientRes.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
-      clientRes.end(body);
+      clientRes.end(bodyBuffer);
 
-      // Attempt PR capture from the response body
-      if (proxyRes.statusCode && proxyRes.statusCode >= 200 && proxyRes.statusCode < 300) {
-        capturePrFromResponse(body, config);
+      // Attempt PR capture only for successful, uncompressed, reasonably-sized responses
+      if (
+        !captureLimitExceeded &&
+        proxyRes.statusCode &&
+        proxyRes.statusCode >= 200 &&
+        proxyRes.statusCode < 300
+      ) {
+        const encoding = proxyRes.headers["content-encoding"];
+        if (!encoding || encoding === "identity") {
+          try {
+            capturePrFromResponse(bodyBuffer.toString("utf-8"), config);
+          } catch {
+            // Decode failed — skip capture
+          }
+        }
       }
     });
   });
