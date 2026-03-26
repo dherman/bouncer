@@ -1,7 +1,9 @@
 // src/main/proxy-network.ts
 //
 // Docker network management for the proxy-based network boundary.
-// Creates per-session internal networks that force container egress through the proxy.
+// Creates per-session bridge networks. Containers on these networks are configured
+// with HTTP_PROXY/HTTPS_PROXY env vars pointing to the host proxy, which enforces
+// domain allowlists. Note: this is env-var-based routing, not network-level enforcement.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -36,17 +38,30 @@ export async function createSessionNetwork(
 ): Promise<SessionNetwork> {
   const networkName = `${NETWORK_PREFIX}-${sessionId}`;
 
-  await execFileAsync("docker", [
-    "network",
-    "create",
-    networkName,
-    "--driver",
-    "bridge",
-    "--label",
-    "glitterball.managed=true",
-    "--label",
-    `glitterball.sessionId=${sessionId}`,
-  ]);
+  // Check if the network already exists (e.g., left over from a crash)
+  try {
+    await execFileAsync("docker", ["network", "inspect", networkName], {
+      timeout: 10_000,
+    });
+    // Network exists — reuse it
+  } catch {
+    // Network doesn't exist — create it
+    await execFileAsync(
+      "docker",
+      [
+        "network",
+        "create",
+        networkName,
+        "--driver",
+        "bridge",
+        "--label",
+        "glitterball.managed=true",
+        "--label",
+        `glitterball.sessionId=${sessionId}`,
+      ],
+      { timeout: 10_000 },
+    );
+  }
 
   return {
     networkName,

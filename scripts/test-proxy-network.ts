@@ -84,13 +84,11 @@ await test("networkMode 'proxy' with networkName uses the named network", () => 
   assert.equal(args[netIdx + 1], "bouncer-net-test-123");
 });
 
-await test("networkMode 'proxy' without networkName falls back to bridge", () => {
-  const args = buildDockerRunArgs(
-    makeContainerConfig({ networkMode: "proxy" }),
+await test("networkMode 'proxy' without networkName throws", () => {
+  assert.throws(
+    () => buildDockerRunArgs(makeContainerConfig({ networkMode: "proxy" })),
+    /networkName is required/,
   );
-  const netIdx = args.indexOf("--network");
-  assert.ok(netIdx >= 0, "--network flag should be present");
-  assert.equal(args[netIdx + 1], "bridge");
 });
 
 await test("networkMode 'none' still works", () => {
@@ -221,27 +219,32 @@ if (!dockerAvailable) {
       const net = await createSessionNetwork(sessionId);
 
       try {
-        // 3. Run a container on the internal network and test connectivity
-        // Use a minimal image with curl
+        // 3. Run a container on the session network and test connectivity
         const proxyUrl = `http://host.docker.internal:${proxy.port}`;
 
+        // Common docker run args for proxy-configured containers.
+        // --add-host ensures host.docker.internal resolves on Linux Docker engines.
+        const dockerRunBase = [
+          "run",
+          "--rm",
+          "--network",
+          net.networkName,
+          "--add-host=host.docker.internal:host-gateway",
+          "-e",
+          `HTTP_PROXY=${proxyUrl}`,
+          "-e",
+          `HTTPS_PROXY=${proxyUrl}`,
+          "-e",
+          `http_proxy=${proxyUrl}`,
+          "-e",
+          `https_proxy=${proxyUrl}`,
+        ];
+
         // Test: proxy egress works for allowed domain
-        // We use --connect-timeout to avoid hanging if something is misconfigured
         const { stdout: allowedResult } = await execFileAsync(
           "docker",
           [
-            "run",
-            "--rm",
-            "--network",
-            net.networkName,
-            "-e",
-            `HTTP_PROXY=${proxyUrl}`,
-            "-e",
-            `HTTPS_PROXY=${proxyUrl}`,
-            "-e",
-            `http_proxy=${proxyUrl}`,
-            "-e",
-            `https_proxy=${proxyUrl}`,
+            ...dockerRunBase,
             "alpine/curl",
             "curl",
             "-s",
@@ -269,18 +272,7 @@ if (!dockerAvailable) {
           await execFileAsync(
             "docker",
             [
-              "run",
-              "--rm",
-              "--network",
-              net.networkName,
-              "-e",
-              `HTTP_PROXY=${proxyUrl}`,
-              "-e",
-              `HTTPS_PROXY=${proxyUrl}`,
-              "-e",
-              `http_proxy=${proxyUrl}`,
-              "-e",
-              `https_proxy=${proxyUrl}`,
+              ...dockerRunBase,
               "alpine/curl",
               "curl",
               "-s",

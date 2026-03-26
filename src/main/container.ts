@@ -145,10 +145,15 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
   }
 
   args.push("-w", config.workdir);
-  if (config.networkMode === "proxy" && config.networkName) {
+  if (config.networkMode === "proxy") {
+    if (!config.networkName) {
+      throw new Error(
+        'ContainerConfig.networkName is required when networkMode is "proxy"',
+      );
+    }
     args.push("--network", config.networkName);
   } else {
-    args.push("--network", config.networkMode === "proxy" ? "bridge" : config.networkMode);
+    args.push("--network", config.networkMode);
   }
   args.push(config.image);
   args.push(...config.command);
