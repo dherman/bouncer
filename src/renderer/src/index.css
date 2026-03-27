@@ -407,7 +407,7 @@ body {
   border-radius: 12px;
   font-size: 14px;
   line-height: 1.4;
-  white-space: normal;
+  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -496,7 +496,10 @@ body {
   color: rgba(255, 255, 255, 0.7);
 }
 
-.cursor {
+/* Streaming cursor: pseudo-element on the last text node */
+.bubble.streaming > :last-child::after,
+.bubble.streaming > p:last-of-type::after {
+  content: '|';
   animation: blink 0.8s step-end infinite;
 }
 
