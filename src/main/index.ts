@@ -114,7 +114,17 @@ app.whenReady().then(async () => {
     if (typeof id !== 'string') {
       throw new Error('Invalid argument: id must be a string')
     }
-    return repoStore.update(id, changes as Record<string, unknown>)
+    if (typeof changes !== 'object' || changes === null || Array.isArray(changes)) {
+      throw new Error('Invalid argument: changes must be an object')
+    }
+    const allowed = ['name', 'localPath', 'githubRepo', 'defaultPolicyId', 'defaultAgentType'] as const
+    const validated: Record<string, unknown> = {}
+    for (const key of allowed) {
+      if (key in changes) {
+        validated[key] = (changes as Record<string, unknown>)[key]
+      }
+    }
+    return repoStore.update(id, validated)
   })
   ipcMain.handle('repositories:remove', async (_e, id: unknown) => {
     if (typeof id !== 'string') {

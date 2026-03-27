@@ -136,10 +136,10 @@ export interface ReplayResult {
 }
 
 export type WorkspaceUpdate =
-  | { sessionId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string }
-  | { sessionId: string; type: "message"; message: Message }
-  | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { sessionId: string; type: "stream-end"; messageId: string }
-  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
-  | { sessionId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
-  | { sessionId: string; type: "policy-event"; event: PolicyEvent };
+  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string }
+  | { workspaceId: string; type: "message"; message: Message }
+  | { workspaceId: string; type: "stream-chunk"; messageId: string; text: string }
+  | { workspaceId: string; type: "stream-end"; messageId: string }
+  | { workspaceId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
+  | { workspaceId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
+  | { workspaceId: string; type: "policy-event"; event: PolicyEvent };

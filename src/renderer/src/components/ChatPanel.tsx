@@ -91,13 +91,13 @@ export function ChatPanel({
         })}
         {sessionStatus === 'error' && (
           <div className="workspace-state-banner error">
-            {sessionError ?? 'Session disconnected'}
-            <button onClick={onCloseSession}>Close session</button>
+            {sessionError ?? 'Workspace disconnected'}
+            <button onClick={onCloseSession}>Close workspace</button>
           </div>
         )}
         {sessionStatus === 'closed' && (
           <div className="workspace-state-banner closed">
-            Session closed
+            Workspace closed
           </div>
         )}
         <div ref={bottomRef} />
@@ -108,9 +108,9 @@ export function ChatPanel({
         violations={violations}
         policyEvents={policyEvents}
         placeholder={
-          sessionStatus === 'error' ? 'Session disconnected' :
-          sessionStatus === 'closed' ? 'Session closed' :
-          sessionStatus === 'initializing' ? 'Starting session...' :
+          sessionStatus === 'error' ? 'Workspace disconnected' :
+          sessionStatus === 'closed' ? 'Workspace closed' :
+          sessionStatus === 'initializing' ? 'Starting workspace...' :
           undefined
         }
       />

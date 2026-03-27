@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { Repository, WorkspaceSummary } from '../../../main/types'
 
 const STATUS_INDICATOR: Record<WorkspaceSummary['status'], string> = {
@@ -59,10 +59,10 @@ function RepoGroup({
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
 
-  // Auto-expand when active workspaces exist
-  if (hasActive && !expanded) {
-    setExpanded(true)
-  }
+  // Auto-expand when active workspaces appear
+  useEffect(() => {
+    if (hasActive) setExpanded(true)
+  }, [hasActive])
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault()

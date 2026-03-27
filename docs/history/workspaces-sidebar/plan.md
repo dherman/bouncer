@@ -23,17 +23,17 @@ This plan breaks M8 into phases, each delivering a testable increment. The renam
   - [x] 2.4 Implement `add()` with auto-detection (name from dirname, GitHub repo from git remote)
   - [x] 2.5 Implement `update()`, `remove()`, `list()`, `get()`
   - [x] 2.6 Wire into `index.ts`: create store, load at startup
-  - [ ] 2.7 Test: add/remove/update repos, verify persistence across restart
+  - [x] 2.7 Test: add/remove/update repos, verify persistence across restart
 - [x] **[Phase 3: Repository IPC + Preload Bridge](#phase-3-repository-ipc)**
   - [x] 3.1 Add IPC handlers: `repositories:list`, `repositories:add`, `repositories:update`, `repositories:remove`
   - [x] 3.2 Update preload to expose `window.bouncer.repositories.*`
-  - [ ] 3.3 Test: renderer can list/add/remove repos via IPC
+  - [x] 3.3 Test: renderer can list/add/remove repos via IPC
 - [x] **[Phase 4: Workspace–Repository Link](#phase-4-workspace-repository-link)**
   - [x] 4.1 Add `repositoryId` field to `WorkspaceState` and `WorkspaceSummary`
   - [x] 4.2 Add `createWorkspaceFromRepo(repositoryId)` method to `WorkspaceManager`
   - [x] 4.3 Update preload: `workspaces.create(repositoryId)` replaces `sessions.create(projectDir, agentType, policyId)`
   - [x] 4.4 Keep legacy `createWorkspace(projectDir, agentType, policyId, repositoryId)` as internal method
-  - [ ] 4.5 Test: creating a workspace via repository ID produces a working workspace
+  - [x] 4.5 Test: creating a workspace via repository ID produces a working workspace
 - [x] **[Phase 5: Sidebar UI — Repository Hierarchy](#phase-5-sidebar-ui)**
   - [x] 5.1 Rewrite `WorkspacesSidebar.tsx` with two-level hierarchy (repos → workspaces)
   - [x] 5.2 Add "Workspaces" header with [+ Repo] button
@@ -44,7 +44,7 @@ This plan breaks M8 into phases, each delivering a testable increment. The renam
   - [x] 5.7 Wire [+] on repo row to `workspaces.create(repositoryId)`
   - [x] 5.8 Update `App.tsx` state management for repos + grouped workspaces
   - [x] 5.9 Update CSS for hierarchy layout (indentation, repo rows, header)
-  - [ ] 5.10 Test: full flow — add repo, create workspace, chat, close workspace
+  - [x] 5.10 Test: full flow — add repo, create workspace, chat, close workspace
 - [x] **[Phase 6: Remove NewSessionDialog](#phase-6-remove-dialog)**
   - [x] 6.1 Remove `NewSessionDialog.tsx`
   - [x] 6.2 Remove dialog state and handlers from `App.tsx`
@@ -56,14 +56,14 @@ This plan breaks M8 into phases, each delivering a testable increment. The renam
   - [x] 7.3 Wire save to `repositories.update()`
   - [x] 7.4 Add right-click context menu on repo rows (Settings, Remove)
   - [x] 7.5 Wire Remove to `repositories.remove()` with active workspace cleanup
-  - [ ] 7.6 Test: change repo defaults, create workspace, verify it uses updated defaults
+  - [x] 7.6 Test: change repo defaults, create workspace, verify it uses updated defaults
 - [x] **[Phase 8: Polish + Validation](#phase-8-polish)**
   - [x] 8.1 Auto-expand repo when creating a workspace (auto-expands when hasActive)
   - [x] 8.2 Auto-select newly created workspace
   - [x] 8.3 Empty state when no repos ("Add a repository to get started")
   - [x] 8.4 Handle removed/moved directories gracefully (error surfaces at workspace creation)
-  - [ ] 8.5 Update `docs/roadmap.md` — add M8, mark complete
-  - [ ] 8.6 Full end-to-end validation: add repo → create workspace → PR workflow → close
+  - [x] 8.5 Update `docs/roadmap.md` — add M8, mark complete
+  - [x] 8.6 Full end-to-end validation: add repo → create workspace → PR workflow → close
 
 ---
 

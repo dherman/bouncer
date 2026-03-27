@@ -35,13 +35,13 @@ function App() {
       case 'status-change':
         setWorkspaces((prev) =>
           prev.map((s) =>
-            s.id === update.sessionId ? { ...s, status: update.status } : s
+            s.id === update.workspaceId ? { ...s, status: update.status } : s
           )
         )
         if (update.status === 'error' && update.error) {
           setWorkspaceErrors((prev) => {
             const next = new Map(prev)
-            next.set(update.sessionId, update.error!)
+            next.set(update.workspaceId, update.error!)
             return next
           })
         }
@@ -50,8 +50,8 @@ function App() {
       case 'message':
         setMessagesByWorkspace((prev) => {
           const next = new Map(prev)
-          const msgs = next.get(update.sessionId) ?? []
-          next.set(update.sessionId, [...msgs, update.message])
+          const msgs = next.get(update.workspaceId) ?? []
+          next.set(update.workspaceId, [...msgs, update.message])
           return next
         })
         if (update.message.streaming) {
@@ -72,10 +72,10 @@ function App() {
         streamingTextRef.current.delete(update.messageId)
         setMessagesByWorkspace((prevMsgs) => {
           const next = new Map(prevMsgs)
-          const msgs = next.get(update.sessionId)
+          const msgs = next.get(update.workspaceId)
           if (msgs) {
             next.set(
-              update.sessionId,
+              update.workspaceId,
               msgs.map((m) =>
                 m.id === update.messageId
                   ? { ...m, text: finalText, streaming: false }
@@ -93,10 +93,10 @@ function App() {
       case 'tool-call':
         setMessagesByWorkspace((prev) => {
           const next = new Map(prev)
-          const msgs = next.get(update.sessionId)
+          const msgs = next.get(update.workspaceId)
           if (msgs) {
             next.set(
-              update.sessionId,
+              update.workspaceId,
               msgs.map((m) => {
                 if (m.id !== update.messageId) return m
                 const toolCalls = m.toolCalls ? [...m.toolCalls] : []
@@ -117,9 +117,9 @@ function App() {
       case 'sandbox-violation':
         setViolationsByWorkspace((prev) => {
           const next = new Map(prev)
-          const existing = next.get(update.sessionId) ?? []
+          const existing = next.get(update.workspaceId) ?? []
           const updated = [...existing, update.violation].slice(-200)
-          next.set(update.sessionId, updated)
+          next.set(update.workspaceId, updated)
           return next
         })
         break
@@ -127,9 +127,9 @@ function App() {
       case 'policy-event':
         setPolicyEventsByWorkspace((prev) => {
           const next = new Map(prev)
-          const existing = next.get(update.sessionId) ?? []
+          const existing = next.get(update.workspaceId) ?? []
           const updated = [...existing, update.event].slice(-200)
-          next.set(update.sessionId, updated)
+          next.set(update.workspaceId, updated)
           return next
         })
         break
@@ -199,6 +199,13 @@ function App() {
     try {
       await window.bouncer.repositories.remove(id)
       setRepos((prev) => prev.filter((r) => r.id !== id))
+      setWorkspaces((prev) => prev.filter((w) => w.repositoryId !== id))
+      setActiveWorkspaceId((prev) => {
+        if (!prev) return null
+        const ws = workspaces.find((w) => w.id === prev)
+        return ws && ws.repositoryId === id ? null : prev
+      })
+      if (settingsRepoId === id) setSettingsRepoId(null)
     } catch (err) {
       console.error('Failed to remove repository:', err)
     }

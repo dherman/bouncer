@@ -56,7 +56,7 @@ export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
             />
           </label>
           <label className="repo-settings-field">
-            <span className="repo-settings-label">Default workspace type</span>
+            <span className="repo-settings-label">Default policy</span>
             <select
               value={defaultPolicyId}
               onChange={(e) => setDefaultPolicyId(e.target.value)}
