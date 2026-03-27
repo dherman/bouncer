@@ -182,6 +182,46 @@ function App() {
     ? policyEventsBySession.get(activeSessionId) ?? []
     : []
 
+  const [sidebarWidth, setSidebarWidth] = useState(280)
+  const dragging = useRef(false)
+  const handleRef = useRef<HTMLDivElement>(null)
+
+  function stopDrag() {
+    dragging.current = false
+    handleRef.current?.classList.remove('dragging')
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+    window.removeEventListener('blur', stopDrag)
+  }
+
+  function onMouseMove(ev: globalThis.MouseEvent) {
+    const newWidth = Math.min(Math.max(ev.clientX, 180), window.innerWidth / 2)
+    setSidebarWidth(newWidth)
+  }
+
+  function onMouseUp() {
+    stopDrag()
+  }
+
+  function handleResizeStart(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    dragging.current = true
+    e.currentTarget.classList.add('dragging')
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', stopDrag)
+  }
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('blur', stopDrag)
+    }
+  }, [])
+
   const violationCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const [id, vs] of violationsBySession) {
@@ -200,7 +240,9 @@ function App() {
         onSelect={setActiveSessionId}
         onCreate={() => setShowNewSessionDialog(true)}
         onClose={handleCloseSession}
+        style={{ width: sidebarWidth }}
       />
+      <div ref={handleRef} className="sidebar-resize-handle" onMouseDown={handleResizeStart} />
       {activeSession ? (
         <ChatPanel
           messages={activeMessages}

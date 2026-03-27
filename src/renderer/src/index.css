@@ -27,16 +27,36 @@ body {
 
 /* Session list */
 .session-list {
-  width: 280px;
   min-width: 180px;
   max-width: 50vw;
-  border-right: 1px solid #333;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   background-color: #252525;
-  resize: horizontal;
   overflow-x: hidden;
+}
+
+.sidebar-resize-handle {
+  width: 9px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sidebar-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background-color: #333;
+}
+
+.sidebar-resize-handle:hover::before,
+.sidebar-resize-handle.dragging::before {
+  background-color: #0078d4;
 }
 
 .new-session-btn {
@@ -120,25 +140,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  position: relative;
-}
-
-.chat-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url('./assets/glitterball-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0.25;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.chat-panel > * {
-  position: relative;
-  z-index: 1;
+  background-color: #151110;
 }
 
 .messages {

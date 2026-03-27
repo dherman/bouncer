@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { SessionSummary } from '../../../main/types'
 
 const STATUS_INDICATOR: Record<SessionSummary['status'], string> = {
@@ -15,6 +16,7 @@ interface Props {
   onSelect: (id: string) => void
   onCreate: () => void
   onClose: (id: string) => void
+  style?: CSSProperties
 }
 
 function projectLabel(session: SessionSummary): string {
@@ -24,9 +26,9 @@ function projectLabel(session: SessionSummary): string {
   return session.id.slice(0, 8)
 }
 
-export function SessionList({ sessions, activeSessionId, violationCounts, policyDescriptions, onSelect, onCreate, onClose }: Props) {
+export function SessionList({ sessions, activeSessionId, violationCounts, policyDescriptions, onSelect, onCreate, onClose, style }: Props) {
   return (
-    <div className="session-list">
+    <div className="session-list" style={style}>
       <button className="new-session-btn" onClick={onCreate}>
         + New Session
       </button>
