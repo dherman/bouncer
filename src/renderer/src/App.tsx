@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Message, PolicyEvent, PolicyTemplateSummary, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
-import { SessionList } from './components/SessionList'
+import type { Message, PolicyEvent, PolicyTemplateSummary, Repository, SandboxViolationInfo, WorkspaceSummary, WorkspaceUpdate } from '../../main/types'
+import { WorkspacesSidebar } from './components/WorkspacesSidebar'
 import { ChatPanel } from './components/ChatPanel'
-import { NewSessionDialog } from './components/NewSessionDialog'
+import { RepoSettings } from './components/RepoSettings'
 
 function App() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map())
-  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
-  const [sessionErrors, setSessionErrors] = useState<Map<string, string>>(new Map())
-  const [violationsBySession, setViolationsBySession] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
+  const [repos, setRepos] = useState<Repository[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
+  const [messagesByWorkspace, setMessagesByWorkspace] = useState<Map<string, Message[]>>(new Map())
+  const [workspaceErrors, setWorkspaceErrors] = useState<Map<string, string>>(new Map())
+  const [violationsByWorkspace, setViolationsByWorkspace] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
+  const [policies, setPolicies] = useState<PolicyTemplateSummary[]>([])
   const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
-  const [policyEventsBySession, setPolicyEventsBySession] = useState<Map<string, PolicyEvent[]>>(new Map())
+  const [policyEventsByWorkspace, setPolicyEventsByWorkspace] = useState<Map<string, PolicyEvent[]>>(new Map())
+  const [settingsRepoId, setSettingsRepoId] = useState<string | null>(null)
 
   // Use a ref for streaming text to avoid re-rendering the entire tree on every chunk.
   // A tick counter triggers periodic re-renders so the UI updates smoothly.
@@ -28,28 +30,28 @@ function App() {
     }
   }, [])
 
-  const handleUpdate = useCallback((update: SessionUpdate) => {
+  const handleUpdate = useCallback((update: WorkspaceUpdate) => {
     switch (update.type) {
       case 'status-change':
-        setSessions((prev) =>
+        setWorkspaces((prev) =>
           prev.map((s) =>
-            s.id === update.sessionId ? { ...s, status: update.status } : s
+            s.id === update.workspaceId ? { ...s, status: update.status } : s
           )
         )
         if (update.status === 'error' && update.error) {
-          setSessionErrors((prev) => {
+          setWorkspaceErrors((prev) => {
             const next = new Map(prev)
-            next.set(update.sessionId, update.error!)
+            next.set(update.workspaceId, update.error!)
             return next
           })
         }
         break
 
       case 'message':
-        setMessagesBySession((prev) => {
+        setMessagesByWorkspace((prev) => {
           const next = new Map(prev)
-          const msgs = next.get(update.sessionId) ?? []
-          next.set(update.sessionId, [...msgs, update.message])
+          const msgs = next.get(update.workspaceId) ?? []
+          next.set(update.workspaceId, [...msgs, update.message])
           return next
         })
         if (update.message.streaming) {
@@ -68,12 +70,12 @@ function App() {
       case 'stream-end': {
         const finalText = streamingTextRef.current.get(update.messageId) ?? ''
         streamingTextRef.current.delete(update.messageId)
-        setMessagesBySession((prevMsgs) => {
+        setMessagesByWorkspace((prevMsgs) => {
           const next = new Map(prevMsgs)
-          const msgs = next.get(update.sessionId)
+          const msgs = next.get(update.workspaceId)
           if (msgs) {
             next.set(
-              update.sessionId,
+              update.workspaceId,
               msgs.map((m) =>
                 m.id === update.messageId
                   ? { ...m, text: finalText, streaming: false }
@@ -89,12 +91,12 @@ function App() {
       }
 
       case 'tool-call':
-        setMessagesBySession((prev) => {
+        setMessagesByWorkspace((prev) => {
           const next = new Map(prev)
-          const msgs = next.get(update.sessionId)
+          const msgs = next.get(update.workspaceId)
           if (msgs) {
             next.set(
-              update.sessionId,
+              update.workspaceId,
               msgs.map((m) => {
                 if (m.id !== update.messageId) return m
                 const toolCalls = m.toolCalls ? [...m.toolCalls] : []
@@ -113,21 +115,21 @@ function App() {
         break
 
       case 'sandbox-violation':
-        setViolationsBySession((prev) => {
+        setViolationsByWorkspace((prev) => {
           const next = new Map(prev)
-          const existing = next.get(update.sessionId) ?? []
+          const existing = next.get(update.workspaceId) ?? []
           const updated = [...existing, update.violation].slice(-200)
-          next.set(update.sessionId, updated)
+          next.set(update.workspaceId, updated)
           return next
         })
         break
 
       case 'policy-event':
-        setPolicyEventsBySession((prev) => {
+        setPolicyEventsByWorkspace((prev) => {
           const next = new Map(prev)
-          const existing = next.get(update.sessionId) ?? []
+          const existing = next.get(update.workspaceId) ?? []
           const updated = [...existing, update.event].slice(-200)
-          next.set(update.sessionId, updated)
+          next.set(update.workspaceId, updated)
           return next
         })
         break
@@ -135,51 +137,98 @@ function App() {
   }, [scheduleStreamTick])
 
   useEffect(() => {
-    window.glitterball.sessions.list().then((list) => {
+    window.bouncer.repositories.list().then(setRepos)
+    window.bouncer.workspaces.list().then((list) => {
       if (list.length > 0) {
-        setSessions(list)
-        setActiveSessionId(list[0].id)
+        setWorkspaces(list)
+        setActiveWorkspaceId(list[0].id)
       }
     })
-    window.glitterball.policies.list().then((list) => {
+    window.bouncer.policies.list().then((list) => {
+      setPolicies(list)
       setPolicyDescriptions(new Map(list.map((p) => [p.id, p.description])))
     })
-    const unsubscribe = window.glitterball.sessions.onUpdate(handleUpdate)
+    const unsubscribe = window.bouncer.workspaces.onUpdate(handleUpdate)
     return unsubscribe
   }, [handleUpdate])
 
-  function handleSessionCreated(session: SessionSummary) {
-    setSessions((prev) => [...prev, session])
-    setActiveSessionId(session.id)
-    setShowNewSessionDialog(false)
+  async function handleAddRepo() {
+    const dir = await window.bouncer.dialog.selectDirectory()
+    if (!dir) return
+    try {
+      const repo = await window.bouncer.repositories.add(dir)
+      setRepos((prev) => [...prev, repo])
+    } catch (err) {
+      console.error('Failed to add repository:', err)
+    }
+  }
+
+  async function handleCreateWorkspace(repositoryId: string) {
+    try {
+      const ws = await window.bouncer.workspaces.create(repositoryId)
+      setWorkspaces((prev) => [...prev, ws])
+      setActiveWorkspaceId(ws.id)
+    } catch (err) {
+      console.error('Failed to create workspace:', err)
+    }
   }
 
   async function handleSendMessage(text: string) {
-    if (!activeSessionId) return
+    if (!activeWorkspaceId) return
     try {
-      await window.glitterball.sessions.sendMessage(activeSessionId, text)
+      await window.bouncer.workspaces.sendMessage(activeWorkspaceId, text)
     } catch (err) {
       console.error('Failed to send message:', err)
     }
   }
 
-  async function handleCloseSession(id: string) {
+  async function handleCloseWorkspace(id: string) {
     try {
-      await window.glitterball.sessions.closeSession(id)
+      await window.bouncer.workspaces.close(id)
     } catch (err) {
-      console.error('Failed to close session:', err)
+      console.error('Failed to close workspace:', err)
     }
   }
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId)
-  const activeMessages = activeSessionId
-    ? messagesBySession.get(activeSessionId) ?? []
+  async function handleRemoveRepo(id: string) {
+    // Close active workspaces for this repo first
+    const repoWorkspaces = workspaces.filter((w) => w.repositoryId === id && w.status !== 'closed')
+    for (const w of repoWorkspaces) {
+      await handleCloseWorkspace(w.id)
+    }
+    try {
+      await window.bouncer.repositories.remove(id)
+      setRepos((prev) => prev.filter((r) => r.id !== id))
+      setWorkspaces((prev) => prev.filter((w) => w.repositoryId !== id))
+      setActiveWorkspaceId((prev) => {
+        if (!prev) return null
+        const ws = workspaces.find((w) => w.id === prev)
+        return ws && ws.repositoryId === id ? null : prev
+      })
+      if (settingsRepoId === id) setSettingsRepoId(null)
+    } catch (err) {
+      console.error('Failed to remove repository:', err)
+    }
+  }
+
+  async function handleUpdateRepo(id: string, changes: Partial<Repository>) {
+    try {
+      await window.bouncer.repositories.update(id, changes)
+      setRepos((prev) => prev.map((r) => r.id === id ? { ...r, ...changes } : r))
+    } catch (err) {
+      console.error('Failed to update repository:', err)
+    }
+  }
+
+  const activeWorkspace = workspaces.find((s) => s.id === activeWorkspaceId)
+  const activeMessages = activeWorkspaceId
+    ? messagesByWorkspace.get(activeWorkspaceId) ?? []
     : []
-  const activeViolations = activeSessionId
-    ? violationsBySession.get(activeSessionId) ?? []
+  const activeViolations = activeWorkspaceId
+    ? violationsByWorkspace.get(activeWorkspaceId) ?? []
     : []
-  const activePolicyEvents = activeSessionId
-    ? policyEventsBySession.get(activeSessionId) ?? []
+  const activePolicyEvents = activeWorkspaceId
+    ? policyEventsByWorkspace.get(activeWorkspaceId) ?? []
     : []
 
   const [sidebarWidth, setSidebarWidth] = useState(280)
@@ -224,50 +273,63 @@ function App() {
 
   const violationCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const [id, vs] of violationsBySession) {
+    for (const [id, vs] of violationsByWorkspace) {
       counts.set(id, vs.length)
     }
     return counts
-  }, [violationsBySession])
+  }, [violationsByWorkspace])
 
   return (
     <div className="app">
-      <SessionList
-        sessions={sessions}
-        activeSessionId={activeSessionId}
+      <WorkspacesSidebar
+        repos={repos}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
         violationCounts={violationCounts}
         policyDescriptions={policyDescriptions}
-        onSelect={setActiveSessionId}
-        onCreate={() => setShowNewSessionDialog(true)}
-        onClose={handleCloseSession}
+        onSelectWorkspace={setActiveWorkspaceId}
+        onCreateWorkspace={handleCreateWorkspace}
+        onCloseWorkspace={handleCloseWorkspace}
+        onAddRepo={handleAddRepo}
+        onRemoveRepo={handleRemoveRepo}
+        onUpdateRepo={handleUpdateRepo}
+        onOpenRepoSettings={setSettingsRepoId}
         style={{ width: sidebarWidth }}
       />
       <div ref={handleRef} className="sidebar-resize-handle" onMouseDown={handleResizeStart} />
-      {activeSession ? (
+      {activeWorkspace ? (
         <ChatPanel
           messages={activeMessages}
           streamingTextRef={streamingTextRef}
           streamTick={streamTick}
-          sessionStatus={activeSession.status}
-          sessionError={sessionErrors.get(activeSession.id)}
+          sessionStatus={activeWorkspace.status}
+          sessionError={workspaceErrors.get(activeWorkspace.id)}
           violations={activeViolations}
           policyEvents={activePolicyEvents}
           onSendMessage={handleSendMessage}
-          onCloseSession={() => handleCloseSession(activeSession.id)}
+          onCloseSession={() => handleCloseWorkspace(activeWorkspace.id)}
         />
       ) : (
         <div className="chat-panel">
           <div className="empty-state">
-            Create a new session to get started
+            {repos.length === 0
+              ? 'Add a repository to get started'
+              : 'Select a workspace or create one with the + button'}
           </div>
         </div>
       )}
-      {showNewSessionDialog && (
-        <NewSessionDialog
-          onClose={() => setShowNewSessionDialog(false)}
-          onCreated={handleSessionCreated}
-        />
-      )}
+      {settingsRepoId && (() => {
+        const repo = repos.find((r) => r.id === settingsRepoId)
+        if (!repo) return null
+        return (
+          <RepoSettings
+            repo={repo}
+            policies={policies}
+            onSave={handleUpdateRepo}
+            onClose={() => setSettingsRepoId(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

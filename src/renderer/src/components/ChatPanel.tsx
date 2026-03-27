@@ -1,12 +1,12 @@
 import { type RefObject, useEffect, useRef } from 'react'
-import type { Message, PolicyEvent, SandboxViolationInfo, SessionSummary, ToolCallInfo } from '../../../main/types'
+import type { Message, PolicyEvent, SandboxViolationInfo, WorkspaceSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
 
 interface Props {
   messages: Message[]
   streamingTextRef: RefObject<Map<string, string>>
   streamTick: number
-  sessionStatus: SessionSummary['status']
+  sessionStatus: WorkspaceSummary['status']
   sessionError?: string
   violations: SandboxViolationInfo[]
   policyEvents: PolicyEvent[]
@@ -90,14 +90,14 @@ export function ChatPanel({
           )
         })}
         {sessionStatus === 'error' && (
-          <div className="session-state-banner error">
-            {sessionError ?? 'Session disconnected'}
-            <button onClick={onCloseSession}>Close session</button>
+          <div className="workspace-state-banner error">
+            {sessionError ?? 'Workspace disconnected'}
+            <button onClick={onCloseSession}>Close workspace</button>
           </div>
         )}
         {sessionStatus === 'closed' && (
-          <div className="session-state-banner closed">
-            Session closed
+          <div className="workspace-state-banner closed">
+            Workspace closed
           </div>
         )}
         <div ref={bottomRef} />
@@ -108,9 +108,9 @@ export function ChatPanel({
         violations={violations}
         policyEvents={policyEvents}
         placeholder={
-          sessionStatus === 'error' ? 'Session disconnected' :
-          sessionStatus === 'closed' ? 'Session closed' :
-          sessionStatus === 'initializing' ? 'Starting session...' :
+          sessionStatus === 'error' ? 'Workspace disconnected' :
+          sessionStatus === 'closed' ? 'Workspace closed' :
+          sessionStatus === 'initializing' ? 'Starting workspace...' :
           undefined
         }
       />

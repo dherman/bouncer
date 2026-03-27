@@ -1,6 +1,7 @@
 import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
-import { SessionManager } from './session-manager.js'
+import { WorkspaceManager } from './workspace-manager.js'
+import { RepositoryStore } from './repository-store.js'
 import { loadSession } from './dataset-loader.js'
 import { isDockerAvailable, ensureAgentImage } from './container.js'
 
@@ -58,7 +59,7 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set Dock icon on macOS (works in dev mode too)
   if (process.platform === 'darwin' && app.dock) {
     const iconPath = join(__dirname, '../../resources/icon.png')
@@ -77,11 +78,15 @@ app.whenReady().then(() => {
     }
   })
 
-  // SessionManager forwards events to the renderer via IPC
+  // Load persisted repository list
+  const repoStore = new RepositoryStore()
+  await repoStore.load()
+
+  // WorkspaceManager forwards events to the renderer via IPC
   // Track IPC throughput to diagnose renderer crashes
   let ipcCount = 0
   let ipcLastReport = Date.now()
-  const sessionManager = new SessionManager((channel, data) => {
+  const workspaceManager = new WorkspaceManager(repoStore, (channel, data) => {
     ipcCount++
     const now = Date.now()
     if (now - ipcLastReport >= 5000) {
@@ -93,49 +98,74 @@ app.whenReady().then(() => {
   })
 
   // Clean up orphan worktrees and sandbox policies from previous crashes
-  sessionManager.cleanupOrphans().catch((err) => {
+  workspaceManager.cleanupOrphans().catch((err) => {
     console.warn('Failed to clean up orphans:', err)
   })
 
-  // IPC handlers for renderer → main communication
-  ipcMain.handle('sessions:list', () => sessionManager.listSessions())
-  ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
-    if (typeof projectDir !== 'string') {
-      throw new Error('Invalid argument: projectDir must be a string')
+  // Repository IPC handlers
+  ipcMain.handle('repositories:list', () => repoStore.list())
+  ipcMain.handle('repositories:add', async (_e, localPath: unknown) => {
+    if (typeof localPath !== 'string') {
+      throw new Error('Invalid argument: localPath must be a string')
     }
-    const validTypes = ['echo', 'claude-code', 'replay'] as const
-    type ValidType = typeof validTypes[number]
-    const validAgentType: ValidType = validTypes.includes(agentType as ValidType)
-      ? (agentType as ValidType)
-      : 'claude-code'
-    const validPolicyId = typeof policyId === 'string' ? policyId : undefined
-    return sessionManager.createSession(projectDir, validAgentType, validPolicyId)
+    return repoStore.add(localPath)
+  })
+  ipcMain.handle('repositories:update', async (_e, id: unknown, changes: unknown) => {
+    if (typeof id !== 'string') {
+      throw new Error('Invalid argument: id must be a string')
+    }
+    if (typeof changes !== 'object' || changes === null || Array.isArray(changes)) {
+      throw new Error('Invalid argument: changes must be an object')
+    }
+    const allowed = ['name', 'localPath', 'githubRepo', 'defaultPolicyId', 'defaultAgentType'] as const
+    const validated: Record<string, unknown> = {}
+    for (const key of allowed) {
+      if (key in changes) {
+        validated[key] = (changes as Record<string, unknown>)[key]
+      }
+    }
+    return repoStore.update(id, validated)
+  })
+  ipcMain.handle('repositories:remove', async (_e, id: unknown) => {
+    if (typeof id !== 'string') {
+      throw new Error('Invalid argument: id must be a string')
+    }
+    return repoStore.remove(id)
+  })
+
+  // Workspace IPC handlers
+  ipcMain.handle('workspaces:list', () => workspaceManager.listWorkspaces())
+  ipcMain.handle('workspaces:create', (_e, repositoryId: unknown) => {
+    if (typeof repositoryId !== 'string') {
+      throw new Error('Invalid argument: repositoryId must be a string')
+    }
+    return workspaceManager.createWorkspaceFromRepo(repositoryId)
   })
 
   ipcMain.handle('policies:list', () => {
-    return sessionManager.policyRegistry.list()
+    return workspaceManager.policyRegistry.list()
   })
-  ipcMain.handle('sessions:sendMessage', (_e, sessionId: unknown, text: unknown) => {
+  ipcMain.handle('workspaces:sendMessage', (_e, sessionId: unknown, text: unknown) => {
     if (typeof sessionId !== 'string' || typeof text !== 'string') {
       throw new Error('Invalid arguments: sessionId and text must be strings')
     }
-    return sessionManager.sendMessage(sessionId, text)
+    return workspaceManager.sendMessage(sessionId, text)
   })
-  ipcMain.handle('sessions:close', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:close', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string')
     }
-    return sessionManager.closeSession(sessionId)
+    return workspaceManager.closeWorkspace(sessionId)
   })
 
-  ipcMain.handle('sessions:getSandboxViolations', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:getSandboxViolations', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string')
     }
-    return sessionManager.getSandboxViolations(sessionId)
+    return workspaceManager.getSandboxViolations(sessionId)
   })
 
-  ipcMain.handle('sessions:loadReplayData', async (_e, datasetSessionId: unknown) => {
+  ipcMain.handle('workspaces:loadReplayData', async (_e, datasetSessionId: unknown) => {
     if (typeof datasetSessionId !== 'string') {
       throw new Error('Invalid argument: datasetSessionId must be a string')
     }
@@ -157,13 +187,13 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
-  // Clean up all sessions before quitting
+  // Clean up all workspaces before quitting
   app.on('before-quit', (event) => {
     event.preventDefault()
-    sessionManager.listSessions().then((sessions) => {
-      const activeSessions = sessions.filter((s) => s.status !== 'closed')
-      if (activeSessions.length > 0) {
-        sessionManager.closeAllSessions().finally(() => {
+    workspaceManager.listWorkspaces().then((workspaces) => {
+      const activeWorkspaces = workspaces.filter((s) => s.status !== 'closed')
+      if (activeWorkspaces.length > 0) {
+        workspaceManager.closeAllWorkspaces().finally(() => {
           app.quit()
         })
       } else {

@@ -1,5 +1,17 @@
 export type AgentType = "echo" | "claude-code" | "replay";
 
+// --- Repository Types (M8) ---
+
+export interface Repository {
+  id: string;
+  name: string;
+  localPath: string;
+  githubRepo: string | null;
+  defaultPolicyId: string;
+  defaultAgentType: AgentType;
+  createdAt: number;
+}
+
 export interface Message {
   id: string;
   role: "user" | "agent";
@@ -20,8 +32,9 @@ export interface ToolCallInfo {
 
 export type SandboxBackend = "safehouse" | "container" | "none";
 
-export interface SessionSummary {
+export interface WorkspaceSummary {
   id: string;
+  repositoryId: string | null;
   status: "initializing" | "ready" | "error" | "closed";
   messageCount: number;
   agentType: AgentType;
@@ -38,7 +51,7 @@ export interface SessionSummary {
 
 // --- GitHub Application-Layer Policy Types (M5) ---
 
-/** GitHub-specific application-layer policy for a session. */
+/** GitHub-specific application-layer policy for a workspace. */
 export interface GitHubPolicy {
   repo: string;
   allowedPushRefs: string[];
@@ -122,11 +135,11 @@ export interface ReplayResult {
   original_outcome: string;
 }
 
-export type SessionUpdate =
-  | { sessionId: string; type: "status-change"; status: SessionSummary["status"]; error?: string }
-  | { sessionId: string; type: "message"; message: Message }
-  | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { sessionId: string; type: "stream-end"; messageId: string }
-  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
-  | { sessionId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
-  | { sessionId: string; type: "policy-event"; event: PolicyEvent };
+export type WorkspaceUpdate =
+  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string }
+  | { workspaceId: string; type: "message"; message: Message }
+  | { workspaceId: string; type: "stream-chunk"; messageId: string; text: string }
+  | { workspaceId: string; type: "stream-end"; messageId: string }
+  | { workspaceId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
+  | { workspaceId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
+  | { workspaceId: string; type: "policy-event"; event: PolicyEvent };

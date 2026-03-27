@@ -44,10 +44,11 @@ import type {
   PolicyEvent,
   SandboxBackend,
   SandboxViolationInfo,
-  SessionSummary,
-  SessionUpdate,
+  WorkspaceSummary,
+  WorkspaceUpdate,
   ToolCallInfo,
 } from "./types.js";
+import type { RepositoryStore } from "./repository-store.js";
 import {
   isDockerAvailable,
   ensureAgentImage,
@@ -156,7 +157,7 @@ function resolveReplayAgentCommand(
 }
 
 // Resolve the command for non-container agent spawning.
-// Container agents are spawned via spawnContainer() directly in createSession.
+// Container agents are spawned via spawnContainer() directly in createWorkspace.
 function resolveAgentCommand(
   agentType: AgentType,
   cwd: string,
@@ -172,8 +173,9 @@ function resolveAgentCommand(
   return resolveClaudeCodeCommand(cwd, sandboxConfig);
 }
 
-interface SessionState {
+interface WorkspaceState {
   id: string;
+  repositoryId: string | null;
   acpSessionId: string;
   agentProcess: ChildProcess;
   connection: acp.ClientSideConnection;
@@ -197,19 +199,34 @@ interface SessionState {
   flushChunks: () => void;
 }
 
-export class SessionManager {
-  private sessions = new Map<string, SessionState>();
+export class WorkspaceManager {
+  private workspaces = new Map<string, WorkspaceState>();
   private worktreeManager = new WorktreeManager();
   private safehouseWarningLogged = false;
   readonly policyRegistry = new PolicyTemplateRegistry();
+  private repoStore: RepositoryStore;
+  private emit: (channel: string, data: WorkspaceUpdate) => void;
 
-  constructor(private emit: (channel: string, data: SessionUpdate) => void) {}
+  constructor(repoStore: RepositoryStore, emit: (channel: string, data: WorkspaceUpdate) => void) {
+    this.repoStore = repoStore;
+    this.emit = emit;
+  }
 
-  async createSession(
+  /** Create a workspace from a repository's default settings. */
+  async createWorkspaceFromRepo(repositoryId: string): Promise<WorkspaceSummary> {
+    const repo = this.repoStore.get(repositoryId);
+    if (!repo) {
+      throw new Error(`Repository not found: ${repositoryId}`);
+    }
+    return this.createWorkspace(repo.localPath, repo.defaultAgentType, repo.defaultPolicyId, repositoryId);
+  }
+
+  async createWorkspace(
     projectDir: string,
     agentType: AgentType = "claude-code",
     policyId?: string,
-  ): Promise<SessionSummary> {
+    repositoryId?: string,
+  ): Promise<WorkspaceSummary> {
     const id = randomUUID();
     let worktree: WorktreeInfo | null = null;
 
@@ -235,8 +252,9 @@ export class SessionManager {
 
     let sandboxConfig: SandboxConfig | null = null;
 
-    const session: SessionState = {
+    const workspace: WorkspaceState = {
       id,
+      repositoryId: repositoryId ?? null,
       acpSessionId: "",
       agentProcess: null!,
       connection: null!,
@@ -257,9 +275,9 @@ export class SessionManager {
       githubPolicy: null,
       flushChunks: () => {},
     };
-    this.sessions.set(id, session);
-    this.emit("session-update", {
-      sessionId: id,
+    this.workspaces.set(id, workspace);
+    this.emit("workspace-update", {
+      workspaceId: id,
       type: "status-change",
       status: "initializing",
     });
@@ -299,7 +317,7 @@ export class SessionManager {
           gitCommonDir: worktree?.gitCommonDir,
           readOnlyDirs,
         });
-        session.sandboxConfig = sandboxConfig;
+        workspace.sandboxConfig = sandboxConfig;
 
         // Write append profile file before spawning (if needed)
         await writeAppendProfile(sandboxConfig);
@@ -310,8 +328,8 @@ export class SessionManager {
         const repo = await detectGitHubRepo(workingDir);
         if (repo) {
           const githubPolicy = buildSessionPolicy(repo, worktree.branch);
-          // Set on session before side effects so error cleanup can find it
-          session.githubPolicy = githubPolicy;
+          // Set on workspace before side effects so error cleanup can find it
+          workspace.githubPolicy = githubPolicy;
           await writePolicyState(id, githubPolicy);
           await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
 
@@ -435,7 +453,7 @@ export class SessionManager {
           let containerHooksDir: string | undefined;
           let containerCredHelper: string | undefined;
 
-          if (template.github && session.githubPolicy) {
+          if (template.github && workspace.githubPolicy) {
             // Write container gh wrapper (points to container paths)
             const wrapperPath = join(POLICY_DIR, `${id}-container-gh-wrapper`);
             await writeFile(wrapperPath, `#!/bin/bash\nexec node /usr/local/lib/bouncer/gh-shim.js "$@"\n`, "utf-8");
@@ -468,7 +486,7 @@ export class SessionManager {
 
           // Resolve the shim bundle — mount whenever GitHub policy is active,
           // independent of whether a host gh binary was found.
-          const shimBundlePath = (template.github && session.githubPolicy)
+          const shimBundlePath = (template.github && workspace.githubPolicy)
             ? join(POLICY_DIR, "gh-shim-bundle.js")
             : undefined;
 
@@ -505,7 +523,7 @@ export class SessionManager {
           };
 
           // --- Network proxy (M7) ---
-          // Start the proxy and create a session network when the template
+          // Start the proxy and create a workspace network when the template
           // uses filtered network access and Docker is available.
           let proxyCaCertPath: string | undefined;
           if (template.network.access === "filtered") {
@@ -523,47 +541,47 @@ export class SessionManager {
               port: 0,
               allowedDomains: template.network.allowedDomains,
               inspectedDomains,
-              githubPolicy: session.githubPolicy,
+              githubPolicy: workspace.githubPolicy,
               ca,
               onPolicyEvent: (event: PolicyEvent) => {
-                this.emit("session-update", {
-                  sessionId: id,
+                this.emit("workspace-update", {
+                  workspaceId: id,
                   type: "policy-event",
                   event,
                 });
                 // Persist policy state if PR was captured
-                if (session.githubPolicy && event.operation.startsWith("captured PR")) {
-                  writePolicyState(id, session.githubPolicy).catch(() => {});
+                if (workspace.githubPolicy && event.operation.startsWith("captured PR")) {
+                  writePolicyState(id, workspace.githubPolicy).catch(() => {});
                 }
               },
             };
 
             // Wire the GitHub MITM handler if GitHub policy is active
-            if (session.githubPolicy) {
+            if (workspace.githubPolicy) {
               proxyConfig.onMitmRequest = createGitHubMitmHandler(proxyConfig);
             }
 
             try {
               const proxyHandle = await startProxy(proxyConfig);
-              session.proxyHandle = proxyHandle;
+              workspace.proxyHandle = proxyHandle;
 
               const sessionNetwork = await createSessionNetwork(id);
-              session.sessionNetwork = sessionNetwork;
+              workspace.sessionNetwork = sessionNetwork;
             } catch (err) {
               // Best-effort cleanup if proxy started but network failed
-              if (session.proxyHandle) {
-                await session.proxyHandle.stop().catch(() => {});
+              if (workspace.proxyHandle) {
+                await workspace.proxyHandle.stop().catch(() => {});
               }
-              if (session.sessionNetwork) {
-                await session.sessionNetwork.cleanup().catch(() => {});
+              if (workspace.sessionNetwork) {
+                await workspace.sessionNetwork.cleanup().catch(() => {});
               }
-              session.proxyHandle = null;
-              session.sessionNetwork = null;
+              workspace.proxyHandle = null;
+              workspace.sessionNetwork = null;
               throw err;
             }
 
             // Add proxy env vars to container env
-            const proxyEnvUrl = `http://host.docker.internal:${session.proxyHandle.port}`;
+            const proxyEnvUrl = `http://host.docker.internal:${workspace.proxyHandle.port}`;
             containerEnv.HTTP_PROXY = proxyEnvUrl;
             containerEnv.HTTPS_PROXY = proxyEnvUrl;
             containerEnv.http_proxy = proxyEnvUrl;
@@ -583,7 +601,7 @@ export class SessionManager {
               await writeFile(containerGitconfigFile, gitconfigContent, "utf-8");
             }
 
-            console.log(`[session] Proxy started on port ${session.proxyHandle.port} for session ${id}`);
+            console.log(`[workspace] Proxy started on port ${workspace.proxyHandle.port} for workspace ${id}`);
           }
 
           const ctx: ContainerSessionContext = {
@@ -596,7 +614,7 @@ export class SessionManager {
             shimScriptPath: containerShimScript,
             hooksDir: containerHooksDir,
             allowedRefsPath: allowedRefsPath(id),
-            policyStatePath: session.githubPolicy ? policyStatePath(id) : undefined,
+            policyStatePath: workspace.githubPolicy ? policyStatePath(id) : undefined,
             gitconfigPath: containerGitconfigFile,
             credentialHelperPath: containerCredHelper,
             caCertPath: proxyCaCertPath,
@@ -630,14 +648,14 @@ export class SessionManager {
           );
 
           // Override network mode when proxy is active
-          if (session.proxyHandle && session.sessionNetwork) {
+          if (workspace.proxyHandle && workspace.sessionNetwork) {
             containerConfig.networkMode = "proxy";
-            containerConfig.networkName = session.sessionNetwork.networkName;
+            containerConfig.networkName = workspace.sessionNetwork.networkName;
           }
         }
 
         if (containerConfig) {
-          session.sandboxBackend = "container";
+          workspace.sandboxBackend = "container";
           // Unset repo-level core.hooksPath so the system gitconfig
           // (/etc/gitconfig) takes effect inside the container.
           // installHooks() set it earlier for the safehouse path.
@@ -655,16 +673,16 @@ export class SessionManager {
       }
 
       if (!containerConfig && sandboxConfig) {
-        session.sandboxBackend = "safehouse";
+        workspace.sandboxBackend = "safehouse";
       } else if (!containerConfig) {
-        session.sandboxBackend = session.sandboxBackend === "container" ? "container" : "none";
+        workspace.sandboxBackend = workspace.sandboxBackend === "container" ? "container" : "none";
       }
 
       // Spawn the agent
       let agentProcess: ChildProcess;
       if (containerConfig) {
         const handle = spawnContainer(containerConfig);
-        session.containerHandle = handle;
+        workspace.containerHandle = handle;
         agentProcess = handle.process;
       } else {
         const { cmd, args, env, cwd } = resolveAgentCommand(
@@ -679,7 +697,7 @@ export class SessionManager {
           cwd,
         });
       }
-      session.agentProcess = agentProcess;
+      workspace.agentProcess = agentProcess;
 
       // Capture stderr for error reporting and parse policy events.
       // Use StringDecoder to handle multibyte characters (e.g. em-dash)
@@ -690,8 +708,8 @@ export class SessionManager {
       const flushStderrLine = (line: string): void => {
         const event = parsePolicyEvent(line);
         if (event) {
-          this.emit("session-update", {
-            sessionId: id,
+          this.emit("workspace-update", {
+            workspaceId: id,
             type: "policy-event",
             event,
           });
@@ -724,16 +742,16 @@ export class SessionManager {
           stderrBuffer = "";
         }
 
-        if (session.status !== "closed") {
+        if (workspace.status !== "closed") {
           const errorMessage =
-            session.status === "initializing"
+            workspace.status === "initializing"
               ? collectedStderr.trim() ||
                 `Agent exited with code ${code}`
               : undefined;
-          session.status = "error";
-          session.errorMessage = errorMessage;
-          this.emit("session-update", {
-            sessionId: id,
+          workspace.status = "error";
+          workspace.errorMessage = errorMessage;
+          this.emit("workspace-update", {
+            workspaceId: id,
             type: "status-change",
             status: "error",
             error: errorMessage,
@@ -741,12 +759,12 @@ export class SessionManager {
         }
       });
       agentProcess.on("error", (err) => {
-        if (session.status !== "closed") {
+        if (workspace.status !== "closed") {
           const errorMessage = err.message;
-          session.status = "error";
-          session.errorMessage = errorMessage;
-          this.emit("session-update", {
-            sessionId: id,
+          workspace.status = "error";
+          workspace.errorMessage = errorMessage;
+          this.emit("workspace-update", {
+            workspaceId: id,
             type: "status-change",
             status: "error",
             error: errorMessage,
@@ -771,8 +789,8 @@ export class SessionManager {
           chunkFlushTimer = null;
         }
         for (const [, chunk] of pendingChunks) {
-          emitUpdate("session-update", {
-            sessionId: id,
+          emitUpdate("workspace-update", {
+            workspaceId: id,
             type: "stream-chunk",
             messageId: chunk.messageId,
             text: chunk.text,
@@ -780,7 +798,7 @@ export class SessionManager {
         }
         pendingChunks.clear();
       };
-      session.flushChunks = flushChunks;
+      workspace.flushChunks = flushChunks;
       const scheduleChunkFlush = (): void => {
         if (!chunkFlushTimer) {
           chunkFlushTimer = setTimeout(flushChunks, 50);
@@ -795,7 +813,7 @@ export class SessionManager {
               update.sessionUpdate === "agent_message_chunk" &&
               update.content.type === "text"
             ) {
-              const agentMsg = session.messages.findLast(
+              const agentMsg = workspace.messages.findLast(
                 (m) => m.role === "agent" && m.streaming
               );
               if (agentMsg) {
@@ -816,7 +834,7 @@ export class SessionManager {
               update.sessionUpdate === "tool_call" ||
               update.sessionUpdate === "tool_call_update"
             ) {
-              const agentMsg = session.messages.findLast(
+              const agentMsg = workspace.messages.findLast(
                 (m) => m.role === "agent"
               );
               if (agentMsg) {
@@ -847,8 +865,8 @@ export class SessionManager {
                 } else {
                   agentMsg.toolCalls.push(toolCall);
                 }
-                emitUpdate("session-update", {
-                  sessionId: id,
+                emitUpdate("workspace-update", {
+                  workspaceId: id,
                   type: "tool-call",
                   messageId: agentMsg.id,
                   toolCall,
@@ -880,7 +898,7 @@ export class SessionManager {
         }),
         stream
       );
-      session.connection = connection;
+      workspace.connection = connection;
 
       // ACP handshake
       await connection.initialize({
@@ -895,7 +913,7 @@ export class SessionManager {
         cwd: containerConfig ? "/workspace" : workingDir,
         mcpServers: [],
       });
-      session.acpSessionId = sessionResp.sessionId;
+      workspace.acpSessionId = sessionResp.sessionId;
 
       // Start sandbox monitor if sandboxed via safehouse
       if (sandboxConfig && !containerConfig && agentProcess.pid) {
@@ -907,19 +925,19 @@ export class SessionManager {
             path: violation.path,
             processName: violation.processName,
           };
-          session.sandboxViolations.push(info);
-          this.emit("session-update", {
-            sessionId: id,
+          workspace.sandboxViolations.push(info);
+          this.emit("workspace-update", {
+            workspaceId: id,
             type: "sandbox-violation",
             violation: info,
           });
         });
         monitor.start(agentProcess.pid);
-        session.sandboxMonitor = monitor;
+        workspace.sandboxMonitor = monitor;
       }
 
       // Start container monitor for container sessions
-      if (session.containerHandle) {
+      if (workspace.containerHandle) {
         const cMonitor = new ContainerMonitor();
         cMonitor.on("violation", (violation) => {
           const info: SandboxViolationInfo = {
@@ -928,29 +946,29 @@ export class SessionManager {
             path: violation.path,
             processName: violation.processName,
           };
-          session.sandboxViolations.push(info);
-          this.emit("session-update", {
-            sessionId: id,
+          workspace.sandboxViolations.push(info);
+          this.emit("workspace-update", {
+            workspaceId: id,
             type: "sandbox-violation",
             violation: info,
           });
         });
-        cMonitor.start(session.containerHandle.containerName);
-        session.containerMonitor = cMonitor;
+        cMonitor.start(workspace.containerHandle.containerName);
+        workspace.containerMonitor = cMonitor;
       }
 
-      session.status = "ready";
-      this.emit("session-update", {
-        sessionId: id,
+      workspace.status = "ready";
+      this.emit("workspace-update", {
+        workspaceId: id,
         type: "status-change",
         status: "ready",
       });
     } catch (err) {
-      console.error(`Failed to create session ${id}:`, err);
-      if (session.containerHandle) {
-        session.containerHandle.kill();
+      console.error(`Failed to create workspace ${id}:`, err);
+      if (workspace.containerHandle) {
+        workspace.containerHandle.kill();
       } else {
-        session.agentProcess?.kill();
+        workspace.agentProcess?.kill();
       }
       await removeContainer(id).catch(() => {});
       if (worktree) {
@@ -969,22 +987,22 @@ export class SessionManager {
       if (worktree) {
         await cleanupHooks(id, worktree.path).catch(() => {});
       }
-      session.status = "error";
-      this.emit("session-update", {
-        sessionId: id,
+      workspace.status = "error";
+      this.emit("workspace-update", {
+        workspaceId: id,
         type: "status-change",
         status: "error",
       });
     }
 
-    return await this.summarize(session);
+    return await this.summarize(workspace);
   }
 
-  async sendMessage(sessionId: string, text: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`Session not found: ${sessionId}`);
-    if (session.status !== "ready")
-      throw new Error(`Session not ready: ${session.status}`);
+  async sendMessage(workspaceId: string, text: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    if (workspace.status !== "ready")
+      throw new Error(`Workspace not ready: ${workspace.status}`);
 
     // Create user message
     const userMsg: Message = {
@@ -993,8 +1011,8 @@ export class SessionManager {
       text,
       timestamp: Date.now(),
     };
-    session.messages.push(userMsg);
-    this.emit("session-update", { sessionId, type: "message", message: userMsg });
+    workspace.messages.push(userMsg);
+    this.emit("workspace-update", { workspaceId, type: "message", message: userMsg });
 
     // Create placeholder agent message for streaming
     const agentMsg: Message = {
@@ -1004,129 +1022,129 @@ export class SessionManager {
       timestamp: Date.now(),
       streaming: true,
     };
-    session.messages.push(agentMsg);
-    this.emit("session-update", { sessionId, type: "message", message: agentMsg });
+    workspace.messages.push(agentMsg);
+    this.emit("workspace-update", { workspaceId, type: "message", message: agentMsg });
 
     // Send prompt via ACP
     try {
-      await session.connection.prompt({
-        sessionId: session.acpSessionId,
+      await workspace.connection.prompt({
+        sessionId: workspace.acpSessionId,
         prompt: [{ type: "text", text }],
       });
     } catch (err) {
-      console.error(`Prompt failed for session ${sessionId}:`, err);
+      console.error(`Prompt failed for workspace ${workspaceId}:`, err);
     }
 
     // Flush any batched chunks before finalizing
-    session.flushChunks();
+    workspace.flushChunks();
 
     // Finalize the agent message
     agentMsg.streaming = false;
-    this.emit("session-update", {
-      sessionId,
+    this.emit("workspace-update", {
+      workspaceId,
       type: "stream-end",
       messageId: agentMsg.id,
     });
   }
 
-  async listSessions(): Promise<SessionSummary[]> {
+  async listWorkspaces(): Promise<WorkspaceSummary[]> {
     return await Promise.all(
-      Array.from(this.sessions.values()).map((s) => this.summarize(s))
+      Array.from(this.workspaces.values()).map((s) => this.summarize(s))
     );
   }
 
-  async closeSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`Session not found: ${sessionId}`);
+  async closeWorkspace(workspaceId: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
 
-    session.status = "closed";
-    session.flushChunks();
-    session.sandboxMonitor?.stop();
-    session.containerMonitor?.stop();
-    if (session.containerHandle) {
-      session.containerHandle.kill();
+    workspace.status = "closed";
+    workspace.flushChunks();
+    workspace.sandboxMonitor?.stop();
+    workspace.containerMonitor?.stop();
+    if (workspace.containerHandle) {
+      workspace.containerHandle.kill();
     } else {
-      session.agentProcess?.kill();
+      workspace.agentProcess?.kill();
     }
 
     // Clean up container and container-specific host artifacts
-    if (session.sandboxBackend === "container") {
-      await removeContainer(sessionId).catch((err) =>
-        console.warn(`Failed to remove container for session ${sessionId}:`, err)
+    if (workspace.sandboxBackend === "container") {
+      await removeContainer(workspaceId).catch((err) =>
+        console.warn(`Failed to remove container for workspace ${workspaceId}:`, err)
       );
       // Clean up container-specific files on the host
-      await rm(join(POLICY_DIR, `${sessionId}-container-gh-wrapper`), { force: true }).catch(() => {});
-      await rm(join(POLICY_DIR, `${sessionId}-container-hooks`), { recursive: true, force: true }).catch(() => {});
-      await rm(join(POLICY_DIR, `${sessionId}-gitconfig`), { force: true }).catch(() => {});
-      await rm(join(POLICY_DIR, `${sessionId}-claude-credentials.json`), { force: true }).catch(() => {});
-      await rm(join(POLICY_DIR, `${sessionId}-credential-helper.js`), { force: true }).catch(() => {});
-      await rm(join(POLICY_DIR, `${sessionId}-user-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-container-gh-wrapper`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-container-hooks`), { recursive: true, force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-claude-credentials.json`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-credential-helper.js`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-user-gitconfig`), { force: true }).catch(() => {});
     }
 
-    // Stop proxy and remove session network (M7)
-    if (session.proxyHandle) {
-      await session.proxyHandle.stop().catch((err) =>
-        console.warn(`Failed to stop proxy for session ${sessionId}:`, err)
+    // Stop proxy and remove workspace network (M7)
+    if (workspace.proxyHandle) {
+      await workspace.proxyHandle.stop().catch((err) =>
+        console.warn(`Failed to stop proxy for workspace ${workspaceId}:`, err)
       );
     }
-    if (session.sessionNetwork) {
-      await session.sessionNetwork.cleanup().catch((err) =>
-        console.warn(`Failed to remove network for session ${sessionId}:`, err)
+    if (workspace.sessionNetwork) {
+      await workspace.sessionNetwork.cleanup().catch((err) =>
+        console.warn(`Failed to remove network for workspace ${workspaceId}:`, err)
       );
     }
 
     // Clean up application-layer policy artifacts
-    if (session.githubPolicy) {
-      if (session.worktree) {
-        await cleanupHooks(sessionId, session.worktree.path).catch((err) =>
-          console.warn(`Failed to clean up hooks for session ${sessionId}:`, err)
+    if (workspace.githubPolicy) {
+      if (workspace.worktree) {
+        await cleanupHooks(workspaceId, workspace.worktree.path).catch((err) =>
+          console.warn(`Failed to clean up hooks for workspace ${workspaceId}:`, err)
         );
       }
-      await cleanupPolicyState(sessionId).catch((err) =>
-        console.warn(`Failed to clean up policy state for session ${sessionId}:`, err)
+      await cleanupPolicyState(workspaceId).catch((err) =>
+        console.warn(`Failed to clean up policy state for workspace ${workspaceId}:`, err)
       );
-      await cleanupGhShim(sessionId).catch((err) =>
-        console.warn(`Failed to clean up gh shim for session ${sessionId}:`, err)
+      await cleanupGhShim(workspaceId).catch((err) =>
+        console.warn(`Failed to clean up gh shim for workspace ${workspaceId}:`, err)
       );
     }
 
     // Tear down worktree
-    if (session.worktree) {
+    if (workspace.worktree) {
       try {
-        await this.worktreeManager.remove(session.worktree);
+        await this.worktreeManager.remove(workspace.worktree);
       } catch (err) {
         console.warn(
-          `Failed to remove worktree for session ${sessionId}:`,
+          `Failed to remove worktree for workspace ${workspaceId}:`,
           err
         );
       }
     }
 
     // Clean up sandbox policy file
-    if (session.sandboxConfig) {
-      await cleanupPolicy(session.sandboxConfig.policyOutputPath);
+    if (workspace.sandboxConfig) {
+      await cleanupPolicy(workspace.sandboxConfig.policyOutputPath);
     }
 
-    this.emit("session-update", {
-      sessionId,
+    this.emit("workspace-update", {
+      workspaceId,
       type: "status-change",
       status: "closed",
     });
   }
 
-  /** Close all active sessions. Called on app quit. */
-  async closeAllSessions(): Promise<void> {
-    const activeSessions = Array.from(this.sessions.values()).filter(
+  /** Close all active workspaces. Called on app quit. */
+  async closeAllWorkspaces(): Promise<void> {
+    const activeWorkspaces = Array.from(this.workspaces.values()).filter(
       (s) => s.status !== "closed"
     );
     await Promise.all(
-      activeSessions.map((s) => this.closeSession(s.id).catch(() => {}))
+      activeWorkspaces.map((s) => this.closeWorkspace(s.id).catch(() => {}))
     );
   }
 
   /** Remove orphan worktree directories, sandbox policies, containers, and container artifacts left behind by a previous crash. */
   async cleanupOrphans(): Promise<void> {
-    const activeIds = new Set(this.sessions.keys());
+    const activeIds = new Set(this.workspaces.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
     await cleanupOrphanPolicies(activeIds);
     await cleanupOrphanGitHubArtifacts(activeIds);
@@ -1156,52 +1174,53 @@ export class SessionManager {
     }
   }
 
-  getSandboxViolations(sessionId: string): SandboxViolationInfo[] {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`Session not found: ${sessionId}`);
-    return session.sandboxViolations.slice();
+  getSandboxViolations(workspaceId: string): SandboxViolationInfo[] {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    return workspace.sandboxViolations.slice();
   }
 
-  private async summarize(session: SessionState): Promise<SessionSummary> {
+  private async summarize(workspace: WorkspaceState): Promise<WorkspaceSummary> {
     let policyName: string | null = null;
-    if (session.policyId) {
+    if (workspace.policyId) {
       try {
-        policyName = this.policyRegistry.get(session.policyId).name;
+        policyName = this.policyRegistry.get(workspace.policyId).name;
       } catch {
-        policyName = session.policyId;
+        policyName = workspace.policyId;
       }
     }
 
     // Read live policy state from disk (the gh shim may have updated it)
-    let githubRepo = session.githubPolicy?.repo ?? null;
-    let ownedPrNumber = session.githubPolicy?.ownedPrNumber ?? null;
-    if (session.githubPolicy) {
+    let githubRepo = workspace.githubPolicy?.repo ?? null;
+    let ownedPrNumber = workspace.githubPolicy?.ownedPrNumber ?? null;
+    if (workspace.githubPolicy) {
       try {
-        const livePolicy = await readPolicyState(policyStatePath(session.id));
+        const livePolicy = await readPolicyState(policyStatePath(workspace.id));
         githubRepo = livePolicy.repo;
         ownedPrNumber = livePolicy.ownedPrNumber;
         // Sync in-memory state
-        session.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
-        session.githubPolicy.canCreatePr = livePolicy.canCreatePr;
+        workspace.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
+        workspace.githubPolicy.canCreatePr = livePolicy.canCreatePr;
       } catch {
         // Policy file may have been cleaned up — use in-memory state
       }
     }
 
     return {
-      id: session.id,
-      status: session.status,
-      messageCount: session.messages.length,
-      agentType: session.agentType,
-      projectDir: session.projectDir,
-      sandboxed: session.sandboxBackend !== "none",
-      sandboxBackend: session.sandboxBackend,
-      containerName: session.containerHandle?.containerName ?? null,
-      policyId: session.policyId,
+      id: workspace.id,
+      repositoryId: workspace.repositoryId,
+      status: workspace.status,
+      messageCount: workspace.messages.length,
+      agentType: workspace.agentType,
+      projectDir: workspace.projectDir,
+      sandboxed: workspace.sandboxBackend !== "none",
+      sandboxBackend: workspace.sandboxBackend,
+      containerName: workspace.containerHandle?.containerName ?? null,
+      policyId: workspace.policyId,
       policyName,
       githubRepo,
       ownedPrNumber,
-      networkAccess: session.proxyHandle ? "filtered" : "full",
+      networkAccess: workspace.proxyHandle ? "filtered" : "full",
     };
   }
 }
