@@ -240,7 +240,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **Goal**: Network-level enforcement via an HTTP proxy, completing the sandbox boundary. The proxy becomes the authoritative security layer for application-level policies.
 
-**Status**: Complete. See [design](milestones/network-boundary/design.md) and [implementation plan](milestones/network-boundary/plan.md).
+**Status**: Complete. See [design](history/network-boundary/design.md) and [implementation plan](history/network-boundary/plan.md).
 
 **What was built:**
 - `src/main/proxy-tls.ts`: Self-signed CA generation and per-hostname certificate minting for TLS MITM
