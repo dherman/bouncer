@@ -1,6 +1,12 @@
 import { type RefObject, useEffect, useRef } from 'react'
+import type { Components } from 'react-markdown'
+import Markdown from 'react-markdown'
 import type { Message, PolicyEvent, SandboxViolationInfo, WorkspaceSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
+
+const markdownComponents: Components = {
+  a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
+}
 
 interface Props {
   messages: Message[]
@@ -78,9 +84,9 @@ export function ChatPanel({
 
           return (
             <div key={msg.id} className={`message ${msg.role}`}>
-              <div className="bubble">{msgStreaming && !displayText
+              <div className={`bubble${msgStreaming ? ' streaming' : ''}`}>{msgStreaming && !displayText
                   ? <span className="thinking-indicator"><span className="dot" /><span className="dot" /><span className="dot" /></span>
-                  : <>{displayText}{msgStreaming && <span className="cursor">|</span>}</>}{msg.toolCalls && msg.toolCalls.length > 0 && (
+                  : <Markdown components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>}{msg.toolCalls && msg.toolCalls.length > 0 && (
                   <div className="tool-calls">
                     {msg.toolCalls.map((tc) => (
                       <ToolCallBlock key={tc.id} toolCall={tc} />

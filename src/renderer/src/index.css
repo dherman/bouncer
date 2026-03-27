@@ -423,7 +423,83 @@ body {
   border-bottom-left-radius: 4px;
 }
 
-.cursor {
+/* Markdown inside chat bubbles */
+.bubble > :first-child {
+  margin-top: 0;
+}
+.bubble > :last-child {
+  margin-bottom: 0;
+}
+.bubble p {
+  margin: 0.4em 0;
+}
+.bubble code {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+.bubble pre {
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 8px 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.bubble pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.bubble ul,
+.bubble ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+.bubble li {
+  margin: 0.2em 0;
+}
+.bubble h1,
+.bubble h2,
+.bubble h3,
+.bubble h4 {
+  margin: 0.6em 0 0.3em;
+  line-height: 1.3;
+}
+.bubble h1 { font-size: 1.2em; }
+.bubble h2 { font-size: 1.1em; }
+.bubble h3 { font-size: 1.05em; }
+.bubble blockquote {
+  border-left: 3px solid rgba(255, 255, 255, 0.3);
+  margin: 0.4em 0;
+  padding-left: 10px;
+  color: #aaa;
+}
+.bubble a {
+  color: #6cb6ff;
+  text-decoration: none;
+}
+.bubble a:hover {
+  text-decoration: underline;
+}
+.bubble hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 0.6em 0;
+}
+
+/* User bubble overrides for blue background */
+.message.user .bubble a {
+  color: #cce5ff;
+}
+.message.user .bubble blockquote {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Streaming cursor: pseudo-element on the last text node */
+.bubble.streaming > :last-child::after,
+.bubble.streaming > p:last-of-type::after {
+  content: '|';
   animation: blink 0.8s step-end infinite;
 }
 
