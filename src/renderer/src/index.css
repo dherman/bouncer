@@ -25,8 +25,8 @@ body {
   height: 100vh;
 }
 
-/* Session list */
-.session-list {
+/* Workspaces sidebar */
+.workspaces-sidebar {
   min-width: 180px;
   max-width: 50vw;
   display: flex;
@@ -59,39 +59,276 @@ body {
   background-color: #999;
 }
 
-.new-session-btn {
+/* Sidebar header */
+.sidebar-header {
   position: sticky;
   top: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
   background-color: #252525;
-  padding: 10px;
-  margin: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.sidebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.add-repo-btn {
+  padding: 3px 8px;
   background-color: #0078d4;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.new-session-btn:hover {
+.add-repo-btn:hover {
   background-color: #106ebe;
 }
 
-.session-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
+/* Repository group */
+.repo-group {
   border-bottom: 1px solid #333;
 }
 
-.session-item:hover {
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 8px 6px;
+  cursor: default;
+}
+
+.repo-row:hover {
   background-color: #2d2d2d;
 }
 
-.session-item.active {
+.repo-toggle {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 9px;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.repo-toggle:hover {
+  color: #ccc;
+}
+
+.repo-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ddd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.repo-github {
+  font-size: 10px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+  flex-shrink: 1;
+}
+
+.repo-create-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
+.repo-create-btn:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.repo-empty {
+  font-size: 11px;
+  color: #666;
+  padding: 4px 12px 8px 32px;
+  font-style: italic;
+}
+
+/* Context menu */
+.context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  min-width: 120px;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.context-menu button:hover {
+  background-color: #3a3d41;
+}
+
+/* Repository settings dialog */
+.repo-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.repo-settings {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.repo-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #444;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.repo-settings-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.repo-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repo-settings-label {
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+}
+
+.repo-settings-field input,
+.repo-settings-field select {
+  padding: 6px 8px;
+  background-color: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: white;
+  font-size: 13px;
+}
+
+.repo-settings-field input:disabled {
+  opacity: 0.5;
+}
+
+.repo-settings-field input:focus,
+.repo-settings-field select:focus {
+  outline: none;
+  border-color: #0078d4;
+}
+
+.repo-settings-field select {
+  cursor: pointer;
+}
+
+.repo-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #444;
+}
+
+.repo-settings-cancel {
+  padding: 6px 14px;
+  background-color: #444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.repo-settings-cancel:hover {
+  background-color: #555;
+}
+
+.repo-settings-save {
+  padding: 6px 14px;
+  background-color: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.repo-settings-save:hover {
+  background-color: #106ebe;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 28px;
+  cursor: pointer;
+}
+
+.workspace-item:hover {
+  background-color: #2d2d2d;
+}
+
+.workspace-item.active {
   background-color: #37373d;
 }
 
@@ -102,7 +339,7 @@ body {
   flex-shrink: 0;
 }
 
-.session-label {
+.workspace-label {
   font-size: 13px;
   font-family: monospace;
   overflow: hidden;
@@ -112,7 +349,7 @@ body {
   flex: 1;
 }
 
-.session-status {
+.workspace-status {
   font-size: 11px;
   color: #888;
   margin-left: auto;
@@ -405,8 +642,8 @@ body {
   background-color: #555;
 }
 
-/* Session state banners */
-.session-state-banner {
+/* Workspace state banners */
+.workspace-state-banner {
   text-align: center;
   padding: 12px;
   border-radius: 8px;
@@ -417,17 +654,17 @@ body {
   gap: 12px;
 }
 
-.session-state-banner.error {
+.workspace-state-banner.error {
   background-color: rgba(217, 83, 79, 0.15);
   color: #d9534f;
 }
 
-.session-state-banner.closed {
+.workspace-state-banner.closed {
   background-color: rgba(153, 153, 153, 0.15);
   color: #999;
 }
 
-.session-state-banner button {
+.workspace-state-banner button {
   padding: 4px 12px;
   background-color: #444;
   color: white;
@@ -437,7 +674,7 @@ body {
   font-size: 13px;
 }
 
-.session-state-banner button:hover {
+.workspace-state-banner button:hover {
   background-color: #555;
 }
 
@@ -448,7 +685,7 @@ body {
   font-style: italic;
 }
 
-/* Policy badge in session list */
+/* Policy badge in workspaces sidebar */
 .policy-badge {
   font-size: 10px;
   padding: 1px 5px;
@@ -578,7 +815,7 @@ body {
   background-color: rgba(217, 83, 79, 0.08);
 }
 
-/* GitHub badge in session list */
+/* GitHub badge in workspaces sidebar */
 .github-badge {
   display: inline-block;
   font-size: 10px;

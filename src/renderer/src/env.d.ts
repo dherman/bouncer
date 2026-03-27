@@ -1,16 +1,22 @@
 /// <reference types="vite/client" />
 
-import type { AgentType, PolicyTemplateSummary, SandboxViolationInfo, SessionSummary, SessionUpdate } from '../../main/types'
+import type { AgentType, PolicyTemplateSummary, Repository, SandboxViolationInfo, WorkspaceSummary, WorkspaceUpdate } from '../../main/types'
 
-interface GlitterballAPI {
-  sessions: {
-    list(): Promise<SessionSummary[]>
-    create(projectDir: string, agentType?: AgentType, policyId?: string): Promise<SessionSummary>
-    sendMessage(sessionId: string, text: string): Promise<void>
-    closeSession(sessionId: string): Promise<void>
-    getSandboxViolations(sessionId: string): Promise<SandboxViolationInfo[]>
+interface BouncerAPI {
+  repositories: {
+    list(): Promise<Repository[]>
+    add(localPath: string): Promise<Repository>
+    update(id: string, changes: Partial<Repository>): Promise<void>
+    remove(id: string): Promise<void>
+  }
+  workspaces: {
+    list(): Promise<WorkspaceSummary[]>
+    create(repositoryId: string): Promise<WorkspaceSummary>
+    sendMessage(workspaceId: string, text: string): Promise<void>
+    close(workspaceId: string): Promise<void>
+    getSandboxViolations(workspaceId: string): Promise<SandboxViolationInfo[]>
     loadReplayData(datasetSessionId: string): Promise<unknown[]>
-    onUpdate(callback: (update: SessionUpdate) => void): () => void
+    onUpdate(callback: (update: WorkspaceUpdate) => void): () => void
   }
   policies: {
     list(): Promise<PolicyTemplateSummary[]>
@@ -22,6 +28,6 @@ interface GlitterballAPI {
 
 declare global {
   interface Window {
-    glitterball: GlitterballAPI
+    bouncer: BouncerAPI
   }
 }

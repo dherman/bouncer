@@ -10,6 +10,7 @@
 - [x] **[Milestone 5: Application-Layer Policies](#milestone-5-application-layer-policies)**
 - [x] **[Milestone 6: Container Migration](#milestone-6-container-migration)**
 - [x] **[Milestone 7: Network Boundary](#milestone-7-network-boundary)**
+- [x] **[Milestone 8: Workspaces Sidebar](#milestone-8-workspaces-sidebar)**
 
 ## Vision
 
@@ -260,6 +261,23 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 | Git hooks | UX (better error messages) |
 | Network proxy | **Authoritative security boundary** |
 | ACP | Observability and session event logging |
+
+### Milestone 8: Workspaces Sidebar
+
+**Goal**: Redesign the sidebar around a repository-first workflow. Sessions become "workspaces" — each includes a containerized directory, a working copy, and a set of permissions. Repositories are persisted between app launches, and new workspaces inherit their defaults.
+
+**Status**: Complete. See [design](history/workspaces-sidebar/design.md) and [implementation plan](history/workspaces-sidebar/plan.md).
+
+**What was built:**
+- Terminology rename: "session" → "workspace", "glitterball" → "bouncer" across the entire codebase
+- `src/main/repository-store.ts`: Persistent repository list at `~/.config/bouncer/repositories.json` with auto-detection of repo name and GitHub remote
+- `Repository` type with configurable defaults (policy template, agent type)
+- Two-level sidebar hierarchy: repositories at the top level with disclosure triangles, workspaces indented underneath
+- One-click workspace creation: "+" button on repo row creates workspace with repo's default settings (no dialog needed)
+- Repository settings dialog: editable name, GitHub repo, default policy, default agent type
+- Right-click context menu on repos (Settings, Remove)
+- IPC bridge: `repositories:list/add/update/remove` channels + `window.bouncer.repositories.*` preload API
+- Removed `NewSessionDialog` — replaced by the streamlined repo-based workflow
 
 ## Open Questions
 

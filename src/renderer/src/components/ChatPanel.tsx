@@ -1,12 +1,12 @@
 import { type RefObject, useEffect, useRef } from 'react'
-import type { Message, PolicyEvent, SandboxViolationInfo, SessionSummary, ToolCallInfo } from '../../../main/types'
+import type { Message, PolicyEvent, SandboxViolationInfo, WorkspaceSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
 
 interface Props {
   messages: Message[]
   streamingTextRef: RefObject<Map<string, string>>
   streamTick: number
-  sessionStatus: SessionSummary['status']
+  sessionStatus: WorkspaceSummary['status']
   sessionError?: string
   violations: SandboxViolationInfo[]
   policyEvents: PolicyEvent[]
@@ -90,13 +90,13 @@ export function ChatPanel({
           )
         })}
         {sessionStatus === 'error' && (
-          <div className="session-state-banner error">
+          <div className="workspace-state-banner error">
             {sessionError ?? 'Session disconnected'}
             <button onClick={onCloseSession}>Close session</button>
           </div>
         )}
         {sessionStatus === 'closed' && (
-          <div className="session-state-banner closed">
+          <div className="workspace-state-banner closed">
             Session closed
           </div>
         )}

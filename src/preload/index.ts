@@ -1,23 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-contextBridge.exposeInMainWorld('glitterball', {
-  sessions: {
-    list: () => ipcRenderer.invoke('sessions:list'),
-    create: (projectDir: string, agentType?: string, policyId?: string) =>
-      ipcRenderer.invoke('sessions:create', projectDir, agentType, policyId),
-    sendMessage: (sessionId: string, text: string) =>
-      ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
-    closeSession: (sessionId: string) =>
-      ipcRenderer.invoke('sessions:close', sessionId),
-    getSandboxViolations: (sessionId: string) =>
-      ipcRenderer.invoke('sessions:getSandboxViolations', sessionId),
+contextBridge.exposeInMainWorld('bouncer', {
+  repositories: {
+    list: () => ipcRenderer.invoke('repositories:list'),
+    add: (localPath: string) => ipcRenderer.invoke('repositories:add', localPath),
+    update: (id: string, changes: Record<string, unknown>) =>
+      ipcRenderer.invoke('repositories:update', id, changes),
+    remove: (id: string) => ipcRenderer.invoke('repositories:remove', id),
+  },
+  workspaces: {
+    list: () => ipcRenderer.invoke('workspaces:list'),
+    create: (repositoryId: string) =>
+      ipcRenderer.invoke('workspaces:create', repositoryId),
+    sendMessage: (workspaceId: string, text: string) =>
+      ipcRenderer.invoke('workspaces:sendMessage', workspaceId, text),
+    close: (workspaceId: string) =>
+      ipcRenderer.invoke('workspaces:close', workspaceId),
+    getSandboxViolations: (workspaceId: string) =>
+      ipcRenderer.invoke('workspaces:getSandboxViolations', workspaceId),
     loadReplayData: (datasetSessionId: string) =>
-      ipcRenderer.invoke('sessions:loadReplayData', datasetSessionId),
+      ipcRenderer.invoke('workspaces:loadReplayData', datasetSessionId),
     onUpdate: (callback: (update: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, update: unknown): void =>
         callback(update)
-      ipcRenderer.on('session-update', handler)
-      return () => ipcRenderer.removeListener('session-update', handler)
+      ipcRenderer.on('workspace-update', handler)
+      return () => ipcRenderer.removeListener('workspace-update', handler)
     },
   },
   policies: {
