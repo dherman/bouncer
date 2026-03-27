@@ -46,6 +46,11 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
     }
   }, [entries, showLog])
 
+  // Close popover when events disappear (e.g. session switch)
+  useEffect(() => {
+    if (!hasEvents) setShowLog(false)
+  }, [hasEvents])
+
   // Focus whenever the input becomes enabled (including initial mount)
   useEffect(() => {
     if (!disabled) {
@@ -67,7 +72,7 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
   return (
     <div className="message-input-wrapper">
       {showLog && hasEvents && (
-        <div className="sandbox-popover">
+        <div className="sandbox-popover" id="sandbox-popover" role="dialog" aria-label="Policy and sandbox events">
           <div className="sandbox-popover-header">
             Policy &amp; sandbox events ({entries.length})
             {denyCount > 0 && <span className="sandbox-popover-deny">{denyCount} denied</span>}
@@ -123,7 +128,10 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
                 type="button"
                 className={`shield-btn${showLog ? ' active' : ''}${denyCount > 0 || violationCount > 0 ? ' has-issues' : ''}`}
                 onClick={() => setShowLog(!showLog)}
-                title="Policy & sandbox events"
+                aria-label="Policy and sandbox events"
+                aria-expanded={showLog}
+                aria-controls="sandbox-popover"
+                aria-haspopup="dialog"
               >
                 &#x1F6E1;
                 {(denyCount > 0 || violationCount > 0) && (
@@ -132,10 +140,11 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
               </button>
             )}
             <button
+              type="button"
               className="send-btn"
               onClick={handleSubmit}
               disabled={!canSend}
-              title="Send message"
+              aria-label="Send message"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M8 3L8 13M8 3L4 7M8 3L12 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
