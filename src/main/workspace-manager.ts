@@ -312,7 +312,7 @@ export class WorkspaceManager {
         }
 
         sandboxConfig = policyToSandboxConfig(template, {
-          workspaceId: id,
+          sessionId: id,
           worktreePath: workingDir,
           gitCommonDir: worktree?.gitCommonDir,
           readOnlyDirs,
@@ -425,7 +425,7 @@ export class WorkspaceManager {
             echoCommand = ["npx", "tsx", echoAgentContainerPath];
           }
           containerConfig = {
-            workspaceId: id,
+            sessionId: id,
             image: imageTag,
             command: echoCommand,
             workdir: "/workspace",
@@ -537,7 +537,7 @@ export class WorkspaceManager {
                 : [];
 
             const proxyConfig: ProxyConfig = {
-              workspaceId: id,
+              sessionId: id,
               port: 0,
               allowedDomains: template.network.allowedDomains,
               inspectedDomains,
@@ -605,7 +605,7 @@ export class WorkspaceManager {
           }
 
           const ctx: ContainerSessionContext = {
-            workspaceId: id,
+            sessionId: id,
             worktreePath: workingDir,
             gitCommonDir: worktree?.gitCommonDir,
             agentBinPath: agentPkgDir,
