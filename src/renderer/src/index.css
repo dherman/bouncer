@@ -37,15 +37,25 @@ body {
 }
 
 .sidebar-resize-handle {
-  width: 1px;
+  width: 9px;
   cursor: col-resize;
-  background-color: #333;
   flex-shrink: 0;
   position: relative;
 }
 
-.sidebar-resize-handle:hover,
-.sidebar-resize-handle.dragging {
+.sidebar-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background-color: #333;
+}
+
+.sidebar-resize-handle:hover::before,
+.sidebar-resize-handle.dragging::before {
   background-color: #0078d4;
 }
 
