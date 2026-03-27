@@ -1,7 +1,6 @@
 import { type RefObject, useEffect, useRef } from 'react'
 import type { Message, PolicyEvent, SandboxViolationInfo, SessionSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
-import { SandboxLog } from './SandboxLog'
 
 interface Props {
   messages: Message[]
@@ -103,10 +102,11 @@ export function ChatPanel({
         )}
         <div ref={bottomRef} />
       </div>
-      <SandboxLog violations={violations} policyEvents={policyEvents} />
       <MessageInput
         onSend={onSendMessage}
         disabled={inputDisabled}
+        violations={violations}
+        policyEvents={policyEvents}
         placeholder={
           sessionStatus === 'error' ? 'Session disconnected' :
           sessionStatus === 'closed' ? 'Session closed' :
