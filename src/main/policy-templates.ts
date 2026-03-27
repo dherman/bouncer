@@ -18,9 +18,13 @@ export const standardPrTemplate: PolicyTemplate = {
   network: {
     access: "filtered",
     allowedDomains: [
+      // Claude Code API backend — required for the agent to function
+      "api.anthropic.com",
+      // GitHub (code hosting, API, uploads)
       "github.com",
       "api.github.com",
       "uploads.github.com",
+      // Package registries
       "registry.npmjs.org",
       "crates.io",
       "static.crates.io",
