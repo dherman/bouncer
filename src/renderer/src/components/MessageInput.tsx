@@ -46,6 +46,9 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
     }
   }, [entries, showLog])
 
+  const canSend = !disabled && !!text.trim()
+  const hasEvents = totalCount > 0
+
   // Close popover when events disappear (e.g. session switch)
   useEffect(() => {
     if (!hasEvents) setShowLog(false)
@@ -65,9 +68,6 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
     setText('')
     requestAnimationFrame(() => inputRef.current?.focus())
   }
-
-  const canSend = !disabled && !!text.trim()
-  const hasEvents = totalCount > 0
 
   return (
     <div className="message-input-wrapper">
