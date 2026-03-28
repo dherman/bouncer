@@ -202,7 +202,9 @@ function App() {
   useEffect(() => {
     if (effectiveFocusedRepoId && effectiveFocusedRepoId !== focusedRepoId) {
       setFocusedRepoId(effectiveFocusedRepoId)
-      window.bouncer.preferences.setFocusedRepoId(effectiveFocusedRepoId)
+      void window.bouncer.preferences
+        .setFocusedRepoId(effectiveFocusedRepoId)
+        .catch((err) => console.error('Failed to persist focused repo ID:', err))
     }
   }, [effectiveFocusedRepoId])
 

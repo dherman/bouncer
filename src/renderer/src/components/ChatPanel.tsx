@@ -28,7 +28,8 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
 
   const isBash = toolCall.name === 'Bash'
   const command = isBash && toolCall.input?.command ? String(toolCall.input.command) : null
-  const hasDetail = isBash && (command || toolCall.output)
+  const hasOutput = !!toolCall.output
+  const hasDetail = (isBash && command) || hasOutput
   const dotClass =
     toolCall.status === 'completed' ? 'step-dot tool-dot-success' :
     toolCall.status === 'failed' ? 'step-dot tool-dot-fail' :
@@ -53,9 +54,9 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
                 <pre>{command}</pre>
               </div>
             )}
-            {toolCall.output && (
+            {hasOutput && (
               <>
-                <div className="bash-divider" />
+                {command && <div className="bash-divider" />}
                 <div className="bash-output">
                   <pre>{toolCall.output}</pre>
                 </div>

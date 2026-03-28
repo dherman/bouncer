@@ -131,10 +131,12 @@ export function MessageInput({ onSend, disabled, sandboxed, sessionStatus, place
               type="button"
               className={`shield-btn${showLog ? ' active' : ''}${denyCount > 0 || violationCount > 0 ? ' has-issues' : ''}`}
               onClick={hasEvents ? () => setShowLog(!showLog) : undefined}
-              aria-label={sandboxed ? 'Sandboxed' : 'Unsandboxed'}
-              aria-expanded={showLog}
-              aria-controls="sandbox-popover"
-              aria-haspopup="dialog"
+              aria-label="Policy and sandbox events"
+              aria-expanded={hasEvents ? showLog : undefined}
+              aria-controls={hasEvents ? 'sandbox-popover' : undefined}
+              aria-haspopup={hasEvents ? 'dialog' : undefined}
+              disabled={!hasEvents}
+              title={sessionStatus === 'initializing' ? 'Starting...' : sandboxed ? 'Sandboxed' : 'Unsandboxed'}
               style={hasEvents ? undefined : { cursor: 'default' }}
             >
               <img

@@ -1,8 +1,24 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Repository, WorkspaceSummary } from '../../../main/types'
 import branchIcon from '../assets/icon-branch.png'
 import newFolderIcon from '../assets/icon-new-folder.png'
 import newFolderHoverIcon from '../assets/icon-new-folder-hover.png'
+
+function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      type="button"
+      className="add-repo-btn"
+      onClick={onAddRepo}
+      title="Add repository (⌘⌥A)"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <img src={hovered ? newFolderHoverIcon : newFolderIcon} alt="Add repository" className="add-repo-icon" />
+    </button>
+  )
+}
 
 interface Props {
   repos: Repository[]
@@ -195,35 +211,36 @@ export function WorkspacesSidebar({
   focusedRepoId,
   style,
 }: Props) {
+  const onAddRepoRef = useRef(onAddRepo)
+  const onCreateWorkspaceRef = useRef(onCreateWorkspace)
+  const focusedRepoIdRef = useRef(focusedRepoId)
+  onAddRepoRef.current = onAddRepo
+  onCreateWorkspaceRef.current = onCreateWorkspace
+  focusedRepoIdRef.current = focusedRepoId
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
       if (e.metaKey && e.altKey && e.code === 'KeyA') {
         e.preventDefault()
-        onAddRepo()
+        onAddRepoRef.current()
       }
-      if (e.metaKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && focusedRepoId) {
+      if (e.metaKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && focusedRepoIdRef.current) {
         e.preventDefault()
-        onCreateWorkspace(focusedRepoId)
+        onCreateWorkspaceRef.current(focusedRepoIdRef.current)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onAddRepo, onCreateWorkspace, focusedRepoId])
+  }, [])
 
   return (
     <div className="workspaces-sidebar" style={style}>
       <div className="sidebar-header">
         <span className="sidebar-title">Workspaces</span>
-        <button
-          type="button"
-          className="add-repo-btn"
-          onClick={onAddRepo}
-          title="Add repository (⌘⌥A)"
-          onMouseEnter={(e) => { (e.currentTarget.querySelector('img') as HTMLImageElement).src = newFolderHoverIcon }}
-          onMouseLeave={(e) => { (e.currentTarget.querySelector('img') as HTMLImageElement).src = newFolderIcon }}
-        >
-          <img src={newFolderIcon} alt="Add repository" className="add-repo-icon" />
-        </button>
+        <AddRepoButton onAddRepo={onAddRepo} />
+
       </div>
       {repos.map((repo) => (
         <RepoGroup
