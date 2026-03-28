@@ -2,6 +2,7 @@ import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electro
 import { join } from 'path'
 import { WorkspaceManager } from './workspace-manager.js'
 import { RepositoryStore } from './repository-store.js'
+import { PreferencesStore } from './preferences-store.js'
 import { loadSession } from './dataset-loader.js'
 import { isDockerAvailable, ensureAgentImage } from './container.js'
 
@@ -78,9 +79,11 @@ app.whenReady().then(async () => {
     }
   })
 
-  // Load persisted repository list
+  // Load persisted repository list and preferences
   const repoStore = new RepositoryStore()
   await repoStore.load()
+  const prefsStore = new PreferencesStore()
+  await prefsStore.load()
 
   // WorkspaceManager forwards events to the renderer via IPC
   // Track IPC throughput to diagnose renderer crashes
@@ -131,6 +134,13 @@ app.whenReady().then(async () => {
       throw new Error('Invalid argument: id must be a string')
     }
     return repoStore.remove(id)
+  })
+
+  // Preferences IPC handlers
+  ipcMain.handle('preferences:getFocusedRepoId', () => prefsStore.focusedRepoId)
+  ipcMain.handle('preferences:setFocusedRepoId', async (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid argument: id must be a string')
+    return prefsStore.setFocusedRepoId(id)
   })
 
   // Workspace IPC handlers

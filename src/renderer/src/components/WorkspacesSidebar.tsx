@@ -1,17 +1,30 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Repository, WorkspaceSummary } from '../../../main/types'
+import branchIcon from '../assets/icon-branch.png'
+import newFolderIcon from '../assets/icon-new-folder.png'
+import newFolderHoverIcon from '../assets/icon-new-folder-hover.png'
 
-const STATUS_INDICATOR: Record<WorkspaceSummary['status'], string> = {
-  initializing: '#f0ad4e',
-  ready: '#5cb85c',
-  error: '#d9534f',
-  closed: '#999',
+function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      type="button"
+      className="add-repo-btn"
+      onClick={onAddRepo}
+      title="Add repository (⌘⌥A)"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <img src={hovered ? newFolderHoverIcon : newFolderIcon} alt="Add repository" className="add-repo-icon" />
+    </button>
+  )
 }
 
 interface Props {
   repos: Repository[]
   workspaces: WorkspaceSummary[]
   activeWorkspaceId: string | null
+  focusedRepoId: string | null
   violationCounts: Map<string, number>
   policyDescriptions: Map<string, string>
   onSelectWorkspace: (id: string) => void
@@ -35,6 +48,7 @@ function RepoGroup({
   repo,
   workspaces,
   activeWorkspaceId,
+  isFocused,
   violationCounts,
   policyDescriptions,
   onSelectWorkspace,
@@ -46,6 +60,7 @@ function RepoGroup({
   repo: Repository
   workspaces: WorkspaceSummary[]
   activeWorkspaceId: string | null
+  isFocused: boolean
   violationCounts: Map<string, number>
   policyDescriptions: Map<string, string>
   onSelectWorkspace: (id: string) => void
@@ -93,7 +108,7 @@ function RepoGroup({
           type="button"
           className="repo-create-btn"
           onClick={() => onCreateWorkspace(repo.id)}
-          title="New workspace"
+          title={isFocused ? 'New workspace (⌘N)' : 'New workspace'}
         >
           +
         </button>
@@ -104,25 +119,14 @@ function RepoGroup({
           className={`workspace-item ${ws.id === activeWorkspaceId ? 'active' : ''}`}
           onClick={() => onSelectWorkspace(ws.id)}
         >
-          <span
-            className="status-dot"
-            style={{ backgroundColor: STATUS_INDICATOR[ws.status] }}
+          <img
+            className="workspace-branch-icon"
+            src={branchIcon}
+            alt="Branch"
           />
           <span className="workspace-label">
             {workspaceLabel(ws)}
             {ws.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-            {ws.sandboxBackend === 'container' && (
-              <span className="sandbox-badge sandbox-container" title={ws.containerName ?? 'Container'}>Container</span>
-            )}
-            {ws.sandboxBackend === 'safehouse' && (
-              <span className="sandbox-badge sandbox-seatbelt" title="macOS Seatbelt sandbox">Seatbelt</span>
-            )}
-            {ws.sandboxBackend === 'none' && ws.status !== 'closed' && (
-              <span className="sandbox-badge sandbox-none" title="No sandbox — agent runs with full host access">Unsandboxed</span>
-            )}
-            {ws.networkAccess === 'filtered' && (
-              <span className="sandbox-badge sandbox-seatbelt" title="Network filtered via proxy">Filtered</span>
-            )}
             {ws.policyName && (
               <span
                 className={`policy-badge policy-${ws.policyId ?? 'default'}`}
@@ -204,20 +208,39 @@ export function WorkspacesSidebar({
   onRemoveRepo,
   onUpdateRepo,
   onOpenRepoSettings,
+  focusedRepoId,
   style,
 }: Props) {
+  const onAddRepoRef = useRef(onAddRepo)
+  const onCreateWorkspaceRef = useRef(onCreateWorkspace)
+  const focusedRepoIdRef = useRef(focusedRepoId)
+  onAddRepoRef.current = onAddRepo
+  onCreateWorkspaceRef.current = onCreateWorkspace
+  focusedRepoIdRef.current = focusedRepoId
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      if (e.metaKey && e.altKey && e.code === 'KeyA') {
+        e.preventDefault()
+        onAddRepoRef.current()
+      }
+      if (e.metaKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && focusedRepoIdRef.current) {
+        e.preventDefault()
+        onCreateWorkspaceRef.current(focusedRepoIdRef.current)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   return (
     <div className="workspaces-sidebar" style={style}>
       <div className="sidebar-header">
         <span className="sidebar-title">Workspaces</span>
-        <button
-          type="button"
-          className="add-repo-btn"
-          onClick={onAddRepo}
-          title="Add repository"
-        >
-          + Repo
-        </button>
+        <AddRepoButton onAddRepo={onAddRepo} />
+
       </div>
       {repos.map((repo) => (
         <RepoGroup
@@ -225,6 +248,7 @@ export function WorkspacesSidebar({
           repo={repo}
           workspaces={workspaces.filter((w) => w.repositoryId === repo.id)}
           activeWorkspaceId={activeWorkspaceId}
+          isFocused={repo.id === focusedRepoId}
           violationCounts={violationCounts}
           policyDescriptions={policyDescriptions}
           onSelectWorkspace={onSelectWorkspace}

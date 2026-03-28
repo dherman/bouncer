@@ -18,6 +18,10 @@ interface BouncerAPI {
     loadReplayData(datasetSessionId: string): Promise<unknown[]>
     onUpdate(callback: (update: WorkspaceUpdate) => void): () => void
   }
+  preferences: {
+    getFocusedRepoId(): Promise<string | undefined>
+    setFocusedRepoId(id: string): Promise<void>
+  }
   policies: {
     list(): Promise<PolicyTemplateSummary[]>
   }

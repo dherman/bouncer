@@ -81,18 +81,24 @@ body {
 }
 
 .add-repo-btn {
-  padding: 3px 8px;
-  background-color: #0078d4;
-  color: white;
+  padding: 4px;
+  background: none;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
 }
 
 .add-repo-btn:hover {
-  background-color: #106ebe;
+  opacity: 1;
+}
+
+.add-repo-icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* Repository group */
@@ -339,6 +345,18 @@ body {
   flex-shrink: 0;
 }
 
+.workspace-branch-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+@keyframes pulse-fade {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
 .workspace-label {
   font-size: 13px;
   font-family: monospace;
@@ -394,111 +412,154 @@ body {
 }
 
 .message.user {
-  justify-content: flex-end;
+  justify-content: stretch;
 }
 
 .message.agent {
   justify-content: flex-start;
+  align-items: flex-start;
+  gap: 10px;
 }
 
-.bubble {
-  max-width: 70%;
+/* User messages: full-width bubble styled like the input component */
+.user-bubble {
+  width: 100%;
   padding: 8px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background-color: rgba(30, 30, 30, 0.6);
+  color: white;
   font-size: 14px;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.message.user .bubble {
-  background-color: #0078d4;
-  color: white;
-  border-bottom-right-radius: 4px;
+/* Agent messages: step with dot, no bubble */
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #555;
+  flex-shrink: 0;
+  margin-top: 7px;
+  position: relative;
+  z-index: 1;
 }
 
-.message.agent .bubble {
-  background-color: #333;
-  color: #e0e0e0;
-  border-bottom-left-radius: 4px;
+.step-content {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #ccc;
+  word-break: break-word;
 }
 
-/* Markdown inside chat bubbles */
-.bubble > :first-child {
+/* Markdown inside chat messages */
+.user-bubble > :first-child,
+.step-content > :first-child {
   margin-top: 0;
 }
-.bubble > :last-child {
+.user-bubble > :last-child,
+.step-content > :last-child {
   margin-bottom: 0;
 }
-.bubble p {
+.user-bubble p,
+.step-content p {
   margin: 0.4em 0;
 }
-.bubble code {
+.user-bubble code,
+.step-content code {
   background-color: rgba(255, 255, 255, 0.1);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 0.9em;
 }
-.bubble pre {
+.user-bubble pre,
+.step-content pre {
   background-color: rgba(0, 0, 0, 0.3);
   padding: 8px 10px;
   border-radius: 6px;
   overflow-x: auto;
   margin: 0.5em 0;
 }
-.bubble pre code {
+.user-bubble pre code,
+.step-content pre code {
   background: none;
   padding: 0;
   font-size: 0.85em;
 }
-.bubble ul,
-.bubble ol {
+.user-bubble ul, .user-bubble ol,
+.step-content ul, .step-content ol {
   margin: 0.4em 0;
   padding-left: 1.5em;
+  white-space: normal;
 }
-.bubble li {
-  margin: 0.2em 0;
+.user-bubble li,
+.step-content li {
+  margin: 0;
 }
-.bubble h1,
-.bubble h2,
-.bubble h3,
-.bubble h4 {
+.user-bubble li > p,
+.step-content li > p {
+  margin: 0;
+}
+.user-bubble h1, .user-bubble h2, .user-bubble h3, .user-bubble h4,
+.step-content h1, .step-content h2, .step-content h3, .step-content h4 {
   margin: 0.6em 0 0.3em;
   line-height: 1.3;
 }
-.bubble h1 { font-size: 1.2em; }
-.bubble h2 { font-size: 1.1em; }
-.bubble h3 { font-size: 1.05em; }
-.bubble blockquote {
+.user-bubble h1, .step-content h1 { font-size: 1.2em; }
+.user-bubble h2, .step-content h2 { font-size: 1.1em; }
+.user-bubble h3, .step-content h3 { font-size: 1.05em; }
+.user-bubble blockquote,
+.step-content blockquote {
   border-left: 3px solid rgba(255, 255, 255, 0.3);
   margin: 0.4em 0;
   padding-left: 10px;
   color: #aaa;
 }
-.bubble a {
+.user-bubble a,
+.step-content a {
   color: #6cb6ff;
   text-decoration: none;
 }
-.bubble a:hover {
+.user-bubble a:hover,
+.step-content a:hover {
   text-decoration: underline;
 }
-.bubble hr {
+.user-bubble hr,
+.step-content hr {
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   margin: 0.6em 0;
 }
 
-/* User bubble overrides for blue background */
-.message.user .bubble a {
-  color: #cce5ff;
+/* GFM tables */
+.user-bubble table,
+.step-content table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.9em;
+  width: 100%;
+  overflow-x: auto;
+  display: block;
 }
-.message.user .bubble blockquote {
-  color: rgba(255, 255, 255, 0.7);
+.user-bubble th, .user-bubble td,
+.step-content th, .step-content td {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 8px;
+  text-align: left;
+}
+.user-bubble th,
+.step-content th {
+  background-color: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
 }
 
 /* Streaming cursor: pseudo-element on the last text node */
-.bubble.streaming > :last-child::after,
-.bubble.streaming > p:last-of-type::after {
+.step-content.streaming > :last-child::after,
+.step-content.streaming > p:last-of-type::after {
   content: '|';
   animation: blink 0.8s step-end infinite;
 }
@@ -606,6 +667,15 @@ body {
 
 .shield-btn.has-issues {
   color: #d9534f;
+}
+
+.shield-lock-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.shield-lock-icon.loading {
+  animation: pulse-fade 1.5s ease-in-out infinite;
 }
 
 .shield-badge {
@@ -788,28 +858,6 @@ body {
 }
 
 /* Sandbox backend badge */
-.sandbox-badge {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  margin-left: 4px;
-  font-weight: 500;
-}
-
-.sandbox-container {
-  background-color: rgba(0, 120, 212, 0.25);
-  color: #6cb6ff;
-}
-
-.sandbox-seatbelt {
-  background-color: rgba(92, 184, 92, 0.2);
-  color: #7ee787;
-}
-
-.sandbox-none {
-  background-color: rgba(217, 83, 79, 0.2);
-  color: #f08080;
-}
 
 .violation-count {
   font-size: 10px;
@@ -904,73 +952,148 @@ body {
   vertical-align: middle;
 }
 
-/* Tool call blocks */
-.tool-calls {
-  margin-top: 8px;
+/* Agent turn wrapper */
+.agent-turn {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  padding-left: 4px;
 }
 
-.tool-call-block {
+/* Vertical connector line from each dot to the next */
+.agent-turn > .message.agent {
+  position: relative;
+}
+
+.agent-turn > .message.agent:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 3.5px; /* center of 8px dot */
+  top: 11px;   /* center of dot (margin-top 7px + 4px radius) */
+  bottom: -15px; /* extend through gap (8px) + next dot's margin-top (7px) */
+  width: 1px;
+  background-color: #333;
+}
+
+/* Tool call steps */
+.tool-step .step-content {
+  padding-top: 0;
+}
+
+.tool-dot-success {
+  background-color: #5cb85c !important;
+}
+
+.tool-dot-fail {
+  background-color: #d9534f !important;
+}
+
+.tool-dot-progress {
+  background-color: transparent !important;
+  position: relative;
+  overflow: visible;
+}
+
+.tool-dot-progress::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-color: #5cb85c;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.tool-step-summary {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  font-size: 12px;
-  font-family: monospace;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
-.tool-status-icon {
+.tool-step-name {
+  font-weight: 600;
+  color: #ccc;
   flex-shrink: 0;
 }
 
-.tool-status-completed .tool-status-icon {
-  color: #5cb85c;
-}
-
-.tool-status-failed .tool-status-icon {
-  color: #d9534f;
-}
-
-.tool-status-in_progress .tool-status-icon,
-.tool-status-pending .tool-status-icon {
-  color: #f0ad4e;
-}
-
-.tool-name {
-  font-weight: 600;
-}
-
-.tool-title {
-  color: #aaa;
+.tool-step-title {
+  color: #888;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tool-output {
-  margin-top: 4px;
-  width: 100%;
-}
-
-.tool-output summary {
+.tool-step-summary.clickable {
   cursor: pointer;
-  color: #888;
-  font-size: 11px;
+}
+.tool-step-summary.clickable:hover .tool-step-name,
+.tool-step-summary.clickable:hover .tool-step-title,
+.tool-step-summary.clickable:hover .tool-run-summary {
+  color: #ddd;
 }
 
-.tool-output pre {
-  margin-top: 4px;
-  padding: 6px 8px;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
+.tool-step-chevron {
+  color: #666;
   font-size: 11px;
-  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.tool-run-summary {
+  color: #888;
+  font-size: 13px;
+}
+
+.tool-run-expanded {
+  display: contents;
+}
+
+/* Bash detail panel */
+.bash-detail {
+  margin-top: 6px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.bash-command {
+  padding: 6px 10px;
+}
+
+.bash-command pre {
+  margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 200px;
-  overflow-y: auto;
+  color: #ccc;
+}
+
+.bash-divider {
+  border-top: 1px solid #333;
+}
+
+.bash-output {
+  padding: 6px 10px;
+  max-height: 80px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bash-detail.expanded .bash-output {
+  max-height: none;
+  overflow: visible;
+}
+
+.bash-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #888;
+  font-size: 12px;
 }

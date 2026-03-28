@@ -13,8 +13,8 @@ import { join, dirname } from "node:path";
 
 const execFileAsync = promisify(execFile);
 
-export const AGENT_IMAGE_PREFIX = "glitterball-agent";
-const CONTAINER_PREFIX = "glitterball";
+export const AGENT_IMAGE_PREFIX = "bouncer-agent";
+const CONTAINER_PREFIX = "bouncer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,8 +129,8 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
   const args: string[] = [
     "run", "-i", "--rm",
     "--name", name,
-    "--label", "glitterball.managed=true",
-    "--label", `glitterball.sessionId=${config.sessionId}`,
+    "--label", "bouncer.managed=true",
+    "--label", `bouncer.sessionId=${config.sessionId}`,
   ];
 
   for (const m of config.mounts) {
@@ -204,7 +204,7 @@ export async function removeContainer(sessionId: string): Promise<void> {
 }
 
 /**
- * Find and remove any glitterball containers that don't belong to active
+ * Find and remove any bouncer containers that don't belong to active
  * sessions. Called at startup to clean up after crashes.
  */
 export async function cleanupOrphanContainers(
@@ -212,16 +212,20 @@ export async function cleanupOrphanContainers(
 ): Promise<void> {
   let stdout: string;
   try {
-    const result = await execFileAsync(
-      "docker",
-      [
+    // Query both current (bouncer.*) and legacy (glitterball.*) labels
+    const [current, legacy] = await Promise.all([
+      execFileAsync("docker", [
+        "ps", "-a",
+        "--filter", "label=bouncer.managed=true",
+        "--format", "{{.Label \"bouncer.sessionId\"}}\t{{.Names}}",
+      ], { timeout: 10_000 }),
+      execFileAsync("docker", [
         "ps", "-a",
         "--filter", "label=glitterball.managed=true",
         "--format", "{{.Label \"glitterball.sessionId\"}}\t{{.Names}}",
-      ],
-      { timeout: 10_000 },
-    );
-    stdout = result.stdout;
+      ], { timeout: 10_000 }).catch(() => ({ stdout: "" })),
+    ]);
+    stdout = current.stdout + legacy.stdout;
   } catch {
     return; // Docker not available or error — nothing to clean up
   }

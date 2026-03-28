@@ -65,7 +65,7 @@ async function resolveAgentImage(): Promise<string> {
   hasher.update(readFileSync(dockerfilePath, "utf-8"));
   hasher.update(readFileSync(join(dockerDir, "entrypoint.sh"), "utf-8"));
   const hash = hasher.digest("hex").slice(0, 12);
-  const imageTag = `glitterball-agent:${hash}`;
+  const imageTag = `bouncer-agent:${hash}`;
 
   try {
     await execFileAsync("docker", ["image", "inspect", imageTag], { timeout: 10_000 });

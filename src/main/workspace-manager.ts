@@ -42,6 +42,7 @@ import type {
   GitHubPolicy,
   Message,
   PolicyEvent,
+  PolicyTemplate,
   SandboxBackend,
   SandboxViolationInfo,
   WorkspaceSummary,
@@ -197,6 +198,9 @@ interface WorkspaceState {
   githubPolicy: GitHubPolicy | null;
   /** Flush any batched stream-chunk events. Called before stream-end. */
   flushChunks: () => void;
+  promptCount: number;
+  /** Message queued while workspace was still initializing. */
+  pendingMessage: string | null;
 }
 
 export class WorkspaceManager {
@@ -274,6 +278,8 @@ export class WorkspaceManager {
       policyId: resolvedPolicyId,
       githubPolicy: null,
       flushChunks: () => {},
+      promptCount: 0,
+      pendingMessage: null,
     };
     this.workspaces.set(id, workspace);
     this.emit("workspace-update", {
@@ -282,6 +288,24 @@ export class WorkspaceManager {
       status: "initializing",
     });
 
+    // Return summary immediately; initialization continues in the background
+    const summary = await this.summarize(workspace);
+    this.initializeWorkspace(workspace, id, worktree, sandboxConfig, workingDir, agentType, template, repositoryId).catch(() => {
+      // Errors are handled inside initializeWorkspace via status-change events
+    });
+    return summary;
+  }
+
+  private async initializeWorkspace(
+    workspace: WorkspaceState,
+    id: string,
+    worktree: WorktreeInfo | null,
+    sandboxConfig: SandboxConfig | null,
+    workingDir: string,
+    agentType: AgentType,
+    template: PolicyTemplate | null,
+    repositoryId: string | undefined,
+  ): Promise<void> {
     try {
       // Build sandbox config from policy template
       const safehouseAvailable = await isSafehouseAvailable();
@@ -781,7 +805,10 @@ export class WorkspaceManager {
 
       // Batch stream-chunk events to reduce IPC/render pressure.
       // Accumulate text per message and flush every 50ms.
-      const pendingChunks = new Map<string, { messageId: string; text: string }>();
+      const pendingChunks = new Map<
+        string,
+        { messageId: string; text: string; segmentIndex: number }
+      >();
       let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
       const flushChunks = (): void => {
         if (chunkFlushTimer) {
@@ -794,6 +821,7 @@ export class WorkspaceManager {
             type: "stream-chunk",
             messageId: chunk.messageId,
             text: chunk.text,
+            segmentIndex: chunk.segmentIndex,
           });
         }
         pendingChunks.clear();
@@ -804,6 +832,8 @@ export class WorkspaceManager {
           chunkFlushTimer = setTimeout(flushChunks, 50);
         }
       };
+
+      let sawToolCallSinceLastText = false;
 
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
@@ -817,15 +847,31 @@ export class WorkspaceManager {
                 (m) => m.role === "agent" && m.streaming
               );
               if (agentMsg) {
-                agentMsg.text += update.content.text;
+                const segments = agentMsg.textSegments!;
+                const parts = agentMsg.parts!;
+
+                // Start a new text segment when text resumes after tool calls
+                if (sawToolCallSinceLastText) {
+                  segments.push("");
+                  parts.push({ type: "text", index: segments.length - 1 });
+                  sawToolCallSinceLastText = false;
+                }
+
+                const segIdx = segments.length - 1;
+                segments[segIdx] += update.content.text;
+                agentMsg.text = segments.join("\n\n");
+
                 // Batch: accumulate text, flush on timer
-                const pending = pendingChunks.get(agentMsg.id);
+                // Key by messageId:segmentIndex so segment changes flush separately
+                const chunkKey = `${agentMsg.id}:${segIdx}`;
+                const pending = pendingChunks.get(chunkKey);
                 if (pending) {
                   pending.text += update.content.text;
                 } else {
-                  pendingChunks.set(agentMsg.id, {
+                  pendingChunks.set(chunkKey, {
                     messageId: agentMsg.id,
                     text: update.content.text,
+                    segmentIndex: segIdx,
                   });
                 }
                 scheduleChunkFlush();
@@ -834,6 +880,7 @@ export class WorkspaceManager {
               update.sessionUpdate === "tool_call" ||
               update.sessionUpdate === "tool_call_update"
             ) {
+              sawToolCallSinceLastText = true;
               const agentMsg = workspace.messages.findLast(
                 (m) => m.role === "agent"
               );
@@ -841,6 +888,10 @@ export class WorkspaceManager {
                 const meta = update._meta as
                   | { claudeCode?: { toolName?: string; toolResponse?: unknown } }
                   | undefined;
+                const rawInput =
+                  "rawInput" in update && update.rawInput != null
+                    ? (update.rawInput as Record<string, unknown>)
+                    : undefined;
                 const toolCall: ToolCallInfo = {
                   id: update.toolCallId,
                   name: meta?.claudeCode?.toolName ?? "Tool",
@@ -849,6 +900,11 @@ export class WorkspaceManager {
                       ? (update.status as ToolCallInfo["status"])
                       : "in_progress",
                   title: "title" in update ? (update.title as string) : undefined,
+                  description:
+                    rawInput?.description && typeof rawInput.description === "string"
+                      ? rawInput.description
+                      : undefined,
+                  input: rawInput,
                   output:
                     "rawOutput" in update
                       ? (typeof update.rawOutput === "string"
@@ -860,8 +916,19 @@ export class WorkspaceManager {
                 const existing = agentMsg.toolCalls.find(
                   (tc) => tc.id === toolCall.id
                 );
+                if (!existing && agentMsg.parts) {
+                  agentMsg.parts.push({
+                    type: "tool",
+                    toolCallId: toolCall.id,
+                  });
+                }
                 if (existing) {
-                  Object.assign(existing, toolCall);
+                  // Only overwrite fields that are defined in the update
+                  for (const [k, v] of Object.entries(toolCall)) {
+                    if (v !== undefined) {
+                      (existing as unknown as Record<string, unknown>)[k] = v;
+                    }
+                  }
                 } else {
                   agentMsg.toolCalls.push(toolCall);
                 }
@@ -958,11 +1025,22 @@ export class WorkspaceManager {
       }
 
       workspace.status = "ready";
+      const readySummary = await this.summarize(workspace);
       this.emit("workspace-update", {
         workspaceId: id,
         type: "status-change",
         status: "ready",
+        summary: readySummary,
       });
+
+      // Drain any message queued while the workspace was initializing
+      if (workspace.pendingMessage !== null) {
+        const pending = workspace.pendingMessage;
+        workspace.pendingMessage = null;
+        this.sendPrompt(workspace, id, pending).catch((err) => {
+          console.error(`Failed to send pending message for workspace ${id}:`, err);
+        });
+      }
     } catch (err) {
       console.error(`Failed to create workspace ${id}:`, err);
       if (workspace.containerHandle) {
@@ -994,13 +1072,30 @@ export class WorkspaceManager {
         status: "error",
       });
     }
-
-    return await this.summarize(workspace);
   }
 
   async sendMessage(workspaceId: string, text: string): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    if (workspace.status === "initializing") {
+      // Queue the message — it will be sent once the session is ready
+      workspace.pendingMessage = text;
+      const userMsg: Message = {
+        id: randomUUID(),
+        role: "user",
+        text,
+        timestamp: Date.now(),
+      };
+      workspace.messages.push(userMsg);
+      this.emit("workspace-update", {
+        workspaceId,
+        type: "message",
+        message: userMsg,
+      });
+      return;
+    }
+
     if (workspace.status !== "ready")
       throw new Error(`Workspace not ready: ${workspace.status}`);
 
@@ -1014,6 +1109,10 @@ export class WorkspaceManager {
     workspace.messages.push(userMsg);
     this.emit("workspace-update", { workspaceId, type: "message", message: userMsg });
 
+    await this.sendPrompt(workspace, workspaceId, text);
+  }
+
+  private async sendPrompt(workspace: WorkspaceState, workspaceId: string, text: string): Promise<void> {
     // Create placeholder agent message for streaming
     const agentMsg: Message = {
       id: randomUUID(),
@@ -1021,15 +1120,30 @@ export class WorkspaceManager {
       text: "",
       timestamp: Date.now(),
       streaming: true,
+      textSegments: [""],
+      parts: [{ type: "text", index: 0 }],
     };
     workspace.messages.push(agentMsg);
     this.emit("workspace-update", { workspaceId, type: "message", message: agentMsg });
 
     // Send prompt via ACP
+    const promptBlocks: Array<{ type: "text"; text: string }> = [];
+
+    // On the first prompt, inject UI formatting guidance
+    if (workspace.promptCount === 0) {
+      promptBlocks.push({
+        type: "text",
+        text: "<system-instruction>\nFormatting guidance: After completing tool calls, when you present the results to the user, always start with a brief summary sentence that contextualizes the data before showing it. Do not output raw data or listings without a lead-in. Before making tool calls, keep your introductory text minimal — just proceed to the tool calls without unnecessary preamble.\n</system-instruction>",
+      });
+    }
+    workspace.promptCount++;
+
+    promptBlocks.push({ type: "text", text });
+
     try {
       await workspace.connection.prompt({
         sessionId: workspace.acpSessionId,
-        prompt: [{ type: "text", text }],
+        prompt: promptBlocks,
       });
     } catch (err) {
       console.error(`Prompt failed for workspace ${workspaceId}:`, err);
@@ -1044,6 +1158,8 @@ export class WorkspaceManager {
       workspaceId,
       type: "stream-end",
       messageId: agentMsg.id,
+      textSegments: agentMsg.textSegments ?? [agentMsg.text],
+      parts: agentMsg.parts ?? [{ type: "text", index: 0 }],
     });
   }
 

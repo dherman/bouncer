@@ -37,12 +37,12 @@ function assert(condition: boolean, msg: string): void {
       credentialHelperPath: "/tmp/cred-helper.js",
     },
     { ANTHROPIC_API_KEY: "test-key", GH_TOKEN: "ghp_test" },
-    "glitterball-agent:abc123",
+    "bouncer-agent:abc123",
     ["node", "/usr/local/lib/agent/index.js"],
   );
 
   assert(config.sessionId === "test-123", "sessionId");
-  assert(config.image === "glitterball-agent:abc123", "image tag");
+  assert(config.image === "bouncer-agent:abc123", "image tag");
   assert(config.workdir === "/workspace", "workdir");
   assert(config.networkMode === "bridge", "network mode");
 
@@ -92,7 +92,7 @@ function assert(condition: boolean, msg: string): void {
       nodeModulesPath: "/app/node_modules",
     },
     {},
-    "glitterball-agent:def456",
+    "bouncer-agent:def456",
     ["node", "/usr/local/lib/agent/index.js"],
   );
 
@@ -122,7 +122,7 @@ function assert(condition: boolean, msg: string): void {
       nodeModulesPath: "/app/node_modules",
     },
     {},
-    "glitterball-agent:ghi789",
+    "bouncer-agent:ghi789",
     ["node", "/usr/local/lib/agent/index.js"],
   );
 
@@ -170,7 +170,7 @@ function assert(condition: boolean, msg: string): void {
       claudeCredentialsPath: "/tmp/creds.json",
     },
     {},
-    "glitterball-agent:claude",
+    "bouncer-agent:claude",
     ["node", "/usr/local/lib/agent/dist/index.js"],
   );
 
@@ -195,7 +195,7 @@ function assert(condition: boolean, msg: string): void {
       nodeModulesPath: "/app/node_modules",
     },
     {},
-    "glitterball-agent:no-claude",
+    "bouncer-agent:no-claude",
     ["node", "/usr/local/lib/agent/dist/index.js"],
   );
 

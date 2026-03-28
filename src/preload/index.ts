@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld('bouncer', {
       return () => ipcRenderer.removeListener('workspace-update', handler)
     },
   },
+  preferences: {
+    getFocusedRepoId: () => ipcRenderer.invoke('preferences:getFocusedRepoId'),
+    setFocusedRepoId: (id: string) => ipcRenderer.invoke('preferences:setFocusedRepoId', id),
+  },
   policies: {
     list: () => ipcRenderer.invoke('policies:list'),
   },

@@ -9,10 +9,10 @@ DOCKERFILE="$PROJECT_DIR/docker/agent.Dockerfile"
 
 # Build or reuse the agent image (same hash logic as container.ts)
 HASH=$(shasum -a 256 "$DOCKERFILE" | cut -c1-12)
-IMAGE_TAG="glitterball-agent:${HASH}"
+IMAGE_TAG="bouncer-agent:${HASH}"
 
-CONTAINER_NAME="glitterball-spawn-test-$$"
-ORPHAN_NAME="glitterball-orphan-test-$$"
+CONTAINER_NAME="bouncer-spawn-test-$$"
+ORPHAN_NAME="bouncer-orphan-test-$$"
 TMPDIR_TEST=$(mktemp -d)
 FIFO_IN="$TMPDIR_TEST/stdin.fifo"
 
@@ -35,8 +35,8 @@ TEST_MSG="hello-from-bouncer-$(date +%s)"
 
 mkfifo "$FIFO_IN"
 docker run -i --rm --name "$CONTAINER_NAME" \
-  --label glitterball.managed=true \
-  --label "glitterball.sessionId=spawn-test-$$" \
+  --label bouncer.managed=true \
+  --label "bouncer.sessionId=spawn-test-$$" \
   "$IMAGE_TAG" cat < "$FIFO_IN" > "$TMPDIR_TEST/stdout.txt" &
 DOCKER_PID=$!
 sleep 2
@@ -70,8 +70,8 @@ fi
 echo ""
 echo "=== Testing orphan cleanup pattern (label-based) ==="
 docker run -d --name "$ORPHAN_NAME" \
-  --label glitterball.managed=true \
-  --label "glitterball.sessionId=orphan-test-$$" \
+  --label bouncer.managed=true \
+  --label "bouncer.sessionId=orphan-test-$$" \
   "$IMAGE_TAG" sleep 300 >/dev/null
 
 if ! docker inspect "$ORPHAN_NAME" >/dev/null 2>&1; then
@@ -81,8 +81,8 @@ fi
 echo "Orphan container created: $ORPHAN_NAME"
 
 # Discover via label filter (matches cleanupOrphanContainers logic)
-FOUND=$(docker ps -a --filter "label=glitterball.managed=true" \
-  --format '{{.Label "glitterball.sessionId"}}\t{{.Names}}')
+FOUND=$(docker ps -a --filter "label=bouncer.managed=true" \
+  --format '{{.Label "bouncer.sessionId"}}\t{{.Names}}')
 echo "Found managed containers:"
 echo "$FOUND"
 
