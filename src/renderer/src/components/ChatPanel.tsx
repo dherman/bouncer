@@ -245,6 +245,7 @@ export function ChatPanel({
         onSend={onSendMessage}
         disabled={inputDisabled}
         sandboxed={sandboxed}
+        sessionStatus={sessionStatus}
         violations={violations}
         policyEvents={policyEvents}
         placeholder={

@@ -674,6 +674,10 @@ body {
   height: 16px;
 }
 
+.shield-lock-icon.loading {
+  animation: pulse-fade 1.5s ease-in-out infinite;
+}
+
 .shield-badge {
   font-size: 10px;
   background-color: #d9534f;
