@@ -126,7 +126,7 @@ function App() {
                   toolCalls[existing] = { ...toolCalls[existing] }
                   for (const [k, v] of Object.entries(update.toolCall)) {
                     if (v !== undefined) {
-                      (toolCalls[existing] as Record<string, unknown>)[k] = v
+                      (toolCalls[existing] as unknown as Record<string, unknown>)[k] = v
                     }
                   }
                   return { ...m, toolCalls }

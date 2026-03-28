@@ -221,7 +221,7 @@ export function ChatPanel({
                     key={`tools-${i}`}
                     toolCallIds={group.toolCallIds}
                     toolCalls={msg.toolCalls ?? []}
-                    isStreaming={isStreaming}
+                    isStreaming={!!isStreaming}
                   />
                 )
               })}
