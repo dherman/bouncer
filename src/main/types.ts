@@ -12,6 +12,10 @@ export interface Repository {
   createdAt: number;
 }
 
+export type MessagePart =
+  | { type: "text"; index: number }
+  | { type: "tool"; toolCallId: string };
+
 export interface Message {
   id: string;
   role: "user" | "agent";
@@ -19,6 +23,8 @@ export interface Message {
   timestamp: number;
   streaming?: boolean;
   toolCalls?: ToolCallInfo[];
+  textSegments?: string[];
+  parts?: MessagePart[];
 }
 
 export interface ToolCallInfo {
@@ -26,6 +32,7 @@ export interface ToolCallInfo {
   name: string;
   status: "pending" | "in_progress" | "completed" | "failed";
   title?: string;
+  description?: string;
   input?: Record<string, unknown>;
   output?: string;
 }
@@ -136,10 +143,10 @@ export interface ReplayResult {
 }
 
 export type WorkspaceUpdate =
-  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string }
+  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string; summary?: WorkspaceSummary }
   | { workspaceId: string; type: "message"; message: Message }
-  | { workspaceId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { workspaceId: string; type: "stream-end"; messageId: string }
+  | { workspaceId: string; type: "stream-chunk"; messageId: string; text: string; segmentIndex: number }
+  | { workspaceId: string; type: "stream-end"; messageId: string; textSegments: string[]; parts: MessagePart[] }
   | { workspaceId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
   | { workspaceId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
   | { workspaceId: string; type: "policy-event"; event: PolicyEvent };

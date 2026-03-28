@@ -8,7 +8,7 @@ DOCKERFILE="$PROJECT_DIR/docker/agent.Dockerfile"
 
 # Compute the content hash (must match logic in container.ts)
 HASH=$(shasum -a 256 "$DOCKERFILE" | cut -c1-12)
-IMAGE_TAG="glitterball-agent:${HASH}"
+IMAGE_TAG="bouncer-agent:${HASH}"
 
 echo "=== Building image $IMAGE_TAG ==="
 docker build -t "$IMAGE_TAG" -f "$DOCKERFILE" "$PROJECT_DIR/docker/"

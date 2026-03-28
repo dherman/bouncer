@@ -20,8 +20,8 @@ export class WorktreeManager {
   private metadataPath: string;
 
   constructor(basePath?: string) {
-    this.basePath = resolve(basePath ?? join(tmpdir(), "glitterball-worktrees"));
-    this.metadataPath = join(homedir(), ".cache", "glitterball", "worktrees");
+    this.basePath = resolve(basePath ?? join(tmpdir(), "bouncer-worktrees"));
+    this.metadataPath = join(homedir(), ".cache", "bouncer", "worktrees");
   }
 
   /** Validate that a directory is a git repository. */

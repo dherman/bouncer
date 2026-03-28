@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PolicyEvent, SandboxViolationInfo } from '../../../main/types'
+import lockIcon from '../assets/icon-lock.png'
+import unlockIcon from '../assets/icon-unlock.png'
 
 type LogEntry =
   | { kind: 'violation'; timestamp: number; data: SandboxViolationInfo }
@@ -8,12 +10,13 @@ type LogEntry =
 interface Props {
   onSend: (text: string) => void
   disabled: boolean
+  sandboxed: boolean
   placeholder?: string
   violations: SandboxViolationInfo[]
   policyEvents: PolicyEvent[]
 }
 
-export function MessageInput({ onSend, disabled, placeholder, violations, policyEvents }: Props) {
+export function MessageInput({ onSend, disabled, sandboxed, placeholder, violations, policyEvents }: Props) {
   const [text, setText] = useState('')
   const [showLog, setShowLog] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -123,22 +126,25 @@ export function MessageInput({ onSend, disabled, placeholder, violations, policy
         />
         <div className="message-input-toolbar">
           <div className="message-input-toolbar-right">
-            {hasEvents && (
-              <button
-                type="button"
-                className={`shield-btn${showLog ? ' active' : ''}${denyCount > 0 || violationCount > 0 ? ' has-issues' : ''}`}
-                onClick={() => setShowLog(!showLog)}
-                aria-label="Policy and sandbox events"
-                aria-expanded={showLog}
-                aria-controls="sandbox-popover"
-                aria-haspopup="dialog"
-              >
-                &#x1F6E1;
-                {(denyCount > 0 || violationCount > 0) && (
-                  <span className="shield-badge">{denyCount + violationCount}</span>
-                )}
-              </button>
-            )}
+            <button
+              type="button"
+              className={`shield-btn${showLog ? ' active' : ''}${denyCount > 0 || violationCount > 0 ? ' has-issues' : ''}`}
+              onClick={hasEvents ? () => setShowLog(!showLog) : undefined}
+              aria-label={sandboxed ? 'Sandboxed' : 'Unsandboxed'}
+              aria-expanded={showLog}
+              aria-controls="sandbox-popover"
+              aria-haspopup="dialog"
+              style={hasEvents ? undefined : { cursor: 'default' }}
+            >
+              <img
+                src={sandboxed ? lockIcon : unlockIcon}
+                alt={sandboxed ? 'Sandboxed' : 'Unsandboxed'}
+                className="shield-lock-icon"
+              />
+              {(denyCount > 0 || violationCount > 0) && (
+                <span className="shield-badge">{denyCount + violationCount}</span>
+              )}
+            </button>
             <button
               type="button"
               className="send-btn"

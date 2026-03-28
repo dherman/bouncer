@@ -26,7 +26,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
 
-export const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
+export const POLICY_DIR = join(tmpdir(), "bouncer-sandbox");
 
 export const BASE_ENV_PASSTHROUGH = [
   "ANTHROPIC_API_KEY",

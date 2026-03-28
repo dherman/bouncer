@@ -15,10 +15,14 @@ function App() {
   const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
   const [policyEventsByWorkspace, setPolicyEventsByWorkspace] = useState<Map<string, PolicyEvent[]>>(new Map())
   const [settingsRepoId, setSettingsRepoId] = useState<string | null>(null)
+  const [focusedRepoId, setFocusedRepoId] = useState<string | null>(null)
+
+  // Buffer status-change events that arrive before the workspace is in state
+  const pendingStatusUpdates = useRef(new Map<string, WorkspaceUpdate & { type: 'status-change' }>())
 
   // Use a ref for streaming text to avoid re-rendering the entire tree on every chunk.
   // A tick counter triggers periodic re-renders so the UI updates smoothly.
-  const streamingTextRef = useRef(new Map<string, string>())
+  const streamingTextRef = useRef(new Map<string, string[]>())
   const [streamTick, setStreamTick] = useState(0)
   const streamTickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleStreamTick = useCallback(() => {
@@ -33,11 +37,19 @@ function App() {
   const handleUpdate = useCallback((update: WorkspaceUpdate) => {
     switch (update.type) {
       case 'status-change':
-        setWorkspaces((prev) =>
-          prev.map((s) =>
-            s.id === update.workspaceId ? { ...s, status: update.status } : s
+        setWorkspaces((prev) => {
+          const exists = prev.some((s) => s.id === update.workspaceId)
+          if (!exists) {
+            // Workspace not yet in state — stash for when it arrives
+            pendingStatusUpdates.current.set(update.workspaceId, update)
+            return prev
+          }
+          return prev.map((s) =>
+            s.id === update.workspaceId
+              ? update.summary ? { ...s, ...update.summary } : { ...s, status: update.status }
+              : s
           )
-        )
+        })
         if (update.status === 'error' && update.error) {
           setWorkspaceErrors((prev) => {
             const next = new Map(prev)
@@ -55,20 +67,23 @@ function App() {
           return next
         })
         if (update.message.streaming) {
-          streamingTextRef.current.set(update.message.id, '')
+          streamingTextRef.current.set(update.message.id, [''])
         }
         break
 
-      case 'stream-chunk':
-        streamingTextRef.current.set(
-          update.messageId,
-          (streamingTextRef.current.get(update.messageId) ?? '') + update.text
-        )
+      case 'stream-chunk': {
+        const segments = streamingTextRef.current.get(update.messageId) ?? ['']
+        // Expand array if needed for new segment index
+        while (segments.length <= update.segmentIndex) {
+          segments.push('')
+        }
+        segments[update.segmentIndex] += update.text
+        streamingTextRef.current.set(update.messageId, segments)
         scheduleStreamTick()
         break
+      }
 
       case 'stream-end': {
-        const finalText = streamingTextRef.current.get(update.messageId) ?? ''
         streamingTextRef.current.delete(update.messageId)
         setMessagesByWorkspace((prevMsgs) => {
           const next = new Map(prevMsgs)
@@ -78,7 +93,13 @@ function App() {
               update.workspaceId,
               msgs.map((m) =>
                 m.id === update.messageId
-                  ? { ...m, text: finalText, streaming: false }
+                  ? {
+                      ...m,
+                      text: update.textSegments.join('\n\n'),
+                      textSegments: update.textSegments,
+                      parts: update.parts,
+                      streaming: false,
+                    }
                   : m
               )
             )
@@ -102,11 +123,19 @@ function App() {
                 const toolCalls = m.toolCalls ? [...m.toolCalls] : []
                 const existing = toolCalls.findIndex((tc) => tc.id === update.toolCall.id)
                 if (existing >= 0) {
-                  toolCalls[existing] = update.toolCall
-                } else {
-                  toolCalls.push(update.toolCall)
+                  toolCalls[existing] = { ...toolCalls[existing] }
+                  for (const [k, v] of Object.entries(update.toolCall)) {
+                    if (v !== undefined) {
+                      (toolCalls[existing] as Record<string, unknown>)[k] = v
+                    }
+                  }
+                  return { ...m, toolCalls }
                 }
-                return { ...m, toolCalls }
+                // New tool call: add to parts ordering
+                toolCalls.push(update.toolCall)
+                const parts = m.parts ? [...m.parts] : [{ type: 'text' as const, index: 0 }]
+                parts.push({ type: 'tool' as const, toolCallId: update.toolCall.id })
+                return { ...m, toolCalls, parts }
               })
             )
           }
@@ -148,9 +177,34 @@ function App() {
       setPolicies(list)
       setPolicyDescriptions(new Map(list.map((p) => [p.id, p.description])))
     })
+    window.bouncer.preferences.getFocusedRepoId().then((id) => {
+      if (id) setFocusedRepoId(id)
+    })
     const unsubscribe = window.bouncer.workspaces.onUpdate(handleUpdate)
     return unsubscribe
   }, [handleUpdate])
+
+  // Compute the effective focused repo:
+  // (a) single repo → always focused
+  // (b) active workspace's repo
+  // (c) persisted last-focused repo
+  const effectiveFocusedRepoId = useMemo(() => {
+    if (repos.length === 1) return repos[0].id
+    if (activeWorkspaceId) {
+      const ws = workspaces.find((w) => w.id === activeWorkspaceId)
+      if (ws?.repositoryId) return ws.repositoryId
+    }
+    if (focusedRepoId && repos.some((r) => r.id === focusedRepoId)) return focusedRepoId
+    return null
+  }, [repos, activeWorkspaceId, workspaces, focusedRepoId])
+
+  // Persist focused repo when it changes due to workspace selection
+  useEffect(() => {
+    if (effectiveFocusedRepoId && effectiveFocusedRepoId !== focusedRepoId) {
+      setFocusedRepoId(effectiveFocusedRepoId)
+      window.bouncer.preferences.setFocusedRepoId(effectiveFocusedRepoId)
+    }
+  }, [effectiveFocusedRepoId])
 
   async function handleAddRepo() {
     const dir = await window.bouncer.dialog.selectDirectory()
@@ -166,7 +220,15 @@ function App() {
   async function handleCreateWorkspace(repositoryId: string) {
     try {
       const ws = await window.bouncer.workspaces.create(repositoryId)
-      setWorkspaces((prev) => [...prev, ws])
+      // Apply any status-change events that arrived while create() was in flight
+      const pending = pendingStatusUpdates.current.get(ws.id)
+      pendingStatusUpdates.current.delete(ws.id)
+      const resolved = pending?.summary
+        ? { ...ws, ...pending.summary }
+        : pending
+          ? { ...ws, status: pending.status }
+          : ws
+      setWorkspaces((prev) => [...prev, resolved])
       setActiveWorkspaceId(ws.id)
     } catch (err) {
       console.error('Failed to create workspace:', err)
@@ -285,6 +347,7 @@ function App() {
         repos={repos}
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
+        focusedRepoId={effectiveFocusedRepoId}
         violationCounts={violationCounts}
         policyDescriptions={policyDescriptions}
         onSelectWorkspace={setActiveWorkspaceId}
@@ -304,6 +367,7 @@ function App() {
           streamTick={streamTick}
           sessionStatus={activeWorkspace.status}
           sessionError={workspaceErrors.get(activeWorkspace.id)}
+          sandboxed={activeWorkspace.sandboxed}
           violations={activeViolations}
           policyEvents={activePolicyEvents}
           onSendMessage={handleSendMessage}

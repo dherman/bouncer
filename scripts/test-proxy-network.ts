@@ -143,7 +143,7 @@ if (!dockerAvailable) {
           "inspect",
           net.networkName,
           "--format",
-          '{{index .Labels "glitterball.managed"}}',
+          '{{index .Labels "bouncer.managed"}}',
         ]);
         assert.equal(labels.trim(), "true", "should have managed label");
       } finally {
