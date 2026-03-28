@@ -42,6 +42,7 @@ import type {
   GitHubPolicy,
   Message,
   PolicyEvent,
+  PolicyTemplate,
   SandboxBackend,
   SandboxViolationInfo,
   WorkspaceSummary,
@@ -925,7 +926,7 @@ export class WorkspaceManager {
                   // Only overwrite fields that are defined in the update
                   for (const [k, v] of Object.entries(toolCall)) {
                     if (v !== undefined) {
-                      (existing as Record<string, unknown>)[k] = v;
+                      (existing as unknown as Record<string, unknown>)[k] = v;
                     }
                   }
                 } else {
