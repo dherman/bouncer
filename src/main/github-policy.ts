@@ -6,12 +6,12 @@
  * gh shim reads at invocation time.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { chmod, mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { POLICY_DIR } from "./sandbox.js";
-import type { GitHubPolicy } from "./types.js";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { chmod, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { POLICY_DIR } from './sandbox.js';
+import type { GitHubPolicy } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,7 +22,7 @@ const execFileAsync = promisify(execFile);
  */
 export async function detectGitHubRepo(cwd: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"]);
+    const { stdout } = await execFileAsync('git', ['-C', cwd, 'remote', 'get-url', 'origin']);
     return parseGitHubRemoteUrl(stdout.trim());
   } catch {
     return null;
@@ -79,14 +79,14 @@ export function policyStatePath(sessionId: string): string {
  */
 export async function writePolicyState(sessionId: string, policy: GitHubPolicy): Promise<void> {
   await mkdir(POLICY_DIR, { recursive: true });
-  await writeFile(policyStatePath(sessionId), JSON.stringify(policy, null, 2), "utf-8");
+  await writeFile(policyStatePath(sessionId), JSON.stringify(policy, null, 2), 'utf-8');
 }
 
 /**
  * Read the policy state file. Called by the gh shim on each invocation.
  */
 export async function readPolicyState(path: string): Promise<GitHubPolicy> {
-  const content = await readFile(path, "utf-8");
+  const content = await readFile(path, 'utf-8');
   return JSON.parse(content) as GitHubPolicy;
 }
 
@@ -127,13 +127,15 @@ let cachedBundlePath: string | null = null;
 async function buildShimBundle(ghShimTsPath: string): Promise<string> {
   if (cachedBundlePath) return cachedBundlePath;
 
-  const outPath = join(POLICY_DIR, "gh-shim-bundle.js");
+  const outPath = join(POLICY_DIR, 'gh-shim-bundle.js');
   await mkdir(POLICY_DIR, { recursive: true });
-  await execFileAsync("npx", ["esbuild", ghShimTsPath,
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    "--packages=external",
+  await execFileAsync('npx', [
+    'esbuild',
+    ghShimTsPath,
+    '--bundle',
+    '--platform=node',
+    '--format=esm',
+    '--packages=external',
     `--outfile=${outPath}`,
   ]);
   cachedBundlePath = outPath;
@@ -157,8 +159,8 @@ export async function installGhShim(
 exec "${nodePath}" "${bundlePath}" "$@"
 `;
 
-  const shimPath = join(dir, "gh");
-  await writeFile(shimPath, shimScript, "utf-8");
+  const shimPath = join(dir, 'gh');
+  await writeFile(shimPath, shimScript, 'utf-8');
   await chmod(shimPath, 0o755);
   return dir;
 }
@@ -178,7 +180,7 @@ let cachedRealGh: string | null | undefined = undefined;
 export async function findRealGh(): Promise<string | null> {
   if (cachedRealGh !== undefined) return cachedRealGh;
   try {
-    const { stdout } = await execFileAsync("which", ["gh"]);
+    const { stdout } = await execFileAsync('which', ['gh']);
     const path = stdout.trim();
     cachedRealGh = path || null;
   } catch {

@@ -1,6 +1,6 @@
-import { createReadStream } from "node:fs";
-import { createInterface } from "node:readline";
-import type { ReplayToolCall } from "./types.js";
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
+import type { ReplayToolCall } from './types.js';
 
 interface DatasetRecord {
   id: number;
@@ -28,13 +28,11 @@ function toReplayToolCall(record: DatasetRecord): ReplayToolCall {
  * Load the dataset and group records by session.
  * Returns a Map from session ID to sorted tool-call array.
  */
-export async function loadDataset(
-  datasetPath: string,
-): Promise<Map<string, ReplayToolCall[]>> {
+export async function loadDataset(datasetPath: string): Promise<Map<string, ReplayToolCall[]>> {
   const sessions = new Map<string, { calls: ReplayToolCall[]; timestamps: number[] }>();
 
   const rl = createInterface({
-    input: createReadStream(datasetPath, "utf-8"),
+    input: createReadStream(datasetPath, 'utf-8'),
     crlfDelay: Infinity,
   });
 
@@ -55,7 +53,10 @@ export async function loadDataset(
   for (const [sessionId, { calls, timestamps }] of sessions) {
     const indices = calls.map((_, i) => i);
     indices.sort((a, b) => timestamps[a] - timestamps[b]);
-    result.set(sessionId, indices.map((i) => calls[i]));
+    result.set(
+      sessionId,
+      indices.map((i) => calls[i]),
+    );
   }
 
   return result;
@@ -74,7 +75,7 @@ export async function loadSession(
   const timestamps: number[] = [];
 
   const rl = createInterface({
-    input: createReadStream(datasetPath, "utf-8"),
+    input: createReadStream(datasetPath, 'utf-8'),
     crlfDelay: Infinity,
   });
 
@@ -103,13 +104,11 @@ export interface SessionInfo {
  * List sessions with basic metadata.
  * Requires a second pass over the raw dataset to extract project info.
  */
-export async function listSessions(
-  datasetPath: string,
-): Promise<SessionInfo[]> {
+export async function listSessions(datasetPath: string): Promise<SessionInfo[]> {
   const sessionMap = new Map<string, { project: string; callCount: number; tools: Set<string> }>();
 
   const rl = createInterface({
-    input: createReadStream(datasetPath, "utf-8"),
+    input: createReadStream(datasetPath, 'utf-8'),
     crlfDelay: Infinity,
   });
 
@@ -136,9 +135,11 @@ export async function listSessions(
 /**
  * Get summary statistics for the loaded dataset.
  */
-export function datasetSummary(
-  sessions: Map<string, ReplayToolCall[]>,
-): { sessionCount: number; recordCount: number; toolDistribution: Record<string, number> } {
+export function datasetSummary(sessions: Map<string, ReplayToolCall[]>): {
+  sessionCount: number;
+  recordCount: number;
+  toolDistribution: Record<string, number>;
+} {
   let recordCount = 0;
   const toolDistribution: Record<string, number> = {};
 

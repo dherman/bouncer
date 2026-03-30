@@ -18,41 +18,41 @@
  *
  * If neither --session nor --sessions is specified, all sessions are replayed (batch mode).
  */
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { homedir, userInfo } from "node:os";
-import { Writable, Readable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { homedir, userInfo } from 'node:os';
+import { Writable, Readable } from 'node:stream';
+import * as acp from '@agentclientprotocol/sdk';
 
-import { loadDataset } from "../src/main/dataset-loader.js";
-import { buildScaffoldPlan, applyScaffold } from "../src/main/replay-scaffold.js";
-import { WorktreeManager } from "../src/main/worktree-manager.js";
-import { PolicyTemplateRegistry } from "../src/main/policy-registry.js";
-import { policyToSandboxConfig } from "../src/main/policy-sandbox.js";
+import { loadDataset } from '../src/main/dataset-loader.js';
+import { buildScaffoldPlan, applyScaffold } from '../src/main/replay-scaffold.js';
+import { WorktreeManager } from '../src/main/worktree-manager.js';
+import { PolicyTemplateRegistry } from '../src/main/policy-registry.js';
+import { policyToSandboxConfig } from '../src/main/policy-sandbox.js';
 import {
   buildSafehouseArgs,
   isSafehouseAvailable,
   ensurePolicyDir,
   writeAppendProfile,
   cleanupPolicy,
-} from "../src/main/sandbox.js";
-import type { ReplayToolCall, ReplayResult } from "../src/main/types.js";
+} from '../src/main/sandbox.js';
+import type { ReplayToolCall, ReplayResult } from '../src/main/types.js';
 
 // --- CLI arg parsing ---
 
 function parseArgs(argv: string[]) {
   const args = argv.slice(2);
   const opts = {
-    policy: "standard-pr",
-    session: "",
-    sessions: "" as string,
+    policy: 'standard-pr',
+    session: '',
+    sessions: '' as string,
     projectDir: process.cwd(),
-    dataset: join(process.cwd(), "data", "tool-use-dataset.jsonl"),
-    output: "",
+    dataset: join(process.cwd(), 'data', 'tool-use-dataset.jsonl'),
+    output: '',
     concurrency: 4,
     noSandbox: false,
   };
@@ -67,22 +67,36 @@ function parseArgs(argv: string[]) {
       return args[++i];
     };
     switch (flag) {
-      case "--policy": opts.policy = next(); break;
-      case "--session": opts.session = next(); break;
-      case "--sessions": opts.sessions = next(); break;
-      case "--project-dir": opts.projectDir = next(); break;
-      case "--dataset": opts.dataset = next(); break;
-      case "--output": opts.output = next(); break;
-      case "--concurrency": {
+      case '--policy':
+        opts.policy = next();
+        break;
+      case '--session':
+        opts.session = next();
+        break;
+      case '--sessions':
+        opts.sessions = next();
+        break;
+      case '--project-dir':
+        opts.projectDir = next();
+        break;
+      case '--dataset':
+        opts.dataset = next();
+        break;
+      case '--output':
+        opts.output = next();
+        break;
+      case '--concurrency': {
         const val = parseInt(next(), 10);
         if (Number.isNaN(val) || val < 1) {
-          console.error("--concurrency must be an integer >= 1");
+          console.error('--concurrency must be an integer >= 1');
           process.exit(1);
         }
         opts.concurrency = val;
         break;
       }
-      case "--no-sandbox": opts.noSandbox = true; break;
+      case '--no-sandbox':
+        opts.noSandbox = true;
+        break;
       default:
         console.error(`Unknown option: ${args[i]}`);
         process.exit(1);
@@ -94,7 +108,11 @@ function parseArgs(argv: string[]) {
 // --- De-anonymization ---
 
 function getSafeUsername(): string {
-  try { return userInfo().username; } catch { return process.env.USER || process.env.USERNAME || "unknown"; }
+  try {
+    return userInfo().username;
+  } catch {
+    return process.env.USER || process.env.USERNAME || 'unknown';
+  }
 }
 
 function makeDeanonymize(worktreePath: string) {
@@ -142,7 +160,10 @@ interface ReplayReport {
 function computeByToolBreakdown(
   results: ReplayResult[],
 ): Record<string, { allowed: number; blocked: number; skipped: number; error: number }> {
-  const byTool: Record<string, { allowed: number; blocked: number; skipped: number; error: number }> = {};
+  const byTool: Record<
+    string,
+    { allowed: number; blocked: number; skipped: number; error: number }
+  > = {};
   for (const r of results) {
     if (!byTool[r.tool]) {
       byTool[r.tool] = { allowed: 0, blocked: 0, skipped: 0, error: 0 };
@@ -158,13 +179,13 @@ function buildReport(
   datasetPath: string,
 ): ReplayReport {
   const allResults = sessionResults.flatMap((s) => s.results);
-  const allowed = allResults.filter((r) => r.replay_outcome === "allowed").length;
-  const blocked = allResults.filter((r) => r.replay_outcome === "blocked").length;
-  const skipped = allResults.filter((r) => r.replay_outcome === "skipped").length;
-  const error = allResults.filter((r) => r.replay_outcome === "error").length;
+  const allowed = allResults.filter((r) => r.replay_outcome === 'allowed').length;
+  const blocked = allResults.filter((r) => r.replay_outcome === 'blocked').length;
+  const skipped = allResults.filter((r) => r.replay_outcome === 'skipped').length;
+  const error = allResults.filter((r) => r.replay_outcome === 'error').length;
 
   const falseBlocks = allResults.filter(
-    (r) => r.replay_outcome === "blocked" && r.original_outcome === "approved",
+    (r) => r.replay_outcome === 'blocked' && r.original_outcome === 'approved',
   ).length;
   const actionable = allowed + blocked;
 
@@ -228,14 +249,14 @@ async function replaySession(
       });
       await writeAppendProfile(sandboxConfig);
     } else if (!noSandbox) {
-      process.stderr.write("  Warning: safehouse not available, running unsandboxed\n");
+      process.stderr.write('  Warning: safehouse not available, running unsandboxed\n');
     }
 
     // Resolve replay agent spawn args
     const require = createRequire(import.meta.url);
-    const tsxBin = require.resolve("tsx/cli");
+    const tsxBin = require.resolve('tsx/cli');
     const scriptDir = dirname(fileURLToPath(import.meta.url));
-    const agentScript = join(scriptDir, "..", "src", "agents", "replay-agent.ts");
+    const agentScript = join(scriptDir, '..', 'src', 'agents', 'replay-agent.ts');
     let cmd = process.execPath;
     let args = [tsxBin, agentScript];
     const env: Record<string, string> = {
@@ -244,18 +265,18 @@ async function replaySession(
 
     if (sandboxConfig) {
       const safehouseArgs = buildSafehouseArgs(sandboxConfig, [cmd, ...args]);
-      cmd = "safehouse";
+      cmd = 'safehouse';
       args = safehouseArgs;
     }
 
     // Spawn agent
     agentProcess = spawn(cmd, args, {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...env },
       cwd: worktree.path,
     });
 
-    agentProcess.stderr?.on("data", (data: Buffer) => {
+    agentProcess.stderr?.on('data', (data: Buffer) => {
       process.stderr.write(data);
     });
 
@@ -270,7 +291,7 @@ async function replaySession(
       (_agent) => ({
         async sessionUpdate(params) {
           const update = params.update;
-          if (update.sessionUpdate === "tool_call") {
+          if (update.sessionUpdate === 'tool_call') {
             const meta = update._meta as { replay?: ReplayResult } | undefined;
             if (meta?.replay) {
               results.push(meta.replay);
@@ -278,7 +299,7 @@ async function replaySession(
           }
         },
         async requestPermission(_params) {
-          return { outcome: { outcome: "cancelled" as const } };
+          return { outcome: { outcome: 'cancelled' as const } };
         },
       }),
       stream,
@@ -297,7 +318,7 @@ async function replaySession(
     // Send tool calls
     await connection.prompt({
       sessionId: acpSession.sessionId,
-      prompt: [{ type: "text", text: JSON.stringify(toolCalls) }],
+      prompt: [{ type: 'text', text: JSON.stringify(toolCalls) }],
     });
 
     return {
@@ -333,7 +354,9 @@ async function replayBatch(
     while (index < entries.length) {
       const i = index++;
       const [sessionId, toolCalls] = entries[i];
-      process.stderr.write(`[${i + 1}/${entries.length}] ${sessionId} (${toolCalls.length} calls)...\n`);
+      process.stderr.write(
+        `[${i + 1}/${entries.length}] ${sessionId} (${toolCalls.length} calls)...\n`,
+      );
       try {
         results[i] = await replaySession(sessionId, toolCalls, policyId, projectDir, noSandbox);
       } catch (err) {
@@ -359,7 +382,9 @@ async function replayBatch(
 function printSummary(report: ReplayReport) {
   const s = report.summary;
   process.stderr.write(`\n=== ${report.metadata.policyId} ===\n`);
-  process.stderr.write(`Sessions: ${report.metadata.sessionsCompleted} completed, ${report.metadata.sessionsFailed} failed\n`);
+  process.stderr.write(
+    `Sessions: ${report.metadata.sessionsCompleted} completed, ${report.metadata.sessionsFailed} failed\n`,
+  );
   process.stderr.write(`Tool calls: ${s.totalToolCalls} total\n`);
   process.stderr.write(`  Allowed: ${s.allowed} (${pct(s.allowed, s.totalToolCalls)})\n`);
   process.stderr.write(`  Blocked: ${s.blocked} (${pct(s.blocked, s.totalToolCalls)})\n`);
@@ -380,17 +405,17 @@ function printSummary(report: ReplayReport) {
       const total = counts.allowed + counts.blocked + counts.skipped + counts.error;
       process.stderr.write(
         `  ${tool.padEnd(12)} ${String(total).padStart(5)} total | ` +
-        `${String(counts.allowed).padStart(5)} allowed | ` +
-        `${String(counts.blocked).padStart(4)} blocked | ` +
-        `${String(counts.skipped).padStart(4)} skipped | ` +
-        `${String(counts.error).padStart(4)} error\n`,
+          `${String(counts.allowed).padStart(5)} allowed | ` +
+          `${String(counts.blocked).padStart(4)} blocked | ` +
+          `${String(counts.skipped).padStart(4)} skipped | ` +
+          `${String(counts.error).padStart(4)} error\n`,
       );
     }
   }
 }
 
 function pct(n: number, total: number): string {
-  return total > 0 ? `${((n / total) * 100).toFixed(1)}%` : "0.0%";
+  return total > 0 ? `${((n / total) * 100).toFixed(1)}%` : '0.0%';
 }
 
 // --- Main ---
@@ -412,10 +437,10 @@ try {
     targetSessions = new Map([[opts.session, toolCalls]]);
   } else if (opts.sessions) {
     targetSessions = new Map<string, ReplayToolCall[]>();
-    for (const id of opts.sessions.split(",")) {
+    for (const id of opts.sessions.split(',')) {
       const trimmed = id.trim();
       if (!trimmed) {
-        console.error("Empty session ID in --sessions");
+        console.error('Empty session ID in --sessions');
         process.exit(1);
       }
       const toolCalls = allSessions.get(trimmed);
@@ -433,18 +458,21 @@ try {
 
   // Resolve which policies to run against
   const registry = new PolicyTemplateRegistry();
-  if (opts.policy !== "all") {
+  if (opts.policy !== 'all') {
     try {
       registry.get(opts.policy);
     } catch {
       console.error(`Unknown policy: ${opts.policy}`);
-      console.error(`Available: ${registry.list().map((p) => p.id).join(", ")}, or "all"`);
+      console.error(
+        `Available: ${registry
+          .list()
+          .map((p) => p.id)
+          .join(', ')}, or "all"`,
+      );
       process.exit(1);
     }
   }
-  const policyIds = opts.policy === "all"
-    ? registry.list().map((p) => p.id)
-    : [opts.policy];
+  const policyIds = opts.policy === 'all' ? registry.list().map((p) => p.id) : [opts.policy];
 
   // Run each policy
   const allReports: Record<string, ReplayReport> = {};
@@ -455,11 +483,21 @@ try {
     if (targetSessions.size === 1) {
       const [sessionId, toolCalls] = targetSessions.entries().next().value!;
       process.stderr.write(`Replaying ${sessionId} (${toolCalls.length} tool calls)...\n`);
-      const result = await replaySession(sessionId, toolCalls, policyId, opts.projectDir, opts.noSandbox);
+      const result = await replaySession(
+        sessionId,
+        toolCalls,
+        policyId,
+        opts.projectDir,
+        opts.noSandbox,
+      );
       sessionResults = [result];
     } else {
       sessionResults = await replayBatch(
-        targetSessions, policyId, opts.projectDir, opts.concurrency, opts.noSandbox,
+        targetSessions,
+        policyId,
+        opts.projectDir,
+        opts.concurrency,
+        opts.noSandbox,
       );
     }
 
@@ -472,12 +510,12 @@ try {
   const output = policyIds.length === 1 ? allReports[policyIds[0]] : allReports;
   const reportJson = JSON.stringify(output, null, 2);
   if (opts.output) {
-    writeFileSync(opts.output, reportJson, "utf-8");
+    writeFileSync(opts.output, reportJson, 'utf-8');
     process.stderr.write(`\nReport written to ${opts.output}\n`);
   } else {
     console.log(reportJson);
   }
 } catch (err) {
-  console.error("Fatal:", err);
+  console.error('Fatal:', err);
   process.exit(1);
 }

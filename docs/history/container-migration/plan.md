@@ -40,7 +40,7 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
   - [x] 5.5 Add `generatePrePushHookForContainer()` to `hooks.ts`
   - [x] 5.6 Update `closeSession` and `cleanupOrphans` for container artifacts
   - [x] 5.7 Test: full agent session in container with policy enforcement
-- [x] **[Phase 6: `gh` Shim Direct API Mode](#phase-6-gh-shim-direct-api-mode)** *(parallel with Phases 3-5)*
+- [x] **[Phase 6: `gh` Shim Direct API Mode](#phase-6-gh-shim-direct-api-mode)** _(parallel with Phases 3-5)_
   - [x] 6.1 Relax `BOUNCER_REAL_GH` requirement in shim entry point
   - [x] 6.2 Add dispatch branch: real gh vs. direct API
   - [x] 6.3 Implement `executeViaApi()` with `fetch`
@@ -71,12 +71,14 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
 ### New files
 
 **`docker/agent.Dockerfile`**
+
 - `FROM docker/sandbox-templates:claude-code`
 - Remove the real `gh` binary (`rm -f $(which gh)`)
 - Install Rust toolchain via `rustup` (stable + rust-analyzer, rustfmt, clippy)
 - Switch to non-root `agent` user, set `WORKDIR /workspace`
 
 **`src/main/container.ts`** — container lifecycle module (partial — image management only in this phase)
+
 - `isDockerAvailable(): Promise<boolean>` — runs `docker info` and caches the result. Same pattern as `isSafehouseAvailable()` in `sandbox.ts`.
 - `ensureAgentImage(): Promise<string>` — builds the image if missing or stale:
   - Read `docker/agent.Dockerfile` content and compute a hash
@@ -89,17 +91,20 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
 ### Changes to existing files
 
 **`src/main/index.ts`** — kick off image build at startup
+
 - After `createWindow()`, call `ensureAgentImage()` in the background (fire-and-forget with error logging). This pre-warms the image so the first `createSession` doesn't block on a Docker build.
 - Import `isDockerAvailable` and log availability at startup.
 
 **`electron.vite.config.ts`** (or `electron-builder` config) — include `docker/` in packaged app resources so the Dockerfile is available at runtime.
 
 ### Testing
+
 - Manual: run `docker build` with the Dockerfile, verify the image contains node, git, rust (`rustc --version`), no `gh` binary (`which gh` returns nothing).
 - Script (`scripts/test-container-image.sh`): build image, `docker run --rm glitterball-agent:<tag> node --version`, `docker run --rm glitterball-agent:<tag> rustc --version`, `docker run --rm glitterball-agent:<tag> which gh` (should fail).
 - Unit: mock `execFile` calls in `container.ts` to test `isDockerAvailable()` and `ensureAgentImage()` logic (hash check, build-if-missing).
 
 ### Exit criteria
+
 - `npm run dev` starts the app, logs Docker availability and image build status.
 - The agent image builds successfully and contains the expected toolchains.
 - No `gh` binary is discoverable anywhere in the image filesystem.
@@ -115,15 +120,17 @@ This plan breaks M6 into phases, each delivering a testable increment. Phases ar
 Add the container spawn and teardown functions:
 
 **`ContainerHandle` interface**:
+
 ```typescript
 interface ContainerHandle {
-  process: ChildProcess;   // the `docker run` process
-  containerId: string;     // container name (glitterball-{sessionId})
-  kill(): void;            // docker stop + rm
+  process: ChildProcess; // the `docker run` process
+  containerId: string; // container name (glitterball-{sessionId})
+  kill(): void; // docker stop + rm
 }
 ```
 
 **`buildDockerRunArgs(config: ContainerConfig): string[]`**:
+
 - Constructs the `docker run -i --rm --name glitterball-{sessionId}` argument list
 - Maps `config.mounts` to `-v host:container[:ro]` flags
 - Maps `config.env` to `-e KEY=VALUE` flags
@@ -133,24 +140,28 @@ interface ContainerHandle {
 - Returns the full args array (not including `"docker"` itself)
 
 **`spawnContainer(config: ContainerConfig): ContainerHandle`**:
+
 - Calls `spawn("docker", buildDockerRunArgs(config), { stdio: ["pipe", "pipe", "pipe"] })`
 - Wraps in a `ContainerHandle`
 - `kill()` calls `process.kill()` then `docker rm -f glitterball-{sessionId}` as cleanup
 
 **`removeContainer(sessionId: string): Promise<void>`**:
+
 - `docker rm -f glitterball-{sessionId}` — idempotent, safe to call on already-stopped containers
 
 **`cleanupOrphanContainers(activeSessionIds: Set<string>): Promise<void>`**:
+
 - `docker ps -a --filter name=glitterball- --format '{{.Names}}'`
 - For each container whose session ID isn't in `activeSessionIds`, call `removeContainer`
 
 ### New type in `src/main/types.ts`
 
 ```typescript
-export type SandboxBackend = "safehouse" | "container" | "none";
+export type SandboxBackend = 'safehouse' | 'container' | 'none';
 ```
 
 Add to `SessionSummary`:
+
 ```typescript
 sandboxBackend: SandboxBackend;
 ```
@@ -158,6 +169,7 @@ sandboxBackend: SandboxBackend;
 ### Testing
 
 Integration test script (`scripts/test-container-spawn.sh`):
+
 - Build the agent image (from Phase 1)
 - Spawn a simple echo container: `docker run -i --rm glitterball-agent:<tag> cat`
 - Write to stdin, read from stdout, verify echo
@@ -166,6 +178,7 @@ Integration test script (`scripts/test-container-spawn.sh`):
 Unit test for `buildDockerRunArgs`: verify mount flags, env vars, network mode, working dir are correctly generated for various `ContainerConfig` inputs.
 
 ### Exit criteria
+
 - `spawnContainer` returns a handle whose `process.stdin`/`process.stdout` work for bidirectional communication
 - `removeContainer` is idempotent
 - `cleanupOrphanContainers` finds and removes stale containers
@@ -179,21 +192,24 @@ Unit test for `buildDockerRunArgs`: verify mount flags, env vars, network mode, 
 ### Changes to `src/main/session-manager.ts`
 
 **Backend selection** — add to `createSession`, after resolving the policy template:
+
 ```typescript
 const dockerAvailable = await isDockerAvailable();
 const safehouseAvailable = await isSafehouseAvailable();
-const backend: SandboxBackend =
-  dockerAvailable ? "container" :
-  safehouseAvailable ? "safehouse" :
-  "none";
+const backend: SandboxBackend = dockerAvailable
+  ? 'container'
+  : safehouseAvailable
+    ? 'safehouse'
+    : 'none';
 ```
 
 Store `backend` on `SessionState`:
+
 ```typescript
 interface SessionState {
   // ... existing fields ...
   sandboxBackend: SandboxBackend;
-  containerId: string | null;  // set when backend === "container"
+  containerId: string | null; // set when backend === "container"
 }
 ```
 
@@ -207,9 +223,9 @@ function resolveAgentCommand(
   containerConfig: ContainerConfig | null,
   worktreePath?: string,
 ): SpawnConfig {
-  if (agentType === "echo") {
+  if (agentType === 'echo') {
     if (containerConfig) {
-      return { cmd: "docker", args: buildDockerRunArgs(containerConfig) };
+      return { cmd: 'docker', args: buildDockerRunArgs(containerConfig) };
     }
     return resolveEchoAgentCommand();
   }
@@ -232,11 +248,13 @@ Call `ensureAgentImage()` before first session creation (block on it if needed, 
 ### Testing
 
 Manual: create an echo agent session in the UI. Verify:
+
 - Session shows as "container" sandbox backend
 - Messages round-trip through ACP
 - Closing the session removes the container (`docker ps -a` shows no stale containers)
 
 ### Exit criteria
+
 - Echo agent works identically whether running natively, via safehouse, or in a container.
 - ACP streaming (text chunks, tool calls) works over container stdio.
 - Session close cleans up the container.
@@ -273,6 +291,7 @@ export function policyToContainerConfig(
 ```
 
 Implementation:
+
 - Standard mounts (always present):
   - Worktree → `/workspace` (rw or ro based on `template.filesystem.worktreeAccess`)
   - Git common dir → same absolute path inside container (rw, follows worktree access mode). The path must match because git stores the absolute path to the common dir in the worktree's `.git` file.
@@ -302,11 +321,15 @@ A tiny Node.js script that acts as a git credential helper. Used inside the cont
 // Used in container gitconfig: credential.https://github.com.helper=!node /usr/local/lib/bouncer/gh-credential-helper.js
 
 const input = await readStdin();
-if (!input.includes("host=github.com")) process.exit(0);
+if (!input.includes('host=github.com')) process.exit(0);
 
 const token = process.env.GH_TOKEN;
-if (!token) { process.exit(1); }
-process.stdout.write(`protocol=https\nhost=github.com\nusername=x-access-token\npassword=${token}\n\n`);
+if (!token) {
+  process.exit(1);
+}
+process.stdout.write(
+  `protocol=https\nhost=github.com\nusername=x-access-token\npassword=${token}\n\n`,
+);
 ```
 
 ### New function: `generateGitconfig()`
@@ -323,6 +346,7 @@ export function generateGitconfig(opts: {
 ```
 
 Generates the content for `/etc/gitconfig`:
+
 ```ini
 [core]
     hooksPath = /etc/bouncer/hooks
@@ -338,11 +362,12 @@ The gitconfig file is written to `/tmp/glitterball-sandbox/{sessionId}-gitconfig
 ### Changes to `src/main/types.ts`
 
 Add `ContainerPolicy` to `PolicyTemplate`:
+
 ```typescript
 export interface ContainerPolicy {
   image?: string;
   additionalMounts?: Array<{ hostPath: string; containerPath: string; readOnly: boolean }>;
-  networkMode?: "none" | "bridge";
+  networkMode?: 'none' | 'bridge';
 }
 ```
 
@@ -355,6 +380,7 @@ Add `container: {}` to `standardPrTemplate` (uses defaults — bridge network, s
 ### Testing
 
 Unit tests for `policyToContainerConfig`:
+
 - Standard PR template → verify mount list (worktree rw, hooks ro, shim ro, gitconfig ro, etc.)
 - Template without `github` → verify no hooks/shim/gitconfig mounts
 - Read-only worktree template → verify worktree mounted ro
@@ -364,6 +390,7 @@ Unit test for `generateGitconfig`: verify output contains `core.hooksPath`, cred
 Unit test for `gh-credential-helper.ts`: mock stdin with github.com host, verify output format.
 
 ### Exit criteria
+
 - `policyToContainerConfig` produces correct mount lists for all three policy templates.
 - System gitconfig sets `core.hooksPath` and credential helper.
 - Credential helper outputs valid git credential protocol.
@@ -401,6 +428,7 @@ exec node /usr/local/lib/bouncer/gh-shim.js "$@"
 This is written to `/tmp/glitterball-sandbox/{id}-container-gh-wrapper` on the host and bind-mounted to `/usr/local/bin/gh:ro` in the container.
 
 **Env changes for container path**:
+
 - `BOUNCER_GITHUB_POLICY=/etc/bouncer/github-policy.json` (container path, not host path)
 - `BOUNCER_REAL_GH` is **not set** (triggers direct API mode in the shim — see Phase 6)
 - `GH_TOKEN`, `ANTHROPIC_API_KEY` passed through as env vars
@@ -409,6 +437,7 @@ This is written to `/tmp/glitterball-sandbox/{id}-container-gh-wrapper` on the h
 **Env passthrough simplification**: On safehouse, we manually enumerate env vars to forward (`envPassthrough`). In the container, only vars explicitly set via `-e` are visible — a simpler model. Pass `ANTHROPIC_API_KEY`, `GH_TOKEN`, `BOUNCER_GITHUB_POLICY`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and `NODE_PATH`.
 
 **Changes to `resolveClaudeCodeCommand` and `resolveReplayAgentCommand`**:
+
 - Add container path: when `containerConfig` is present, return `{ cmd: "docker", args: buildDockerRunArgs(containerConfig) }`
 - The agent binary path inside the container: `/usr/local/lib/agent/index.js`
 
@@ -428,6 +457,7 @@ The pre-push hook needs a small change for the container path. The `ALLOWED_REFS
 ### Testing
 
 Integration test script (`scripts/test-container-agent.sh`):
+
 1. Build the agent image
 2. Create a git repo with a GitHub remote
 3. Start a replay agent session with `standard-pr` policy in a container
@@ -441,6 +471,7 @@ Integration test script (`scripts/test-container-agent.sh`):
 Manual: run a Claude Code session in the UI, do a simple task, verify agent can code and commit.
 
 ### Exit criteria
+
 - Claude Code agent starts in a container, speaks ACP, can edit files and run commands.
 - `gh` shim is mounted at `/usr/local/bin/gh` and enforces policy.
 - Git hooks are mounted read-only at `/etc/bouncer/hooks` and enforce push restrictions.
@@ -461,6 +492,7 @@ This phase is what makes the container `gh` shim functional for allowed operatio
 ### Changes to `src/main/gh-shim.ts`
 
 **Entry point change** — relax the `BOUNCER_REAL_GH` requirement:
+
 ```typescript
 // Before (M5):
 if (!policyPath || !realGh) { ... exit(1) }
@@ -471,8 +503,9 @@ const realGh = process.env.BOUNCER_REAL_GH; // may be undefined in container
 ```
 
 **Dispatch change** — after policy evaluation:
+
 ```typescript
-if (decision.action === "deny") {
+if (decision.action === 'deny') {
   // unchanged — log and exit
 }
 
@@ -501,41 +534,50 @@ async function executeViaApi(
 **API endpoint mapping** — a function per supported command:
 
 `gh pr create --title T --body B --base main --head branch`:
+
 - `POST /repos/{owner}/{repo}/pulls` with `{ title, body, base, head }`
 - Extract `--title`, `--body`, `--base`, `--head` flags from `parsed.rawArgs`
 - Response: print the PR URL to stdout (same as real `gh`)
 - If `decision.action === "allow-and-capture-pr"`: extract PR number from response, update policy state
 
 `gh pr view [number]`:
+
 - `GET /repos/{owner}/{repo}/pulls/{number}`
 - Format output as JSON (agent-friendly)
 
 `gh pr edit [number] [--title T] [--body B]`:
+
 - `PATCH /repos/{owner}/{repo}/pulls/{number}` with provided fields
 
 `gh pr list`:
+
 - `GET /repos/{owner}/{repo}/pulls`
 - Format as JSON array
 
 `gh issue list`:
+
 - `GET /repos/{owner}/{repo}/issues`
 - Format as JSON array
 
 `gh issue view [number]`:
+
 - `GET /repos/{owner}/{repo}/issues/{number}`
 - Format as JSON
 
 `gh api <endpoint> [-X METHOD] [-f key=value]`:
+
 - Direct HTTP request to `https://api.github.com{endpoint}`
 - Method from `-X`/`--method` flag
 - Body from `-f`/`--field` flags (JSON-encoded)
 
 **Unsupported commands**: For commands that pass policy evaluation but aren't in the API mapping (edge case — most denied commands never reach this point), print a clear error:
+
 ```
 error: 'gh {command} {subcommand}' is not available in this sandbox environment
 ```
 
 **Flag parsing for API mode**: The shim already parses policy-relevant flags (`-R`, `--repo`, `-X`, `--method`). For API mode, we also need:
+
 - `--title`, `--body`, `--base`, `--head` (for `pr create/edit`)
 - `-f`, `--field`, `-F`, `--raw-field` (for `api`)
 - `--json`, `--jq` (for output formatting — pass-through for API mode since we return JSON by default)
@@ -549,12 +591,14 @@ Add these to the flag parser. Keep it simple — we only need the flags that map
 ### Testing
 
 Unit tests (can run without Docker):
+
 - Test `executeViaApi` with mocked `fetch` for each supported command
 - Test PR creation → policy state update
 - Test unsupported command → clear error message
 - Test flag extraction for `--title`, `--body`, `--base`, `--head`
 
 Integration tests (require GitHub token):
+
 - Run the shim (without `BOUNCER_REAL_GH`) against a test repo
 - `gh pr list` → returns JSON array
 - `gh issue list` → returns JSON array
@@ -562,6 +606,7 @@ Integration tests (require GitHub token):
 - `gh pr create` → creates PR, captures number, updates policy state
 
 ### Exit criteria
+
 - The shim works in both modes: proxy-to-real-gh (host) and direct-API (container).
 - All commands listed in the design doc's API mapping work.
 - PR creation captures the PR number and updates policy state (same behavior as M5).
@@ -597,6 +642,7 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
 ```
 
 For M6, the `ContainerMonitor` is lightweight — it's mainly a placeholder. The real violation detection comes from:
+
 - Policy events (stderr parsing — already works, unchanged)
 - Filesystem permission errors (surface via ACP tool call failures — no code change needed)
 - Container lifecycle events (OOM, unexpected exit — from Docker events stream)
@@ -609,17 +655,19 @@ For M6, the `ContainerMonitor` is lightweight — it's mainly a placeholder. The
 ### Changes to `src/main/types.ts`
 
 Update `SessionSummary`:
+
 ```typescript
 export interface SessionSummary {
   // ... existing fields ...
   sandboxBackend: SandboxBackend; // "safehouse" | "container" | "none"
-  containerId: string | null;     // Docker container ID when backend=container
+  containerId: string | null; // Docker container ID when backend=container
 }
 ```
 
 ### Changes to renderer
 
 **`SessionList.tsx`**: Show sandbox backend indicator next to each session:
+
 - Container: "Container" badge
 - Safehouse: "Seatbelt" badge
 - None: "Unsandboxed" warning
@@ -635,12 +683,14 @@ No changes needed — `SessionSummary` is passed through IPC and the new fields 
 ### Testing
 
 Manual: create sessions with and without Docker available. Verify:
+
 - Container sessions show "Container" badge
 - Safehouse fallback shows "Seatbelt" badge
 - Policy events display correctly for both backends
 - OOM-killed container shows up as a session error
 
 ### Exit criteria
+
 - UI clearly indicates which sandbox backend each session uses.
 - Policy events work identically for both backends.
 - Container lifecycle events (unexpected exit, OOM) surface as session errors.
@@ -654,6 +704,7 @@ Manual: create sessions with and without Docker available. Verify:
 ### Validation checklist
 
 **Claude Code PR workflow in container**:
+
 - [ ] Create session with `standard-pr` policy
 - [ ] Agent can read and edit files in the worktree
 - [ ] Agent can run `npm install`, `npm test`, etc.
@@ -669,14 +720,17 @@ Manual: create sessions with and without Docker available. Verify:
 - [ ] Session close removes the container and all host artifacts
 
 **Replay agent regression**:
+
 - [ ] All replay sessions from the test dataset pass in containers
 - [ ] Policy enforcement results match safehouse baseline
 
 **Safehouse fallback**:
+
 - [ ] With Docker unavailable, sessions fall back to safehouse
 - [ ] All M5 tests pass in safehouse mode (no regressions)
 
 **Orphan cleanup**:
+
 - [ ] Kill the app mid-session, restart — orphan containers are cleaned up
 - [ ] Orphan worktrees, policy files, hooks, shim dirs are cleaned up (existing behavior)
 
@@ -688,6 +742,7 @@ Manual: create sessions with and without Docker available. Verify:
 - Ensure `scripts/test-*` scripts cover both container and safehouse paths
 
 ### Exit criteria
+
 - All items in the validation checklist pass.
 - Roadmap updated.
 - No stale TODO comments.
@@ -726,13 +781,13 @@ Phase 6 (`gh` shim API mode) can be developed in parallel with Phases 3-5. It ha
 
 After each phase merges, verify:
 
-| After Phase | Check |
-|---|---|
-| Phase 1 | Image builds, contains expected toolchains, no `gh` binary |
-| Phase 2 | stdio works through `docker run -i`, container cleanup is reliable |
-| Phase 3 | ACP protocol works over container stdio (text streaming, tool calls) |
-| Phase 4 | Mount strategy is correct (rw/ro), gitconfig is valid, credential helper works |
-| Phase 5 | Full agent session works in container, policy enforcement matches safehouse |
-| Phase 6 | Shim API mode handles the common `gh` commands, PR capture works |
-| Phase 7 | UI reflects backend correctly, monitoring captures relevant events |
-| Phase 8 | Everything works together, no regressions, roadmap updated |
+| After Phase | Check                                                                          |
+| ----------- | ------------------------------------------------------------------------------ |
+| Phase 1     | Image builds, contains expected toolchains, no `gh` binary                     |
+| Phase 2     | stdio works through `docker run -i`, container cleanup is reliable             |
+| Phase 3     | ACP protocol works over container stdio (text streaming, tool calls)           |
+| Phase 4     | Mount strategy is correct (rw/ro), gitconfig is valid, credential helper works |
+| Phase 5     | Full agent session works in container, policy enforcement matches safehouse    |
+| Phase 6     | Shim API mode handles the common `gh` commands, PR capture works               |
+| Phase 7     | UI reflects backend correctly, monitoring captures relevant events             |
+| Phase 8     | Everything works together, no regressions, roadmap updated                     |
