@@ -10,6 +10,7 @@ function App() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [messagesByWorkspace, setMessagesByWorkspace] = useState<Map<string, Message[]>>(new Map())
   const [workspaceErrors, setWorkspaceErrors] = useState<Map<string, string>>(new Map())
+  const [workspaceErrorKinds, setWorkspaceErrorKinds] = useState<Map<string, "auth">>(new Map())
   const [violationsByWorkspace, setViolationsByWorkspace] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
   const [policies, setPolicies] = useState<PolicyTemplateSummary[]>([])
   const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
@@ -54,6 +55,21 @@ function App() {
           setWorkspaceErrors((prev) => {
             const next = new Map(prev)
             next.set(update.workspaceId, update.error!)
+            return next
+          })
+        }
+        if (update.errorKind) {
+          setWorkspaceErrorKinds((prev) => {
+            const next = new Map(prev)
+            next.set(update.workspaceId, update.errorKind!)
+            return next
+          })
+        } else if (update.status !== 'error') {
+          // Clear errorKind when transitioning away from error (e.g., back to ready)
+          setWorkspaceErrorKinds((prev) => {
+            if (!prev.has(update.workspaceId)) return prev
+            const next = new Map(prev)
+            next.delete(update.workspaceId)
             return next
           })
         }
@@ -165,12 +181,42 @@ function App() {
     }
   }, [scheduleStreamTick])
 
+  // Fetch messages for all open workspaces from the main process.
+  // Called on initial mount and when the app returns to foreground
+  // (the renderer may have been discarded by macOS while backgrounded).
+  const hydrateMessages = useCallback(async (workspaceList: WorkspaceSummary[]) => {
+    const open = workspaceList.filter((w) => w.status !== 'closed')
+    if (open.length === 0) return
+    const entries = await Promise.all(
+      open.map(async (w) => {
+        try {
+          const msgs: Message[] = await window.bouncer.workspaces.getMessages(w.id)
+          return [w.id, msgs] as const
+        } catch {
+          return [w.id, []] as const
+        }
+      })
+    )
+    setMessagesByWorkspace((prev) => {
+      const next = new Map(prev)
+      for (const [id, msgs] of entries) {
+        // Only replace if the main process has more messages (avoids clobbering
+        // in-flight streaming state with a stale snapshot).
+        if (msgs.length > 0 && msgs.length >= (next.get(id)?.length ?? 0)) {
+          next.set(id, msgs)
+        }
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     window.bouncer.repositories.list().then(setRepos)
     window.bouncer.workspaces.list().then((list) => {
       if (list.length > 0) {
         setWorkspaces(list)
         setActiveWorkspaceId(list[0].id)
+        hydrateMessages(list)
       }
     })
     window.bouncer.policies.list().then((list) => {
@@ -182,7 +228,25 @@ function App() {
     })
     const unsubscribe = window.bouncer.workspaces.onUpdate(handleUpdate)
     return unsubscribe
-  }, [handleUpdate])
+  }, [handleUpdate, hydrateMessages])
+
+  // Re-hydrate messages when the app returns to the foreground.
+  // macOS may discard the renderer's webContents while backgrounded,
+  // causing React to remount with empty state.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        window.bouncer.workspaces.list().then((list) => {
+          if (list.length > 0) {
+            setWorkspaces(list)
+            hydrateMessages(list)
+          }
+        })
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [hydrateMessages])
 
   // Compute the effective focused repo:
   // (a) single repo → always focused
@@ -251,6 +315,15 @@ function App() {
       await window.bouncer.workspaces.close(id)
     } catch (err) {
       console.error('Failed to close workspace:', err)
+    }
+  }
+
+  async function handleRefreshCredentials() {
+    if (!activeWorkspaceId) return
+    try {
+      await window.bouncer.workspaces.refreshCredentials(activeWorkspaceId)
+    } catch (err) {
+      console.error('Failed to refresh credentials:', err)
     }
   }
 
@@ -374,6 +447,8 @@ function App() {
           policyEvents={activePolicyEvents}
           onSendMessage={handleSendMessage}
           onCloseSession={() => handleCloseWorkspace(activeWorkspace.id)}
+          sessionErrorKind={workspaceErrorKinds.get(activeWorkspace.id)}
+          onRefreshCredentials={handleRefreshCredentials}
         />
       ) : (
         <div className="chat-panel">

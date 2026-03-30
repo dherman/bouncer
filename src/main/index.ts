@@ -155,6 +155,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('policies:list', () => {
     return workspaceManager.policyRegistry.list()
   })
+  ipcMain.handle('workspaces:getMessages', (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') {
+      throw new Error('Invalid argument: sessionId must be a string')
+    }
+    return workspaceManager.getMessages(sessionId)
+  })
   ipcMain.handle('workspaces:sendMessage', (_e, sessionId: unknown, text: unknown) => {
     if (typeof sessionId !== 'string' || typeof text !== 'string') {
       throw new Error('Invalid arguments: sessionId and text must be strings')
@@ -166,6 +172,12 @@ app.whenReady().then(async () => {
       throw new Error('Invalid argument: sessionId must be a string')
     }
     return workspaceManager.closeWorkspace(sessionId)
+  })
+  ipcMain.handle('workspaces:refreshCredentials', (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') {
+      throw new Error('Invalid argument: sessionId must be a string')
+    }
+    return workspaceManager.refreshCredentials(sessionId)
   })
 
   ipcMain.handle('workspaces:getSandboxViolations', (_e, sessionId: unknown) => {

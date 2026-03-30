@@ -12,10 +12,14 @@ contextBridge.exposeInMainWorld('bouncer', {
     list: () => ipcRenderer.invoke('workspaces:list'),
     create: (repositoryId: string) =>
       ipcRenderer.invoke('workspaces:create', repositoryId),
+    getMessages: (workspaceId: string) =>
+      ipcRenderer.invoke('workspaces:getMessages', workspaceId),
     sendMessage: (workspaceId: string, text: string) =>
       ipcRenderer.invoke('workspaces:sendMessage', workspaceId, text),
     close: (workspaceId: string) =>
       ipcRenderer.invoke('workspaces:close', workspaceId),
+    refreshCredentials: (workspaceId: string) =>
+      ipcRenderer.invoke('workspaces:refreshCredentials', workspaceId),
     getSandboxViolations: (workspaceId: string) =>
       ipcRenderer.invoke('workspaces:getSandboxViolations', workspaceId),
     loadReplayData: (datasetSessionId: string) =>

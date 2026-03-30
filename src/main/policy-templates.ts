@@ -20,6 +20,8 @@ export const standardPrTemplate: PolicyTemplate = {
     allowedDomains: [
       // Claude Code API backend — required for the agent to function
       "api.anthropic.com",
+      // Claude Code OAuth — required for token refresh / re-authentication
+      "platform.claude.com",
       // GitHub (code hosting, API, uploads)
       "github.com",
       "api.github.com",
