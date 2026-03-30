@@ -94,14 +94,18 @@ function groupParts(parts: MessagePart[]): PartGroup[] {
   return groups
 }
 
-function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
+function ToolRunGroup({ toolCallIds, toolCalls, isStreaming, followedByText }: {
   toolCallIds: string[]
   toolCalls: ToolCallInfo[]
   isStreaming: boolean
+  /** True when a non-empty text segment appears after this tool group. */
+  followedByText: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
 
-  // Track turn completion: once streaming transitions false, the turn is done.
+  // A group should collapse when either:
+  // 1. The turn is complete (streaming ended), or
+  // 2. The agent has moved on to a text segment after this group
   const [turnComplete, setTurnComplete] = useState(!isStreaming)
   const prevStreaming = useRef(isStreaming)
   useEffect(() => {
@@ -111,14 +115,16 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
     prevStreaming.current = isStreaming
   }, [isStreaming])
 
+  const shouldCollapse = turnComplete || followedByText
+
   const resolved = toolCallIds.map((id) => toolCalls.find((t) => t.id === id)).filter(Boolean) as ToolCallInfo[]
   const failCount = resolved.filter((tc) => tc.status === 'failed').length
 
-  // Before the turn is complete, or if user expanded: show all tool calls individually
-  if (!turnComplete || expanded) {
+  // Before collapse, or if user expanded: show all tool calls individually
+  if (!shouldCollapse || expanded) {
     return (
       <>
-        {turnComplete && (
+        {shouldCollapse && (
           <button type="button" className="tool-group-summary" onClick={() => setExpanded(false)}>
             <span className="tool-step-chevron">{'\u25BE'}</span>
             <span className="tool-group-summary-text">
@@ -132,7 +138,7 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
     )
   }
 
-  // Turn complete and collapsed: single summary line
+  // Collapsed: single summary line
   return (
     <button type="button" className="tool-group-summary" onClick={() => setExpanded(true)}>
       <span className="tool-step-chevron">{'\u25B8'}</span>
@@ -206,6 +212,23 @@ export function ChatPanel({
           const activeSegmentIsLast = lastGroup?.type === 'text' && lastGroup.part.index === activeSegmentIndex
           const showTrailingThinking = isStreaming && !activeSegmentIsLast
 
+          // Precompute which tool groups are followed by a non-empty text segment
+          const toolGroupFollowedByText = new Set<number>()
+          for (let gi = 0; gi < grouped.length; gi++) {
+            if (grouped[gi].type === 'tools') {
+              for (let gj = gi + 1; gj < grouped.length; gj++) {
+                const later = grouped[gj]
+                if (later.type === 'text') {
+                  const text = (segments[later.part.index] ?? '').replace(/^\n+/, '')
+                  if (text) {
+                    toolGroupFollowedByText.add(gi)
+                    break
+                  }
+                }
+              }
+            }
+          }
+
           return (
             <div key={msg.id} className="agent-turn">
               {grouped.map((group, i) => {
@@ -241,6 +264,7 @@ export function ChatPanel({
                     toolCallIds={group.toolCallIds}
                     toolCalls={msg.toolCalls ?? []}
                     isStreaming={!!isStreaming}
+                    followedByText={toolGroupFollowedByText.has(i)}
                   />
                 )
               })}

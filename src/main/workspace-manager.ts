@@ -1172,11 +1172,30 @@ export class WorkspaceManager {
     // Send prompt via ACP
     const promptBlocks: Array<{ type: "text"; text: string }> = [];
 
-    // On the first prompt, inject UI formatting guidance
+    // On the first prompt, inject behavioral and formatting guidance
     if (workspace.promptCount === 0) {
+      const hasGitHub = !!workspace.githubPolicy;
+      const systemParts: string[] = [
+        "Formatting guidance: After completing tool calls, when you present the results to the user, always start with a brief summary sentence that contextualizes the data before showing it. Do not output raw data or listings without a lead-in. Before making tool calls, keep your introductory text minimal — just proceed to the tool calls without unnecessary preamble.",
+      ];
+      if (hasGitHub) {
+        systemParts.push(
+          "Autonomy guidance: You are running inside a sandboxed environment. Work autonomously through the full task without stopping to ask for permission at intermediate steps. Specifically:",
+          "1. Implement the requested changes, committing as needed.",
+          "2. Push your branch and create a draft PR (use `gh pr create --draft`).",
+          "3. Check CI status with `gh pr checks`. If checks fail, read the logs, fix the issues, push again, and re-check. Repeat until CI is green.",
+          "4. Request a Copilot review by running: gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers -f reviewers[]=\"copilot-swe-agent\"",
+          "5. Poll for the review to complete, then read the review comments.",
+          "6. For each review comment, propose your response to the user (describe what you would change and why) but do NOT post replies to the review. Leave it to the user to decide.",
+          "7. If there are actionable suggestions, implement the fixes, push, and re-check CI.",
+          "8. When CI is green and all review comments are addressed, report the final status to the user.",
+          "Do NOT stop to ask the user for confirmation between these steps. The sandbox prevents any dangerous operations (merging, pushing to protected branches, posting review comments). Work through the entire workflow in one shot.",
+          "Do NOT attempt to merge the PR — that is a human-only operation and the sandbox will block it.",
+        );
+      }
       promptBlocks.push({
         type: "text",
-        text: "<system-instruction>\nFormatting guidance: After completing tool calls, when you present the results to the user, always start with a brief summary sentence that contextualizes the data before showing it. Do not output raw data or listings without a lead-in. Before making tool calls, keep your introductory text minimal — just proceed to the tool calls without unnecessary preamble.\n</system-instruction>",
+        text: `<system-instruction>\n${systemParts.join("\n")}\n</system-instruction>`,
       });
     }
     workspace.promptCount++;
