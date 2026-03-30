@@ -212,20 +212,12 @@ export async function cleanupOrphanContainers(
 ): Promise<void> {
   let stdout: string;
   try {
-    // Query both current (bouncer.*) and legacy (glitterball.*) labels
-    const [current, legacy] = await Promise.all([
-      execFileAsync("docker", [
-        "ps", "-a",
-        "--filter", "label=bouncer.managed=true",
-        "--format", "{{.Label \"bouncer.sessionId\"}}\t{{.Names}}",
-      ], { timeout: 10_000 }),
-      execFileAsync("docker", [
-        "ps", "-a",
-        "--filter", "label=glitterball.managed=true",
-        "--format", "{{.Label \"glitterball.sessionId\"}}\t{{.Names}}",
-      ], { timeout: 10_000 }).catch(() => ({ stdout: "" })),
-    ]);
-    stdout = current.stdout + legacy.stdout;
+    const result = await execFileAsync("docker", [
+      "ps", "-a",
+      "--filter", "label=bouncer.managed=true",
+      "--format", "{{.Label \"bouncer.sessionId\"}}\t{{.Names}}",
+    ], { timeout: 10_000 });
+    stdout = result.stdout;
   } catch {
     return; // Docker not available or error — nothing to clean up
   }

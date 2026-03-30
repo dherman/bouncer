@@ -58,11 +58,11 @@ ACP-level interception (via the ACP proxy) serves as an **observability and UX l
 
 ## Architecture
 
-The project is structured as an **Electron app** (codename: **Glitter Ball**) that serves as a multi-session coding agent workbench. It uses the **Agent Client Protocol (ACP)** to communicate with coding agents, and **[agent-safehouse](https://agent-safehouse.dev)** for OS-level sandbox enforcement on macOS (with a planned migration to containers for cross-platform support — see [Sandbox Primitive: Seatbelt vs. Containers](#sandbox-primitive-seatbelt-vs-containers)).
+The project is structured as an **Electron app** (formerly codenamed "Glitter Ball," now **Bouncer**) that serves as a multi-session coding agent workbench. It uses the **Agent Client Protocol (ACP)** to communicate with coding agents, and **[agent-safehouse](https://agent-safehouse.dev)** for OS-level sandbox enforcement on macOS (with a planned migration to containers for cross-platform support — see [Sandbox Primitive: Seatbelt vs. Containers](#sandbox-primitive-seatbelt-vs-containers)).
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                 Glitter Ball (Electron)                   │
+│                   Bouncer (Electron)                      │
 │                                                          │
 │  ┌───────────────────────────────────────────────────┐   │
 │  │                   React UI                        │   │
@@ -135,7 +135,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **OrbStack bind-mount performance (validated 2026-03-24):** Performance testing with OrbStack on this repo (6,500+ files, 462MB `node_modules`) showed bind-mount performance at parity with native macOS — some operations were actually faster due to Linux kernel IO scheduling. See [OrbStack performance investigation](reference/orbstack-perf-investigation.md) for details. This eliminates the key container migration risk.
 
-**Current state (post-M6):** Containers are the primary sandbox backend. When Docker is available, agents run inside `glitterball-agent` containers with the full mount table (worktree, git hooks, gh shim, policy state, gitconfig, credential helper). When Docker is unavailable, the system falls back to safehouse (Seatbelt). The policy template system generates configs for both backends from the same template definitions.
+**Current state (post-M6):** Containers are the primary sandbox backend. When Docker is available, agents run inside `bouncer-agent` containers with the full mount table (worktree, git hooks, gh shim, policy state, gitconfig, credential helper). When Docker is unavailable, the system falls back to safehouse (Seatbelt). The policy template system generates configs for both backends from the same template definitions.
 
 **Migration path:** Milestones 2-5 used safehouse to iterate on policy semantics quickly. Milestone 6 migrated to containers, which strengthened the CLI wrapper enforcement model (the real `gh` binary doesn't exist in the container) and provides native network isolation for Milestone 7. See the [M5 design investigation](reference/m5-app-layer-design.md) for the analysis behind this sequencing.
 
