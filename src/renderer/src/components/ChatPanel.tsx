@@ -150,6 +150,57 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming, followedByText }: {
   )
 }
 
+/** Format all messages as a plain text transcript for clipboard. */
+function formatTranscript(messages: Message[]): string {
+  const lines: string[] = []
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      lines.push(msg.text)
+      lines.push('')
+      continue
+    }
+    // Agent message: interleave text and tool calls using parts
+    const segments = msg.textSegments ?? [msg.text]
+    const parts: MessagePart[] = msg.parts ?? [{ type: 'text', index: 0 }]
+    const toolCalls = msg.toolCalls ?? []
+
+    for (const part of parts) {
+      if (part.type === 'text') {
+        const text = (segments[part.index] ?? '').trim()
+        if (text) {
+          lines.push(text)
+          lines.push('')
+        }
+      } else {
+        const tc = toolCalls.find((t) => t.id === part.toolCallId)
+        if (tc) {
+          const desc = tc.description || tc.title || ''
+          lines.push(`**${tc.name}** ${desc}`)
+          const isBash = tc.name === 'Bash'
+          const command = isBash && tc.input?.command ? String(tc.input.command) : null
+          if (command) {
+            lines.push('')
+            lines.push('```')
+            lines.push(command)
+            lines.push('```')
+          }
+          if (tc.output) {
+            lines.push('')
+            lines.push('<output>')
+            lines.push(tc.output)
+            lines.push('</output>')
+          } else if (command) {
+            lines.push('')
+            lines.push('(Bash completed with no output)')
+          }
+          lines.push('')
+        }
+      }
+    }
+  }
+  return lines.join('\n')
+}
+
 export function ChatPanel({
   messages,
   streamingTextRef,
@@ -166,6 +217,7 @@ export function ChatPanel({
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const lastScrollTime = useRef(0)
+  const [copyFeedback, setCopyFeedback] = useState(false)
 
   const isStreaming = messages.some((m) => m.streaming)
   const hasPendingMessage = sessionStatus === 'initializing' && messages.some((m) => m.role === 'user')
@@ -179,8 +231,28 @@ export function ChatPanel({
     bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' })
   }, [messages, streamTick, isStreaming])
 
+  const handleCopyTranscript = () => {
+    const text = formatTranscript(messages)
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 1500)
+    })
+  }
+
   return (
     <div className="chat-panel">
+      {messages.length > 0 && (
+        <div className="chat-toolbar">
+          <button
+            type="button"
+            className="copy-transcript-btn"
+            onClick={handleCopyTranscript}
+            title="Copy transcript to clipboard"
+          >
+            {copyFeedback ? 'Copied!' : 'Copy transcript'}
+          </button>
+        </div>
+      )}
       <div className="messages">
         {messages.length === 0 && (sessionStatus === 'ready' || sessionStatus === 'initializing') && (
           <div className="empty-state">Send a message to begin</div>

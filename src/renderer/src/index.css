@@ -398,6 +398,28 @@ body {
   background-color: #151110;
 }
 
+.chat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px;
+  border-bottom: 1px solid #2a2420;
+  flex-shrink: 0;
+}
+
+.copy-transcript-btn {
+  background: none;
+  border: 1px solid #3a3430;
+  color: #8b8580;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.copy-transcript-btn:hover {
+  background-color: #2a2420;
+  color: #c0b8b0;
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;
