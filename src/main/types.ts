@@ -39,6 +39,11 @@ export interface ToolCallInfo {
 
 export type SandboxBackend = "safehouse" | "container" | "none";
 
+export type WorkspacePhase =
+  | "implementing"    // Pre-push, agent is writing code
+  | "pr-open"         // PR created, CI/review loop
+  | "ready";          // CI green, reviews clean
+
 export interface WorkspaceSummary {
   id: string;
   repositoryId: string | null;
@@ -53,6 +58,8 @@ export interface WorkspaceSummary {
   policyName: string | null;
   githubRepo: string | null;
   ownedPrNumber: number | null;
+  prUrl: string | null;
+  phase: WorkspacePhase | null;
   networkAccess: "full" | "none" | "filtered" | null;
 }
 
@@ -64,6 +71,8 @@ export interface GitHubPolicy {
   allowedPushRefs: string[];
   ownedPrNumber: number | null;
   canCreatePr: boolean;
+  /** Branches that can never be pushed to, regardless of allowedPushRefs wildcards. */
+  protectedBranches: string[];
 }
 
 /** Logged when the gh shim, git hook, or proxy allows/denies an operation. */

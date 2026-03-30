@@ -33,7 +33,7 @@ import {
   findRealGh,
   cleanupOrphanGitHubArtifacts,
 } from "./github-policy.js";
-import { installHooks, cleanupHooks, generatePrePushHookForContainer, allowedRefsPath } from "./hooks.js";
+import { installHooks, cleanupHooks, generatePrePushHookForContainer, allowedRefsPath, updateAllowedRefs } from "./hooks.js";
 import { policyToContainerConfig, generateGitconfig, type ContainerSessionContext } from "./policy-container.js";
 import { writeFile, mkdir, rm, chmod } from "node:fs/promises";
 import { POLICY_DIR } from "./sandbox.js";
@@ -46,6 +46,7 @@ import type {
   SandboxBackend,
   SandboxViolationInfo,
   WorkspaceSummary,
+  WorkspacePhase,
   WorkspaceUpdate,
   ToolCallInfo,
 } from "./types.js";
@@ -207,6 +208,8 @@ interface WorkspaceState {
   sessionNetwork: SessionNetwork | null;
   policyId: string | null;
   githubPolicy: GitHubPolicy | null;
+  phase: WorkspacePhase | null;
+  prUrl: string | null;
   /** Flush any batched stream-chunk events. Called before stream-end. */
   flushChunks: () => void;
   promptCount: number;
@@ -288,6 +291,8 @@ export class WorkspaceManager {
       sessionNetwork: null,
       policyId: resolvedPolicyId,
       githubPolicy: null,
+      phase: null,
+      prUrl: null,
       flushChunks: () => {},
       promptCount: 0,
       pendingMessage: null,
@@ -365,8 +370,9 @@ export class WorkspaceManager {
           const githubPolicy = buildSessionPolicy(repo, worktree.branch);
           // Set on workspace before side effects so error cleanup can find it
           workspace.githubPolicy = githubPolicy;
+          workspace.phase = "implementing";
           await writePolicyState(id, githubPolicy);
-          await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
+          await installHooks(id, workingDir, githubPolicy.allowedPushRefs, githubPolicy.protectedBranches);
 
           // Configure the worktree for HTTPS push with gh credential helper.
           // SSH push fails in the sandbox (SSH_AUTH_SOCK socket is blocked),
@@ -584,9 +590,30 @@ export class WorkspaceManager {
                   type: "policy-event",
                   event,
                 });
-                // Persist policy state if PR was captured
-                if (workspace.githubPolicy && event.operation.startsWith("captured PR")) {
-                  writePolicyState(id, workspace.githubPolicy).catch(() => {});
+                // Persist policy state on ratchet events
+                if (workspace.githubPolicy) {
+                  if (event.operation.startsWith("branch-ratchet:")) {
+                    writePolicyState(id, workspace.githubPolicy).catch(() => {});
+                    updateAllowedRefs(id, workspace.githubPolicy.allowedPushRefs).catch(() => {});
+                  }
+                  if (event.operation.startsWith("captured PR")) {
+                    writePolicyState(id, workspace.githubPolicy).catch(() => {});
+                    // Extract PR URL from event operation if present
+                    const urlMatch = event.operation.match(/https:\/\/\S+/);
+                    if (urlMatch) {
+                      workspace.prUrl = urlMatch[0];
+                    }
+                    workspace.phase = "pr-open";
+                    // Emit a summary update so the UI picks up the phase/prUrl change
+                    this.summarize(workspace).then((summary) => {
+                      this.emit("workspace-update", {
+                        workspaceId: id,
+                        type: "status-change",
+                        status: workspace.status,
+                        summary,
+                      });
+                    }).catch(() => {});
+                  }
                 }
               },
             };
@@ -1412,6 +1439,8 @@ export class WorkspaceManager {
       policyName,
       githubRepo,
       ownedPrNumber,
+      prUrl: workspace.prUrl,
+      phase: workspace.phase,
       networkAccess: workspace.proxyHandle ? "filtered" : "full",
     };
   }

@@ -11,6 +11,7 @@ import {
   evaluateGitHubRequest,
   parseGitReceivePack,
   evaluateGitPush,
+  isPushWildcard,
 } from "./github-policy-engine.js";
 import type { ProxyConfig, MitmRequestHandler } from "./proxy.js";
 
@@ -185,6 +186,18 @@ function handleGitSmartHttp(
       return;
     }
 
+    // Branch ratchet: on first push (wildcard refs), lock to the specific branch
+    if (config.githubPolicy && isPushWildcard(config.githubPolicy)) {
+      const pushedRef = parseResult.refs[0].refName;
+      config.githubPolicy.allowedPushRefs = [pushedRef];
+      config.onPolicyEvent({
+        timestamp: Date.now(),
+        tool: "proxy",
+        operation: `branch-ratchet: locked to ${pushedRef}`,
+        decision: "allow",
+      });
+    }
+
     // Push allowed — log and forward the buffered body
     config.onPolicyEvent({
       timestamp: Date.now(),
@@ -335,10 +348,11 @@ function capturePrFromResponse(body: string, config: ProxyConfig): void {
     if (typeof data.number === "number" && config.githubPolicy) {
       config.githubPolicy.canCreatePr = false;
       config.githubPolicy.ownedPrNumber = data.number;
+      const prUrl = typeof data.html_url === "string" ? data.html_url : null;
       config.onPolicyEvent({
         timestamp: Date.now(),
         tool: "proxy",
-        operation: `captured PR #${data.number}`,
+        operation: `captured PR #${data.number}${prUrl ? ` ${prUrl}` : ""}`,
         decision: "allow",
       });
     }

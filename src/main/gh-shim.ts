@@ -290,7 +290,7 @@ export function evaluatePolicy(
 
 const PR_READ_ONLY = new Set(["view", "list", "status", "checks", "diff"]);
 const PR_OWNED_ONLY = new Set(["edit", "comment", "ready", "update-branch"]);
-const PR_ALWAYS_DENY = new Set(["checkout", "close", "merge", "reopen", "review", "lock", "unlock"]);
+const PR_ALWAYS_DENY = new Set(["checkout", "close", "reopen", "lock", "unlock"]);
 
 function evaluatePrPolicy(
   subcommand: string | null,
@@ -298,6 +298,22 @@ function evaluatePrPolicy(
   policy: GitHubPolicy,
 ): PolicyDecision {
   if (!subcommand || subcommand === "--help") return { action: "allow" };
+
+  // Explicit merge deny with clear message
+  if (subcommand === "merge") {
+    return {
+      action: "deny",
+      reason: "Merging PRs is not allowed in this sandbox. The PR is ready for human review.",
+    };
+  }
+
+  // Review: allow requesting reviews (owned PR only), deny posting reviews
+  if (subcommand === "review") {
+    return {
+      action: "deny",
+      reason: "Posting reviews is not allowed. Propose responses to the user instead.",
+    };
+  }
 
   if (PR_ALWAYS_DENY.has(subcommand)) {
     return { action: "deny", reason: `'pr ${subcommand}' is not allowed` };
@@ -385,7 +401,7 @@ function evaluateReleasePolicy(subcommand: string | null): PolicyDecision {
 
 // --- Run Policy ---
 
-const RUN_READ_ONLY = new Set(["view", "list"]);
+const RUN_READ_ONLY = new Set(["view", "list", "watch"]);
 
 function evaluateRunPolicy(subcommand: string | null): PolicyDecision {
   if (!subcommand || subcommand === "--help") return { action: "allow" };
@@ -479,6 +495,10 @@ async function executeViaApi(
     await apiPrEdit(parsed, policy, token);
   } else if (command === "pr" && subcommand === "list") {
     await apiPrList(policy, token);
+  } else if (command === "pr" && subcommand === "checks") {
+    await apiPrChecks(parsed, policy, token);
+  } else if (command === "run" && (subcommand === "view" || subcommand === "list")) {
+    await apiRunViewOrList(parsed, policy, token);
   } else if (command === "issue" && subcommand === "list") {
     await apiIssueList(policy, token);
   } else if (command === "issue" && subcommand === "view") {
@@ -627,6 +647,66 @@ async function apiIssueView(
   }
   const data = await githubFetch(`/repos/${policy.repo}/issues/${issueNumber}`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiPrChecks(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write("[bouncer:gh] error: PR number required\n");
+    process.exit(1);
+  }
+  // Get the PR to find the head SHA
+  const pr = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token) as { head: { sha: string } };
+  const data = await githubFetch(
+    `/repos/${policy.repo}/commits/${pr.head.sha}/check-runs`,
+    token,
+  );
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiRunViewOrList(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const { subcommand } = parsed;
+  if (subcommand === "list") {
+    const data = await githubFetch(`/repos/${policy.repo}/actions/runs`, token);
+    process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+    return;
+  }
+  // run view
+  const runId = parsed.positionalArgs[0];
+  if (!runId) {
+    process.stderr.write("[bouncer:gh] error: run ID required\n");
+    process.exit(1);
+  }
+  // Check if --log flag is present
+  const wantsLog = parsed.rawArgs.includes("--log");
+  if (wantsLog) {
+    // Download logs — this returns a redirect to a zip file
+    const resp = await fetch(`https://api.github.com/repos/${policy.repo}/actions/runs/${runId}/logs`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+      },
+      redirect: "follow",
+    });
+    if (!resp.ok) {
+      process.stderr.write(`[bouncer:gh] API error: ${resp.status}\n`);
+      process.exit(1);
+    }
+    // Stream the response body to stdout (it's a zip, but gh does the same)
+    const body = Buffer.from(await resp.arrayBuffer());
+    process.stdout.write(body);
+  } else {
+    const data = await githubFetch(`/repos/${policy.repo}/actions/runs/${runId}`, token);
+    process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  }
 }
 
 async function apiDirect(

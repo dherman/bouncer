@@ -951,6 +951,36 @@ body {
   vertical-align: middle;
 }
 
+.pr-link {
+  color: #58a6ff;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pr-link:hover {
+  text-decoration: underline;
+}
+
+.phase-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.phase-implementing {
+  background-color: #2d333b;
+  color: #8b949e;
+}
+.phase-pr-open {
+  background-color: #1a3a2a;
+  color: #3fb950;
+}
+.phase-ready {
+  background-color: #1a2a3a;
+  color: #58a6ff;
+}
+
 /* Agent turn wrapper */
 .agent-turn {
   display: flex;

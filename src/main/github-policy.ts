@@ -56,13 +56,17 @@ export function parseGitHubRemoteUrl(url: string): string | null {
 
 /**
  * Build a GitHubPolicy for a new session.
+ * Starts with wildcard push refs (any non-protected branch).
+ * The branch parameter is unused — the agent picks its own branch name,
+ * and the policy narrows on first push (branch ratchet).
  */
-export function buildSessionPolicy(repo: string, branch: string): GitHubPolicy {
+export function buildSessionPolicy(repo: string, _branch: string): GitHubPolicy {
   return {
     repo,
-    allowedPushRefs: [branch],
+    allowedPushRefs: ["refs/heads/*"],
     ownedPrNumber: null,
     canCreatePr: true,
+    protectedBranches: ["main"],
   };
 }
 
@@ -216,6 +220,9 @@ export async function cleanupOrphanGitHubArtifacts(activeIds: Set<string>): Prom
 
     const refsMatch = entry.match(/^(.+)-allowed-refs\.txt$/);
     if (refsMatch) sessionId = refsMatch[1];
+
+    const protectedMatch = entry.match(/^(.+)-protected-branches\.txt$/);
+    if (protectedMatch) sessionId = protectedMatch[1];
 
     if (sessionId && !activeIds.has(sessionId)) {
       try {
