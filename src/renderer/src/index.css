@@ -1054,7 +1054,8 @@ body {
 }
 
 /* Tool group summary (collapsed/expanded header, no dot) */
-.tool-group-summary {
+button.tool-group-summary {
+  all: unset;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1064,7 +1065,7 @@ body {
   padding: 2px 0;
 }
 
-.tool-group-summary:hover {
+button.tool-group-summary:hover {
   color: #bbb;
 }
 

@@ -181,7 +181,7 @@ function isAuthError(err: unknown): boolean {
     : err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message)
     : String(err);
   const msg = raw.toLowerCase();
-  return /\b(401|unauthorized|authentication.*(failed|error|required|expired)|token.*expired|invalid.token|unauthenticated)\b/.test(msg);
+  return /\b(401|unauthorized|authentication.*(failed|error|required|expired)|token.*expired|invalid[._ -]?token|unauthenticated)\b/.test(msg);
 }
 
 interface WorkspaceState {
@@ -1217,8 +1217,11 @@ export class WorkspaceManager {
       throw new Error("Agent process has exited. Please close this workspace and create a new one after re-authenticating.");
     }
 
-    // For container workspaces, re-extract credentials and overwrite the file
+    // For container workspaces, re-extract credentials from macOS keychain and overwrite the file
     if (workspace.sandboxBackend === "container") {
+      if (process.platform !== "darwin") {
+        throw new Error("Credential refresh from keychain is only supported on macOS.");
+      }
       const { execFile: execFileCb } = await import("node:child_process");
       const { promisify } = await import("node:util");
       const execFileP = promisify(execFileCb);

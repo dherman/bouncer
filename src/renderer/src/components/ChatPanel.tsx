@@ -119,13 +119,13 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
     return (
       <>
         {turnComplete && (
-          <div className="tool-group-summary" onClick={() => setExpanded(false)}>
+          <button type="button" className="tool-group-summary" onClick={() => setExpanded(false)}>
             <span className="tool-step-chevron">{'\u25BE'}</span>
             <span className="tool-group-summary-text">
               {resolved.length} tool call{resolved.length !== 1 ? 's' : ''}
               {failCount > 0 && <span className="tool-group-fail-count"> ({failCount} failed)</span>}
             </span>
-          </div>
+          </button>
         )}
         {resolved.map((tc) => <ToolCallStep key={tc.id} toolCall={tc} />)}
       </>
@@ -134,13 +134,13 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
 
   // Turn complete and collapsed: single summary line
   return (
-    <div className="tool-group-summary" onClick={() => setExpanded(true)}>
+    <button type="button" className="tool-group-summary" onClick={() => setExpanded(true)}>
       <span className="tool-step-chevron">{'\u25B8'}</span>
       <span className="tool-group-summary-text">
         {resolved.length} tool call{resolved.length !== 1 ? 's' : ''}
         {failCount > 0 && <span className="tool-group-fail-count"> ({failCount} failed)</span>}
       </span>
-    </div>
+    </button>
   )
 }
 
@@ -255,7 +255,7 @@ export function ChatPanel({
         {sessionStatus === 'error' && sessionErrorKind === 'auth' && (
           <div className="workspace-state-banner auth-error">
             Authentication expired. Run <code>claude auth login</code> in your terminal, then:
-            <button onClick={onRefreshCredentials}>Retry</button>
+            <button type="button" onClick={onRefreshCredentials}>Retry</button>
           </div>
         )}
         {sessionStatus === 'error' && sessionErrorKind !== 'auth' && (

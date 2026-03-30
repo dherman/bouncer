@@ -64,8 +64,8 @@ function App() {
             next.set(update.workspaceId, update.errorKind!)
             return next
           })
-        } else if (update.status !== 'error') {
-          // Clear errorKind when transitioning away from error (e.g., back to ready)
+        } else {
+          // Clear errorKind when transitioning to a non-auth error or away from error
           setWorkspaceErrorKinds((prev) => {
             if (!prev.has(update.workspaceId)) return prev
             const next = new Map(prev)
