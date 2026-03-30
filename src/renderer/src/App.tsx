@@ -193,7 +193,7 @@ function App() {
           const msgs: Message[] = await window.bouncer.workspaces.getMessages(w.id)
           return [w.id, msgs] as const
         } catch {
-          return [w.id, []] as const
+          return [w.id, [] as Message[]] as const
         }
       })
     )
