@@ -4,6 +4,7 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Message, MessagePart, PolicyEvent, SandboxViolationInfo, WorkspaceSummary, ToolCallInfo } from '../../../main/types'
 import { MessageInput } from './MessageInput'
+import thinkingVideo from '../assets/thinking.webm'
 
 const markdownComponents: Components = {
   a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
@@ -15,11 +16,13 @@ interface Props {
   streamTick: number
   sessionStatus: WorkspaceSummary['status']
   sessionError?: string
+  sessionErrorKind?: 'auth'
   sandboxed: boolean
   violations: SandboxViolationInfo[]
   policyEvents: PolicyEvent[]
   onSendMessage: (text: string) => void
   onCloseSession: () => void
+  onRefreshCredentials: () => void
 }
 
 
@@ -97,47 +100,47 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
   isStreaming: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const resolved = toolCallIds.map((id) => toolCalls.find((t) => t.id === id)).filter(Boolean) as ToolCallInfo[]
-  const allDone = !isStreaming && resolved.length > 0 && resolved.every(
-    (tc) => tc.status === 'completed' || tc.status === 'failed'
-  )
-  // While still in progress or only one tool call, show individually
-  if (!allDone || resolved.length <= 1) {
-    return <>{resolved.map((tc) => <ToolCallStep key={tc.id} toolCall={tc} />)}</>
-  }
 
-  // Collapsed summary for completed runs
-  if (!expanded) {
+  // Track turn completion: once streaming transitions false, the turn is done.
+  const [turnComplete, setTurnComplete] = useState(!isStreaming)
+  const prevStreaming = useRef(isStreaming)
+  useEffect(() => {
+    if (prevStreaming.current && !isStreaming) {
+      setTurnComplete(true)
+    }
+    prevStreaming.current = isStreaming
+  }, [isStreaming])
+
+  const resolved = toolCallIds.map((id) => toolCalls.find((t) => t.id === id)).filter(Boolean) as ToolCallInfo[]
+  const failCount = resolved.filter((tc) => tc.status === 'failed').length
+
+  // Before the turn is complete, or if user expanded: show all tool calls individually
+  if (!turnComplete || expanded) {
     return (
-      <div className="message agent tool-step">
-        <div className="step-dot" />
-        <div className="step-content tool-step-content">
-          <div className="tool-step-summary clickable" onClick={() => setExpanded(true)}>
-            <span className="tool-run-summary">
-              {resolved.length} tool call{resolved.length > 1 ? 's' : ''}
+      <>
+        {turnComplete && (
+          <button type="button" className="tool-group-summary" onClick={() => setExpanded(false)}>
+            <span className="tool-step-chevron">{'\u25BE'}</span>
+            <span className="tool-group-summary-text">
+              {resolved.length} tool call{resolved.length !== 1 ? 's' : ''}
+              {failCount > 0 && <span className="tool-group-fail-count"> ({failCount} failed)</span>}
             </span>
-            <span className="tool-step-chevron">{'\u25B8'}</span>
-          </div>
-        </div>
-      </div>
+          </button>
+        )}
+        {resolved.map((tc) => <ToolCallStep key={tc.id} toolCall={tc} />)}
+      </>
     )
   }
 
+  // Turn complete and collapsed: single summary line
   return (
-    <div className="tool-run-expanded">
-      <div className="message agent tool-step">
-        <div className="step-dot" />
-        <div className="step-content tool-step-content">
-          <div className="tool-step-summary clickable" onClick={() => setExpanded(false)}>
-            <span className="tool-run-summary">
-              {resolved.length} tool call{resolved.length > 1 ? 's' : ''}
-            </span>
-            <span className="tool-step-chevron">{'\u25BE'}</span>
-          </div>
-        </div>
-      </div>
-      {resolved.map((tc) => <ToolCallStep key={tc.id} toolCall={tc} />)}
-    </div>
+    <button type="button" className="tool-group-summary" onClick={() => setExpanded(true)}>
+      <span className="tool-step-chevron">{'\u25B8'}</span>
+      <span className="tool-group-summary-text">
+        {resolved.length} tool call{resolved.length !== 1 ? 's' : ''}
+        {failCount > 0 && <span className="tool-group-fail-count"> ({failCount} failed)</span>}
+      </span>
+    </button>
   )
 }
 
@@ -147,11 +150,13 @@ export function ChatPanel({
   streamTick,
   sessionStatus,
   sessionError,
+  sessionErrorKind,
   sandboxed,
   violations,
   policyEvents,
   onSendMessage,
   onCloseSession,
+  onRefreshCredentials,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const lastScrollTime = useRef(0)
@@ -195,6 +200,12 @@ export function ChatPanel({
 
           const grouped = groupParts(parts)
 
+          // Show the thinking indicator at the bottom of the turn whenever
+          // the agent is streaming and the last group is not an active text segment.
+          const lastGroup = grouped[grouped.length - 1]
+          const activeSegmentIsLast = lastGroup?.type === 'text' && lastGroup.part.index === activeSegmentIndex
+          const showTrailingThinking = isStreaming && !activeSegmentIsLast
+
           return (
             <div key={msg.id} className="agent-turn">
               {grouped.map((group, i) => {
@@ -203,15 +214,22 @@ export function ChatPanel({
                   const displayText = rawText.replace(/^\n+/, '')
                   const isActiveSegment = isStreaming && group.part.index === activeSegmentIndex
 
+                  // Skip empty active segments when we'll show the indicator at the bottom instead
+                  if (!displayText && isActiveSegment && showTrailingThinking) return null
                   if (!displayText && !isActiveSegment) return null
 
+                  if (isActiveSegment && !displayText) {
+                    return (
+                      <div key={`text-${group.part.index}`} className="thinking-indicator">
+                        <video src={thinkingVideo} autoPlay loop muted playsInline />
+                      </div>
+                    )
+                  }
+
                   return (
-                    <div key={`text-${group.part.index}`} className="message agent">
-                      <div className="step-dot" />
+                    <div key={`text-${group.part.index}`} className="message agent agent-text">
                       <div className={`step-content${isActiveSegment ? ' streaming' : ''}`}>
-                        {isActiveSegment && !displayText
-                          ? <span className="thinking-indicator"><span className="dot" /><span className="dot" /><span className="dot" /></span>
-                          : <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>}
+                        <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>
                       </div>
                     </div>
                   )
@@ -226,10 +244,21 @@ export function ChatPanel({
                   />
                 )
               })}
+              {showTrailingThinking && (
+                <div className="thinking-indicator">
+                  <video src={thinkingVideo} autoPlay loop muted playsInline />
+                </div>
+              )}
             </div>
           )
         })}
-        {sessionStatus === 'error' && (
+        {sessionStatus === 'error' && sessionErrorKind === 'auth' && (
+          <div className="workspace-state-banner auth-error">
+            Authentication expired. Run <code>claude auth login</code> in your terminal, then:
+            <button type="button" onClick={onRefreshCredentials}>Retry</button>
+          </div>
+        )}
+        {sessionStatus === 'error' && sessionErrorKind !== 'auth' && (
           <div className="workspace-state-banner error">
             {sessionError ?? 'Workspace disconnected'}
             <button onClick={onCloseSession}>Close workspace</button>

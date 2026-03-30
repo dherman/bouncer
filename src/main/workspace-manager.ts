@@ -174,6 +174,16 @@ function resolveAgentCommand(
   return resolveClaudeCodeCommand(cwd, sandboxConfig);
 }
 
+/** Heuristic: does the error look like an authentication/token failure? */
+function isAuthError(err: unknown): boolean {
+  // Extract message from Error objects, JSON-RPC error objects, or plain strings
+  const raw = typeof err === "string" ? err
+    : err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message)
+    : String(err);
+  const msg = raw.toLowerCase();
+  return /\b(401|unauthorized|authentication.*(failed|error|required|expired)|token.*expired|invalid[._ -]?token|unauthenticated)\b/.test(msg);
+}
+
 interface WorkspaceState {
   id: string;
   repositoryId: string | null;
@@ -183,6 +193,7 @@ interface WorkspaceState {
   messages: Message[];
   status: "initializing" | "ready" | "error" | "closed";
   errorMessage?: string;
+  errorKind?: "auth";
   agentType: AgentType;
   projectDir: string;
   worktree: WorktreeInfo | null;
@@ -772,13 +783,18 @@ export class WorkspaceManager {
               ? collectedStderr.trim() ||
                 `Agent exited with code ${code}`
               : undefined;
+          const errorKind = isAuthError(collectedStderr) ? "auth" as const : undefined;
           workspace.status = "error";
-          workspace.errorMessage = errorMessage;
+          workspace.errorMessage = errorKind
+            ? "Authentication expired. Please re-authenticate and retry."
+            : errorMessage;
+          workspace.errorKind = errorKind;
           this.emit("workspace-update", {
             workspaceId: id,
             type: "status-change",
             status: "error",
-            error: errorMessage,
+            error: workspace.errorMessage,
+            errorKind,
           });
         }
       });
@@ -1147,6 +1163,18 @@ export class WorkspaceManager {
       });
     } catch (err) {
       console.error(`Prompt failed for workspace ${workspaceId}:`, err);
+      if (isAuthError(err) && workspace.status !== "closed") {
+        workspace.status = "error";
+        workspace.errorMessage = "Authentication expired. Please re-authenticate and retry.";
+        workspace.errorKind = "auth";
+        this.emit("workspace-update", {
+          workspaceId,
+          type: "status-change",
+          status: "error",
+          error: workspace.errorMessage,
+          errorKind: "auth",
+        });
+      }
     }
 
     // Flush any batched chunks before finalizing
@@ -1163,10 +1191,58 @@ export class WorkspaceManager {
     });
   }
 
+  getMessages(workspaceId: string): Message[] {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    return workspace.messages;
+  }
+
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
     return await Promise.all(
       Array.from(this.workspaces.values()).map((s) => this.summarize(s))
     );
+  }
+
+  /**
+   * Re-extract credentials from the macOS keychain and, for container workspaces,
+   * overwrite the mounted credentials file. Resets the workspace from "error" back
+   * to "ready" so the user can send a new prompt.
+   */
+  async refreshCredentials(workspaceId: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    // If the agent process has exited, we can't recover — the ACP connection is gone
+    if (workspace.agentProcess.exitCode !== null) {
+      throw new Error("Agent process has exited. Please close this workspace and create a new one after re-authenticating.");
+    }
+
+    // For container workspaces, re-extract credentials from macOS keychain and overwrite the file
+    if (workspace.sandboxBackend === "container") {
+      if (process.platform !== "darwin") {
+        throw new Error("Credential refresh from keychain is only supported on macOS.");
+      }
+      const { execFile: execFileCb } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execFileP = promisify(execFileCb);
+      const { stdout: credJson } = await execFileP("security", [
+        "find-generic-password", "-s", "Claude Code-credentials", "-w",
+      ]);
+      const credPath = join(POLICY_DIR, `${workspaceId}-claude-credentials.json`);
+      await writeFile(credPath, credJson.trim(), { mode: 0o600 });
+      console.log(`[workspace ${workspaceId}] Refreshed Claude credentials from keychain`);
+    }
+    // For safehouse: Claude Code reads from keychain directly, so no file update needed.
+
+    // Reset workspace back to ready
+    workspace.status = "ready";
+    workspace.errorMessage = undefined;
+    workspace.errorKind = undefined;
+    this.emit("workspace-update", {
+      workspaceId,
+      type: "status-change",
+      status: "ready",
+    });
   }
 
   async closeWorkspace(workspaceId: string): Promise<void> {

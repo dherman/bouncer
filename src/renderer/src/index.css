@@ -568,33 +568,20 @@ body {
   50% { opacity: 0; }
 }
 
-/* Thinking indicator (animated ellipsis) */
+/* Thinking indicator (video animation) */
 .thinking-indicator {
-  display: inline-flex;
-  gap: 3px;
+  display: flex;
   align-items: center;
-  height: 1.4em;
+  height: 22px;
+  width: fit-content;
 }
 
-.thinking-indicator .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #999;
-  animation: thinking-bounce 1.2s ease-in-out infinite;
-}
-
-.thinking-indicator .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.thinking-indicator .dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes thinking-bounce {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-4px); }
+.thinking-indicator video {
+  height: 22px;
+  width: auto;
+  object-fit: contain;
+  /* GPU-accelerated color transform (source is teal) */
+  filter: hue-rotate(100deg) saturate(2.5) brightness(0.8);
 }
 
 /* Message input */
@@ -805,6 +792,18 @@ body {
   color: #d9534f;
 }
 
+.workspace-state-banner.auth-error {
+  background-color: rgba(240, 173, 78, 0.15);
+  color: #f0ad4e;
+}
+
+.workspace-state-banner.auth-error code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
 .workspace-state-banner.closed {
   background-color: rgba(153, 153, 153, 0.15);
   color: #999;
@@ -960,12 +959,17 @@ body {
   padding-left: 4px;
 }
 
+/* Agent text segments (no dot, just content) */
+.message.agent.agent-text {
+  gap: 0;
+}
+
 /* Vertical connector line from each dot to the next */
-.agent-turn > .message.agent {
+.agent-turn > .message.agent.tool-step {
   position: relative;
 }
 
-.agent-turn > .message.agent:not(:last-child)::before {
+.agent-turn > .message.agent.tool-step:has(+ .message.agent.tool-step)::before {
   content: '';
   position: absolute;
   left: 3.5px; /* center of 8px dot */
@@ -1049,8 +1053,28 @@ body {
   font-size: 13px;
 }
 
-.tool-run-expanded {
-  display: contents;
+/* Tool group summary (collapsed/expanded header, no dot) */
+button.tool-group-summary {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #888;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+button.tool-group-summary:hover {
+  color: #bbb;
+}
+
+.tool-group-summary-text {
+  font-size: 13px;
+}
+
+.tool-group-fail-count {
+  color: #d9534f;
 }
 
 /* Bash detail panel */

@@ -143,7 +143,7 @@ export interface ReplayResult {
 }
 
 export type WorkspaceUpdate =
-  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string; summary?: WorkspaceSummary }
+  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string; errorKind?: "auth"; summary?: WorkspaceSummary }
   | { workspaceId: string; type: "message"; message: Message }
   | { workspaceId: string; type: "stream-chunk"; messageId: string; text: string; segmentIndex: number }
   | { workspaceId: string; type: "stream-end"; messageId: string; textSegments: string[]; parts: MessagePart[] }

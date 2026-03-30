@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentType, PolicyTemplateSummary, Repository, SandboxViolationInfo, WorkspaceSummary, WorkspaceUpdate } from '../../main/types'
+import type { AgentType, Message, PolicyTemplateSummary, Repository, SandboxViolationInfo, WorkspaceSummary, WorkspaceUpdate } from '../../main/types'
 
 interface BouncerAPI {
   repositories: {
@@ -12,8 +12,10 @@ interface BouncerAPI {
   workspaces: {
     list(): Promise<WorkspaceSummary[]>
     create(repositoryId: string): Promise<WorkspaceSummary>
+    getMessages(workspaceId: string): Promise<Message[]>
     sendMessage(workspaceId: string, text: string): Promise<void>
     close(workspaceId: string): Promise<void>
+    refreshCredentials(workspaceId: string): Promise<void>
     getSandboxViolations(workspaceId: string): Promise<SandboxViolationInfo[]>
     loadReplayData(datasetSessionId: string): Promise<unknown[]>
     onUpdate(callback: (update: WorkspaceUpdate) => void): () => void
