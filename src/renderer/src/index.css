@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url(./assets/Figtree-Variable.ttf) format('truetype');
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -402,6 +410,8 @@ body {
   flex-direction: column;
   min-width: 0;
   background-color: #151110;
+  font-family: 'Figtree', sans-serif;
+  font-feature-settings: 'ss01' 1;
 }
 
 .messages {
@@ -435,7 +445,7 @@ body {
   border: 1px solid #333;
   background-color: rgba(30, 30, 30, 0.6);
   color: white;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
@@ -448,7 +458,7 @@ body {
   border-radius: 50%;
   background-color: #555;
   flex-shrink: 0;
-  margin-top: 7px;
+  margin-top: 5px;
   position: relative;
   z-index: 1;
 }
@@ -456,7 +466,7 @@ body {
 .step-content {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
   color: #ccc;
   word-break: break-word;
@@ -637,7 +647,9 @@ body {
   border: none;
   background: transparent;
   color: white;
-  font-size: 14px;
+  font-family: 'Figtree', sans-serif;
+  font-feature-settings: 'ss01' 1;
+  font-size: 15px;
   outline: none;
 }
 
