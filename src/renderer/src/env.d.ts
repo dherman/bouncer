@@ -1,6 +1,14 @@
 /// <reference types="vite/client" />
 
-import type { AgentType, Message, PolicyTemplateSummary, Repository, SandboxViolationInfo, WorkspaceSummary, WorkspaceUpdate } from '../../main/types'
+import type {
+  AgentType,
+  Message,
+  PolicyTemplateSummary,
+  Repository,
+  SandboxViolationInfo,
+  WorkspaceSummary,
+  WorkspaceUpdate,
+} from '../../main/types'
 
 interface BouncerAPI {
   repositories: {

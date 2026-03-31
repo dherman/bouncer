@@ -22,12 +22,12 @@ The workspace model fixes both:
 
 ## Terminology
 
-| Old term | New term | Notes |
-|---|---|---|
-| Session | Workspace | A sandboxed agent environment (container + worktree + policy) |
-| Session list | Workspaces sidebar | The left panel |
-| New Session dialog | (removed for common case) | Quick-create via "+" button on repo |
-| — (new) | Repository | A persisted project entry in the sidebar |
+| Old term           | New term                  | Notes                                                         |
+| ------------------ | ------------------------- | ------------------------------------------------------------- |
+| Session            | Workspace                 | A sandboxed agent environment (container + worktree + policy) |
+| Session list       | Workspaces sidebar        | The left panel                                                |
+| New Session dialog | (removed for common case) | Quick-create via "+" button on repo                           |
+| — (new)            | Repository                | A persisted project entry in the sidebar                      |
 
 **Internal code naming**: The `SessionManager`, `SessionState`, `SessionSummary` types will be renamed to use "workspace" terminology. This is a mechanical rename — the behavior is unchanged.
 
@@ -37,13 +37,13 @@ The workspace model fixes both:
 
 ```typescript
 interface Repository {
-  id: string;                    // UUID
-  name: string;                  // Display name (e.g., "bouncer")
-  localPath: string;             // Path to the git repo on disk
-  githubRepo: string | null;     // e.g., "anthropics/bouncer" (auto-detected from git remote)
-  defaultPolicyId: string;       // e.g., "standard-pr"
-  defaultAgentType: AgentType;   // e.g., "claude-code"
-  createdAt: number;             // Timestamp
+  id: string // UUID
+  name: string // Display name (e.g., "bouncer")
+  localPath: string // Path to the git repo on disk
+  githubRepo: string | null // e.g., "anthropics/bouncer" (auto-detected from git remote)
+  defaultPolicyId: string // e.g., "standard-pr"
+  defaultAgentType: AgentType // e.g., "claude-code"
+  createdAt: number // Timestamp
 }
 ```
 
@@ -56,7 +56,7 @@ The existing `SessionState` / `SessionSummary` types are renamed but structurall
 ```typescript
 interface WorkspaceSummary {
   // ... all existing SessionSummary fields, renamed ...
-  repositoryId: string;  // Links workspace to its parent repository
+  repositoryId: string // Links workspace to its parent repository
 }
 ```
 
@@ -120,15 +120,15 @@ Only repositories are persisted. Workspaces are ephemeral — when the app resta
 
 ### Interactions
 
-| Action | Trigger | Behavior |
-|---|---|---|
-| Add repository | Click [+ Repo] header button | Opens directory browser → creates repo entry with auto-detected settings |
-| Create workspace | Click [+] on repo row | Immediately creates workspace with repo defaults. No dialog. |
-| Select workspace | Click workspace row | Shows workspace chat panel (same as current session select) |
-| Close workspace | Click × on workspace row | Closes workspace (same as current session close) |
-| Repo settings | Right-click repo → Settings | Opens a settings panel/dialog for editing repo defaults |
-| Remove repo | Right-click repo → Remove | Removes repo from sidebar (closes active workspaces first, with confirmation) |
-| Collapse/expand | Click disclosure triangle | Toggles workspace list visibility |
+| Action           | Trigger                      | Behavior                                                                      |
+| ---------------- | ---------------------------- | ----------------------------------------------------------------------------- |
+| Add repository   | Click [+ Repo] header button | Opens directory browser → creates repo entry with auto-detected settings      |
+| Create workspace | Click [+] on repo row        | Immediately creates workspace with repo defaults. No dialog.                  |
+| Select workspace | Click workspace row          | Shows workspace chat panel (same as current session select)                   |
+| Close workspace  | Click × on workspace row     | Closes workspace (same as current session close)                              |
+| Repo settings    | Right-click repo → Settings  | Opens a settings panel/dialog for editing repo defaults                       |
+| Remove repo      | Right-click repo → Remove    | Removes repo from sidebar (closes active workspaces first, with confirmation) |
+| Collapse/expand  | Click disclosure triangle    | Toggles workspace list visibility                                             |
 
 ## Add Repository Flow
 
@@ -200,6 +200,7 @@ export class RepositoryStore {
 ### Renamed: SessionManager → WorkspaceManager
 
 Mechanical rename of:
+
 - `SessionManager` → `WorkspaceManager`
 - `SessionState` → `WorkspaceState`
 - `SessionSummary` → `WorkspaceSummary`
@@ -229,12 +230,14 @@ private async _createWorkspace(
 ### IPC Changes
 
 **New channels**:
+
 - `repositories:list` → `Repository[]`
 - `repositories:add` → `(localPath: string) => Repository`
 - `repositories:update` → `(id: string, changes: Partial<Repository>) => void`
 - `repositories:remove` → `(id: string) => void`
 
 **Renamed channels**:
+
 - `sessions:list` → `workspaces:list`
 - `sessions:create` → `workspaces:create` (now takes `repositoryId` instead of `(projectDir, agentType, policyId)`)
 - `sessions:sendMessage` → `workspaces:sendMessage`
@@ -247,12 +250,15 @@ private async _createWorkspace(
 ### Renderer Changes
 
 **Removed**:
+
 - `NewSessionDialog.tsx` — no longer needed for the common case
 
 **Renamed**:
+
 - `SessionList.tsx` → `WorkspacesSidebar.tsx`
 
 **New/modified**:
+
 - `WorkspacesSidebar.tsx` — two-level hierarchy (repos → workspaces)
 - `RepoSettingsPanel.tsx` — inline settings for a repository (or small dialog)
 - `App.tsx` — state management updated for repos + workspaces

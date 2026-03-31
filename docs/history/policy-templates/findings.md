@@ -6,7 +6,7 @@ Phase 7 empirical validation revealed two key limitations of OS-level sandboxing
 
 1. **Network deny is incompatible with Claude Code.** SBPL deny rules are all-or-nothing — they block the agent's own Anthropic API traffic, making sessions non-functional. Domain-based filtering requires an application-layer proxy (Milestone 6).
 
-2. **Safehouse's `--enable=all-agents` grants broad temp directory access.** The agent profiles grant write access to temp directories (`/tmp`, `/var/folders/...`), which is where worktrees live. This means filesystem policies can't restrict writes *within* temp. Writes to paths outside the sandbox (e.g., home directory) are correctly blocked.
+2. **Safehouse's `--enable=all-agents` grants broad temp directory access.** The agent profiles grant write access to temp directories (`/tmp`, `/var/folders/...`), which is where worktrees live. This means filesystem policies can't restrict writes _within_ temp. Writes to paths outside the sandbox (e.g., home directory) are correctly blocked.
 
 The policy template system, registry, IPC layer, session manager integration, and UI all work end-to-end. The `research-only` template was updated to reflect what's actually enforceable: worktree-scoped writes (not read-only), with writes outside the sandbox blocked.
 
@@ -50,6 +50,7 @@ The policy template system, registry, IPC layer, session manager integration, an
 ### Network filtering requires Milestone 6
 
 SBPL deny rules are absolute. Meaningful network restriction requires an **application-layer proxy**:
+
 - SBPL blocks all network except localhost proxy ports
 - Proxy allows agent API traffic (e.g., `api.anthropic.com`)
 - Proxy enforces domain allowlists from the policy template
@@ -58,6 +59,7 @@ SBPL deny rules are absolute. Meaningful network restriction requires an **appli
 ### Filesystem differentiation is limited by safehouse's agent profiles
 
 Safehouse's `--enable=all-agents` grants write access to temp directories where worktrees live. To achieve true read-only worktree enforcement, we'd need either:
+
 - Worktrees in a non-temp location (complicates cleanup)
 - Custom safehouse profiles that don't grant temp broadly
 - Container-based sandboxing (Milestone roadmap discusses this migration)
@@ -67,6 +69,7 @@ For now, all three templates have the same effective filesystem behavior: rw wor
 ### What works today
 
 Despite the limitations above, the sandbox **does** provide meaningful protection:
+
 - Agent cannot write to arbitrary paths outside the worktree/temp (home directory, system files, etc.)
 - Agent cannot access other users' files
 - All child processes inherit sandbox constraints

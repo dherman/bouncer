@@ -2,7 +2,14 @@ import { type RefObject, useEffect, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Message, MessagePart, PolicyEvent, SandboxViolationInfo, WorkspaceSummary, ToolCallInfo } from '../../../main/types'
+import type {
+  Message,
+  MessagePart,
+  PolicyEvent,
+  SandboxViolationInfo,
+  WorkspaceSummary,
+  ToolCallInfo,
+} from '../../../main/types'
 import { MessageInput } from './MessageInput'
 import thinkingVideo from '../assets/thinking.webm'
 
@@ -25,7 +32,6 @@ interface Props {
   onRefreshCredentials: () => void
 }
 
-
 function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -34,9 +40,11 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
   const hasOutput = !!toolCall.output
   const hasDetail = (isBash && command) || hasOutput
   const dotClass =
-    toolCall.status === 'completed' ? 'step-dot tool-dot-success' :
-    toolCall.status === 'failed' ? 'step-dot tool-dot-fail' :
-    'step-dot tool-dot-progress'
+    toolCall.status === 'completed'
+      ? 'step-dot tool-dot-success'
+      : toolCall.status === 'failed'
+        ? 'step-dot tool-dot-fail'
+        : 'step-dot tool-dot-progress'
 
   return (
     <div className="message agent tool-step">
@@ -94,7 +102,11 @@ function groupParts(parts: MessagePart[]): PartGroup[] {
   return groups
 }
 
-function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
+function ToolRunGroup({
+  toolCallIds,
+  toolCalls,
+  isStreaming,
+}: {
   toolCallIds: string[]
   toolCalls: ToolCallInfo[]
   isStreaming: boolean
@@ -111,7 +123,9 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
     prevStreaming.current = isStreaming
   }, [isStreaming])
 
-  const resolved = toolCallIds.map((id) => toolCalls.find((t) => t.id === id)).filter(Boolean) as ToolCallInfo[]
+  const resolved = toolCallIds
+    .map((id) => toolCalls.find((t) => t.id === id))
+    .filter(Boolean) as ToolCallInfo[]
   const failCount = resolved.filter((tc) => tc.status === 'failed').length
 
   // Before the turn is complete, or if user expanded: show all tool calls individually
@@ -123,11 +137,15 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
             <span className="tool-step-chevron">{'\u25BE'}</span>
             <span className="tool-group-summary-text">
               {resolved.length} tool call{resolved.length !== 1 ? 's' : ''}
-              {failCount > 0 && <span className="tool-group-fail-count"> ({failCount} failed)</span>}
+              {failCount > 0 && (
+                <span className="tool-group-fail-count"> ({failCount} failed)</span>
+              )}
             </span>
           </button>
         )}
-        {resolved.map((tc) => <ToolCallStep key={tc.id} toolCall={tc} />)}
+        {resolved.map((tc) => (
+          <ToolCallStep key={tc.id} toolCall={tc} />
+        ))}
       </>
     )
   }
@@ -162,8 +180,12 @@ export function ChatPanel({
   const lastScrollTime = useRef(0)
 
   const isStreaming = messages.some((m) => m.streaming)
-  const hasPendingMessage = sessionStatus === 'initializing' && messages.some((m) => m.role === 'user')
-  const inputDisabled = isStreaming || hasPendingMessage || (sessionStatus !== 'ready' && sessionStatus !== 'initializing')
+  const hasPendingMessage =
+    sessionStatus === 'initializing' && messages.some((m) => m.role === 'user')
+  const inputDisabled =
+    isStreaming ||
+    hasPendingMessage ||
+    (sessionStatus !== 'ready' && sessionStatus !== 'initializing')
 
   // Throttle scrolling to at most once per 100ms
   useEffect(() => {
@@ -176,16 +198,23 @@ export function ChatPanel({
   return (
     <div className="chat-panel">
       <div className="messages">
-        {messages.length === 0 && (sessionStatus === 'ready' || sessionStatus === 'initializing') && (
-          <div className="empty-state">Send a message to begin</div>
-        )}
+        {messages.length === 0 &&
+          (sessionStatus === 'ready' || sessionStatus === 'initializing') && (
+            <div className="empty-state">Send a message to begin</div>
+          )}
         {messages.map((msg) => {
           if (msg.role === 'user') {
             const displayText = msg.text.replace(/^\n+/, '')
             return (
               <div key={msg.id} className="message user">
                 <div className="user-bubble">
-                  <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>
+                  <Markdown
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                    disallowedElements={['img']}
+                  >
+                    {displayText}
+                  </Markdown>
                 </div>
               </div>
             )
@@ -203,7 +232,8 @@ export function ChatPanel({
           // Show the thinking indicator at the bottom of the turn whenever
           // the agent is streaming and the last group is not an active text segment.
           const lastGroup = grouped[grouped.length - 1]
-          const activeSegmentIsLast = lastGroup?.type === 'text' && lastGroup.part.index === activeSegmentIndex
+          const activeSegmentIsLast =
+            lastGroup?.type === 'text' && lastGroup.part.index === activeSegmentIndex
           const showTrailingThinking = isStreaming && !activeSegmentIsLast
 
           return (
@@ -229,7 +259,13 @@ export function ChatPanel({
                   return (
                     <div key={`text-${group.part.index}`} className="message agent agent-text">
                       <div className={`step-content${isActiveSegment ? ' streaming' : ''}`}>
-                        <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          components={markdownComponents}
+                          disallowedElements={['img']}
+                        >
+                          {displayText}
+                        </Markdown>
                       </div>
                     </div>
                   )
@@ -255,7 +291,9 @@ export function ChatPanel({
         {sessionStatus === 'error' && sessionErrorKind === 'auth' && (
           <div className="workspace-state-banner auth-error">
             Authentication expired. Run <code>claude auth login</code> in your terminal, then:
-            <button type="button" onClick={onRefreshCredentials}>Retry</button>
+            <button type="button" onClick={onRefreshCredentials}>
+              Retry
+            </button>
           </div>
         )}
         {sessionStatus === 'error' && sessionErrorKind !== 'auth' && (
@@ -265,9 +303,7 @@ export function ChatPanel({
           </div>
         )}
         {sessionStatus === 'closed' && (
-          <div className="workspace-state-banner closed">
-            Workspace closed
-          </div>
+          <div className="workspace-state-banner closed">Workspace closed</div>
         )}
         <div ref={bottomRef} />
       </div>
@@ -279,10 +315,13 @@ export function ChatPanel({
         violations={violations}
         policyEvents={policyEvents}
         placeholder={
-          sessionStatus === 'error' ? 'Workspace disconnected' :
-          sessionStatus === 'closed' ? 'Workspace closed' :
-          sessionStatus === 'initializing' && hasPendingMessage ? 'Starting workspace...' :
-          undefined
+          sessionStatus === 'error'
+            ? 'Workspace disconnected'
+            : sessionStatus === 'closed'
+              ? 'Workspace closed'
+              : sessionStatus === 'initializing' && hasPendingMessage
+                ? 'Starting workspace...'
+                : undefined
         }
       />
     </div>
