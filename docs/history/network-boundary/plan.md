@@ -24,7 +24,7 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
   - [x] 3.3 Create `docker/entrypoint.sh`
   - [x] 3.4 Add `"proxy"` to `ContainerConfig.networkMode` and `buildDockerRunArgs()`
   - [x] 3.5 Test: container on session network routes traffic through proxy, proxy blocks denied domains
-- [x] **[Phase 4: GitHub Policy Engine Extraction](#phase-4-github-policy-engine-extraction)** *(parallel with Phases 1-3)*
+- [x] **[Phase 4: GitHub Policy Engine Extraction](#phase-4-github-policy-engine-extraction)** _(parallel with Phases 1-3)_
   - [x] 4.1 Create `github-policy-engine.ts` with `evaluateGitHubRequest()`
   - [x] 4.2 Extract `parseApiEndpoint()` and REST allowlist logic from `gh-shim.ts`
   - [x] 4.3 Update `gh-shim.ts` to import from shared module
@@ -51,10 +51,10 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
 - [x] **[Phase 8: Policy Templates, UI, and Validation](#phase-8-policy-templates-ui-and-validation)**
   - [x] 8.1 Update `NetworkPolicy` type with `inspectedDomains`
   - [x] 8.2 Update `standard-pr` template with domain allowlist
-  - [x] 8.3 Update `PolicyEvent.tool` to include `"proxy"` *(done in Phase 2)*
+  - [x] 8.3 Update `PolicyEvent.tool` to include `"proxy"` _(done in Phase 2)_
   - [x] 8.4 Update `policy-event-parser.ts` to parse `[bouncer:proxy]` lines
   - [x] 8.5 Add proxy status and network policy badges to session UI
-  - [x] 8.6 Full validation checklist *(covered by automated tests across Phases 1-7)*
+  - [x] 8.6 Full validation checklist _(covered by automated tests across Phases 1-7)_
   - [x] 8.7 Update `docs/roadmap.md` — mark M7 complete
 
 ---
@@ -66,15 +66,17 @@ This plan breaks M7 into phases, each delivering a testable increment. The core 
 ### New file: `src/main/proxy-tls.ts`
 
 **`BouncerCA` interface:**
+
 ```typescript
 export interface BouncerCA {
-  cert: string;      // PEM-encoded CA certificate
-  key: string;       // PEM-encoded CA private key
-  certPath: string;  // Path to cert file on disk (for container bind-mount)
+  cert: string // PEM-encoded CA certificate
+  key: string // PEM-encoded CA private key
+  certPath: string // Path to cert file on disk (for container bind-mount)
 }
 ```
 
 **`ensureCA(): Promise<BouncerCA>`**
+
 - Compute CA directory: `join(app.getPath("userData"), "bouncer-ca")`
 - If `bouncer-ca.crt` and `bouncer-ca.key` exist, load and return them
 - Otherwise generate a new CA:
@@ -90,6 +92,7 @@ export interface BouncerCA {
 **Why `node-forge`**: Node's built-in `crypto` module can generate keys but has limited X.509 certificate construction support (no `crypto.createCertificate`). `node-forge` is a mature, well-maintained library specifically for this purpose. It adds ~500KB to the bundle. Alternative: shell out to `openssl` — simpler but creates a runtime dependency on the OpenSSL CLI being installed.
 
 **`generateHostCert(hostname, ca): { cert: string; key: string }`**
+
 - Check in-memory cache (`Map<string, { cert, key, expiresAt }>`)
 - If cached and not expired, return it
 - Otherwise generate:
@@ -106,6 +109,7 @@ export interface BouncerCA {
 ### Changes to `package.json`
 
 Add `node-forge` as a dependency:
+
 ```
 npm install node-forge
 npm install -D @types/node-forge
@@ -114,6 +118,7 @@ npm install -D @types/node-forge
 ### Testing
 
 Unit tests for `proxy-tls.ts`:
+
 - `ensureCA()` generates a valid CA cert (parse with `crypto.X509Certificate`, verify `ca` flag is true)
 - `ensureCA()` is idempotent — second call loads from disk, returns same cert
 - `generateHostCert("api.github.com", ca)` returns a cert signed by the CA
@@ -121,6 +126,7 @@ Unit tests for `proxy-tls.ts`:
 - Cache behavior: second call for same hostname returns cached cert; different hostname generates a new one
 
 ### Exit criteria
+
 - CA persists across app restarts (loaded from disk)
 - Host certificates form a valid TLS chain with the CA
 - Certificate generation is fast (<50ms per hostname)
@@ -142,51 +148,54 @@ Creates an `http.Server` that handles two types of requests:
 **1. CONNECT requests (HTTPS tunneling)**
 
 ```typescript
-server.on("connect", (req, clientSocket, head) => {
-  const [host, port] = req.url.split(":");
+server.on('connect', (req, clientSocket, head) => {
+  const [host, port] = req.url.split(':')
 
   if (!domainAllowed(host, config.allowedDomains)) {
-    clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
-    clientSocket.write(formatDenyMessage(host, config));
-    clientSocket.destroy();
-    config.onPolicyEvent({ /* deny event */ });
-    return;
+    clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+    clientSocket.write(formatDenyMessage(host, config))
+    clientSocket.destroy()
+    config.onPolicyEvent({
+      /* deny event */
+    })
+    return
   }
 
   if (domainInspected(host, config.inspectedDomains)) {
     // TLS MITM path — see below
-    handleMitm(host, port, clientSocket, head, config);
-    return;
+    handleMitm(host, port, clientSocket, head, config)
+    return
   }
 
   // Tunnel path — connect directly to upstream
   const upstream = net.connect(parseInt(port), host, () => {
-    clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-    upstream.write(head);
-    upstream.pipe(clientSocket);
-    clientSocket.pipe(upstream);
-  });
-});
+    clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+    upstream.write(head)
+    upstream.pipe(clientSocket)
+    clientSocket.pipe(upstream)
+  })
+})
 ```
 
 **2. Plain HTTP requests**
 
 ```typescript
-server.on("request", (req, res) => {
-  const url = new URL(req.url);
+server.on('request', (req, res) => {
+  const url = new URL(req.url)
   if (!domainAllowed(url.hostname, config.allowedDomains)) {
-    res.writeHead(403);
-    res.end(formatDenyMessage(url.hostname, config));
-    return;
+    res.writeHead(403)
+    res.end(formatDenyMessage(url.hostname, config))
+    return
   }
   // Forward the request to upstream
-  forwardHttpRequest(req, res, url);
-});
+  forwardHttpRequest(req, res, url)
+})
 ```
 
 **3. TLS MITM handler (`handleMitm`)**
 
 When a CONNECT request targets an inspected domain:
+
 1. Tell the client the tunnel is established (`200 Connection Established`)
 2. Create a TLS server socket using `generateHostCert(host, config.ca)`:
    ```typescript
@@ -194,7 +203,7 @@ When a CONNECT request targets an inspected domain:
      isServer: true,
      cert: hostCert.cert,
      key: hostCert.key,
-   });
+   })
    ```
 3. Parse HTTP requests from the decrypted stream (use Node's `http` module with `createServer` on the TLS socket, or a lightweight HTTP parser)
 4. For each request, apply policy (Phase 5 wires this up — for now, forward all requests)
@@ -203,15 +212,16 @@ When a CONNECT request targets an inspected domain:
 
 **Implementation note on parsing MITM'd HTTP:** The simplest approach is to use `httpProxy` or manually pipe the decrypted stream. However, for policy enforcement we need to inspect the request before forwarding. Options:
 
-| Approach | Pros | Cons |
-|---|---|---|
-| **A: Full HTTP parse** — use `http.createServer` on the decrypted socket | Clean request/response API; can modify or reject before forwarding | Requires wrapping the TLS socket in a new HTTP server |
-| **B: Manual stream parse** — read headers, buffer body if needed | Lower overhead; minimal dependencies | Must handle chunked encoding, keep-alive, etc. |
-| **C: Use `http-mitm-proxy` or similar library** | Handles the hard parts (HTTP parsing, keep-alive, connection pooling) | External dependency; may not be maintained |
+| Approach                                                                 | Pros                                                                  | Cons                                                  |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------- | ----------------------------------------------------- |
+| **A: Full HTTP parse** — use `http.createServer` on the decrypted socket | Clean request/response API; can modify or reject before forwarding    | Requires wrapping the TLS socket in a new HTTP server |
+| **B: Manual stream parse** — read headers, buffer body if needed         | Lower overhead; minimal dependencies                                  | Must handle chunked encoding, keep-alive, etc.        |
+| **C: Use `http-mitm-proxy` or similar library**                          | Handles the hard parts (HTTP parsing, keep-alive, connection pooling) | External dependency; may not be maintained            |
 
 **Recommended: Approach A** — create an `http.Server` bound to the decrypted TLS socket. This gives us a standard `(req, res)` callback where we can inspect the request, call the policy engine, and either forward to upstream or return 403. Node's `http` module handles chunked encoding, keep-alive, and other HTTP details.
 
 **`domainMatches(hostname, pattern): boolean`**
+
 - `*` matches everything
 - `*.example.com` matches `foo.example.com`, `bar.example.com`, but not `example.com`
 - `example.com` matches only `example.com`
@@ -225,6 +235,7 @@ When a CONNECT request targets an inspected domain:
 ### Testing
 
 Unit tests:
+
 - `domainMatches`: exact, wildcard, `*`, no-match cases
 - `startProxy` + `curl --proxy http://localhost:{port}`:
   - Allowed domain: `curl --proxy ... http://httpbin.org/get` → 200
@@ -233,11 +244,13 @@ Unit tests:
   - CONNECT to denied domain: 403
 
 Integration test (requires CA from Phase 1):
+
 - Start proxy with MITM for `api.github.com`
 - `curl --proxy ... --cacert bouncer-ca.crt https://api.github.com/` → response returned (MITM'd but forwarded)
 - Verify the certificate presented to the client is signed by the Bouncer CA
 
 ### Exit criteria
+
 - Proxy correctly tunnels allowed domains
 - Proxy blocks denied domains with 403 and a descriptive message
 - MITM'd connections present a valid certificate chain (Bouncer CA → host cert)
@@ -252,27 +265,33 @@ Integration test (requires CA from Phase 1):
 ### New file: `src/main/proxy-network.ts`
 
 **`createSessionNetwork(sessionId): Promise<SessionNetwork>`**
+
 ```typescript
-const networkName = `bouncer-net-${sessionId}`;
-await execFileAsync("docker", [
-  "network", "create", networkName,
-  "--driver", "bridge",
+const networkName = `bouncer-net-${sessionId}`
+await execFileAsync('docker', [
+  'network',
+  'create',
+  networkName,
+  '--driver',
+  'bridge',
   // Note: we intentionally do NOT use --internal because it blocks
   // host.docker.internal resolution, making the host proxy unreachable.
   // The proxy is the enforcement layer instead.
-  "--label", "glitterball.managed=true",
-  "--label", `glitterball.sessionId=${sessionId}`,
-]);
+  '--label',
+  'glitterball.managed=true',
+  '--label',
+  `glitterball.sessionId=${sessionId}`,
+])
 return {
   networkName,
   async cleanup() {
-    await execFileAsync("docker", ["network", "rm", networkName])
-      .catch(() => {}); // idempotent
+    await execFileAsync('docker', ['network', 'rm', networkName]).catch(() => {}) // idempotent
   },
-};
+}
 ```
 
 **`cleanupOrphanNetworks(activeSessionIds): Promise<void>`**
+
 - `docker network ls --filter label=glitterball.managed=true --format '{{.Name}}'`
 - For each network, extract session ID from the name (`bouncer-net-{sessionId}`)
 - If not in `activeSessionIds`, `docker network rm {name}`
@@ -318,38 +337,43 @@ exec "$@"
 ### Changes to `src/main/container.ts`
 
 Update `ContainerConfig.networkMode` type:
+
 ```typescript
-networkMode: "none" | "bridge" | "proxy";
+networkMode: 'none' | 'bridge' | 'proxy'
 ```
 
 Add optional `networkName` field:
+
 ```typescript
 networkName?: string;
 ```
 
 Update `buildDockerRunArgs`:
+
 ```typescript
-if (config.networkMode === "proxy" && config.networkName) {
-  args.push("--network", config.networkName);
+if (config.networkMode === 'proxy' && config.networkName) {
+  args.push('--network', config.networkName)
 } else {
-  args.push("--network", config.networkMode);
+  args.push('--network', config.networkMode)
 }
 ```
 
 ### Changes to `src/main/types.ts`
 
 Update `ContainerPolicy`:
+
 ```typescript
 export interface ContainerPolicy {
-  image?: string;
-  additionalMounts?: Array<{ hostPath: string; containerPath: string; readOnly: boolean }>;
-  networkMode?: "none" | "bridge" | "proxy";
+  image?: string
+  additionalMounts?: Array<{ hostPath: string; containerPath: string; readOnly: boolean }>
+  networkMode?: 'none' | 'bridge' | 'proxy'
 }
 ```
 
 ### Testing
 
 Integration test (requires Docker/OrbStack):
+
 1. Generate CA (Phase 1)
 2. Start proxy on auto-assigned port (Phase 2)
 3. Create Docker bridge network
@@ -361,6 +385,7 @@ Integration test (requires Docker/OrbStack):
 7. Clean up network and container
 
 ### Exit criteria
+
 - Container can reach the internet through the proxy (env vars respected)
 - Proxy blocks denied domains with 403
 - CA certificate is trusted by curl, git, and Node.js inside the container
@@ -372,16 +397,18 @@ Integration test (requires Docker/OrbStack):
 
 **Goal**: Extract the policy evaluation logic from `gh-shim.ts` into a shared module used by both the shim and the proxy.
 
-*This phase has no dependency on Phases 1-3 and can be developed in parallel.*
+_This phase has no dependency on Phases 1-3 and can be developed in parallel._
 
 ### New file: `src/main/github-policy-engine.ts`
 
 Extract from `gh-shim.ts`:
+
 - `parseApiEndpoint()` — parses `/repos/{owner}/{repo}/...` URL paths
 - `ApiEndpointMatch` type
 - `expandPlaceholder()` helper
 
 Add new function:
+
 ```typescript
 /**
  * Evaluate a raw HTTP request against GitHub policy.
@@ -394,34 +421,35 @@ export function evaluateGitHubRequest(
   policy: GitHubPolicy,
 ): PolicyDecision {
   // Reuse parseApiEndpoint to extract resource, method, repo, number
-  const match = parseApiEndpoint(path, { method });
+  const match = parseApiEndpoint(path, { method })
 
   // Cross-repo check
   if (match.ownerRepo !== null && match.ownerRepo !== policy.repo) {
-    return { action: "deny", reason: `cross-repo access denied` };
+    return { action: 'deny', reason: `cross-repo access denied` }
   }
 
   // Default-deny allowlist
-  if (match.resource === "pulls") return evaluateApiPulls(match, policy);
-  if (match.resource === "issues") return evaluateApiIssues(match);
-  if (match.resource === "" && method === "GET") return { action: "allow" }; // repo metadata
+  if (match.resource === 'pulls') return evaluateApiPulls(match, policy)
+  if (match.resource === 'issues') return evaluateApiIssues(match)
+  if (match.resource === '' && method === 'GET') return { action: 'allow' } // repo metadata
 
-  return { action: "deny", reason: `endpoint not in allowlist` };
+  return { action: 'deny', reason: `endpoint not in allowlist` }
 }
 ```
 
 The existing functions `evaluateApiPulls` and `evaluateApiIssues` are also moved here. The key difference from the shim's `evaluateApiPolicy` is that this function is **default-deny**: if the endpoint doesn't match a known pattern, it returns deny. The shim's version was also default-deny for the `api` subcommand, but the proxy function is the canonical allowlist for all HTTP traffic.
 
 Also add git push evaluation:
+
 ```typescript
 /**
  * Parse git pkt-line format to extract ref updates.
  */
 export function parseGitReceivePack(body: Buffer): Array<{
-  oldSha: string;
-  newSha: string;
-  refName: string;
-}>;
+  oldSha: string
+  newSha: string
+  refName: string
+}>
 
 /**
  * Check if a git push is allowed by the session policy.
@@ -429,19 +457,20 @@ export function parseGitReceivePack(body: Buffer): Array<{
 export function evaluateGitPush(
   refs: Array<{ refName: string }>,
   policy: GitHubPolicy,
-): { allowed: boolean; deniedRef?: string };
+): { allowed: boolean; deniedRef?: string }
 ```
 
 ### Changes to `src/main/gh-shim.ts`
 
 Replace the extracted functions with imports:
+
 ```typescript
 import {
   parseApiEndpoint,
   evaluateApiPulls,
   evaluateApiIssues,
   type ApiEndpointMatch,
-} from "./github-policy-engine.js";
+} from './github-policy-engine.js'
 ```
 
 The shim's `evaluateApiPolicy` function now delegates to the shared module. The shim retains its `evaluatePolicy` function (which handles `gh` subcommand routing), since that's CLI-specific logic the proxy doesn't need.
@@ -469,6 +498,7 @@ The shim's `evaluateApiPolicy` function now delegates to the shared module. The 
   - Push to `refs/heads/main` with `allowedPushRefs: ["feature-branch"]` → denied
 
 ### Exit criteria
+
 - Shared module is the single source of truth for REST API policy evaluation
 - `gh` shim works identically after refactor (no behavioral changes)
 - esbuild bundle for the shim includes the shared module
@@ -491,64 +521,58 @@ async function handleMitmRequest(
   hostname: string,
   config: ProxyConfig,
 ): Promise<void> {
-  if (hostname === "api.github.com" && config.githubPolicy) {
-    const decision = evaluateGitHubRequest(
-      req.method ?? "GET",
-      req.url ?? "/",
-      config.githubPolicy,
-    );
+  if (hostname === 'api.github.com' && config.githubPolicy) {
+    const decision = evaluateGitHubRequest(req.method ?? 'GET', req.url ?? '/', config.githubPolicy)
 
     config.onPolicyEvent({
       timestamp: Date.now(),
-      tool: "proxy",
+      tool: 'proxy',
       operation: `${req.method} ${req.url}`,
-      decision: decision.action === "deny" ? "deny" : "allow",
-      reason: decision.action === "deny" ? decision.reason : undefined,
-    });
+      decision: decision.action === 'deny' ? 'deny' : 'allow',
+      reason: decision.action === 'deny' ? decision.reason : undefined,
+    })
 
-    if (decision.action === "deny") {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end(`[bouncer:proxy] DENY ${req.method} ${req.url} — ${decision.reason}\n`);
-      return;
+    if (decision.action === 'deny') {
+      res.writeHead(403, { 'Content-Type': 'text/plain' })
+      res.end(`[bouncer:proxy] DENY ${req.method} ${req.url} — ${decision.reason}\n`)
+      return
     }
 
     // Forward to upstream and optionally capture response
-    const upstreamRes = await forwardToUpstream(req, hostname);
+    const upstreamRes = await forwardToUpstream(req, hostname)
 
-    if (decision.action === "allow-and-capture-pr") {
+    if (decision.action === 'allow-and-capture-pr') {
       // Read response body to capture PR number
-      const body = await readResponseBody(upstreamRes);
-      capturePrFromResponse(body, config);
-      relayResponse(upstreamRes, res, body);
+      const body = await readResponseBody(upstreamRes)
+      capturePrFromResponse(body, config)
+      relayResponse(upstreamRes, res, body)
     } else {
-      pipeResponse(upstreamRes, res);
+      pipeResponse(upstreamRes, res)
     }
-    return;
+    return
   }
 
   // Non-GitHub inspected domain — forward without policy check
-  const upstreamRes = await forwardToUpstream(req, hostname);
-  pipeResponse(upstreamRes, res);
+  const upstreamRes = await forwardToUpstream(req, hostname)
+  pipeResponse(upstreamRes, res)
 }
 ```
 
 **PR capture from response:**
+
 ```typescript
-function capturePrFromResponse(
-  body: string,
-  config: ProxyConfig,
-): void {
+function capturePrFromResponse(body: string, config: ProxyConfig): void {
   try {
-    const data = JSON.parse(body);
-    if (typeof data.number === "number" && config.githubPolicy) {
-      config.githubPolicy.canCreatePr = false;
-      config.githubPolicy.ownedPrNumber = data.number;
+    const data = JSON.parse(body)
+    if (typeof data.number === 'number' && config.githubPolicy) {
+      config.githubPolicy.canCreatePr = false
+      config.githubPolicy.ownedPrNumber = data.number
       config.onPolicyEvent({
         timestamp: Date.now(),
-        tool: "proxy",
+        tool: 'proxy',
         operation: `captured PR #${data.number}`,
-        decision: "allow",
-      });
+        decision: 'allow',
+      })
     }
   } catch {
     // Response wasn't JSON — skip capture
@@ -561,6 +585,7 @@ function capturePrFromResponse(
 ### Testing
 
 Integration tests (require proxy + CA from Phases 1-2, plus a GitHub token):
+
 - `curl --proxy ... --cacert bouncer-ca.crt https://api.github.com/repos/{owner}/{repo}/pulls` → 200 (allowed)
 - `curl --proxy ... --cacert bouncer-ca.crt -X PUT https://api.github.com/repos/{owner}/{repo}/pulls/1/merge` → 403 (denied)
 - `curl --proxy ... --cacert bouncer-ca.crt -X POST https://api.github.com/graphql -d '{}'` → 403 (not in allowlist)
@@ -568,11 +593,13 @@ Integration tests (require proxy + CA from Phases 1-2, plus a GitHub token):
 - PR capture: `POST /pulls` → response body parsed, PR number extracted, policy state updated
 
 Unit tests (mocked upstream):
+
 - Verify policy decision is checked before forwarding
 - Verify 403 response includes `[bouncer:proxy]` prefix for policy event parsing
 - Verify PR capture updates the policy object
 
 ### Exit criteria
+
 - All REST allowlist entries enforced correctly
 - Unrecognized endpoints denied (default-deny)
 - PR creation captured from response body
@@ -595,53 +622,52 @@ async function handleGitHubMitmRequest(
   config: ProxyConfig,
 ): Promise<void> {
   // Match: POST /{owner}/{repo}.git/git-receive-pack
-  const pushMatch = req.url?.match(
-    /^\/([^/]+\/[^/]+)\.git\/git-receive-pack$/
-  );
+  const pushMatch = req.url?.match(/^\/([^/]+\/[^/]+)\.git\/git-receive-pack$/)
 
-  if (req.method === "POST" && pushMatch && config.githubPolicy) {
-    const repo = pushMatch[1];
+  if (req.method === 'POST' && pushMatch && config.githubPolicy) {
+    const repo = pushMatch[1]
 
     // Cross-repo check
     if (repo !== config.githubPolicy.repo) {
-      res.writeHead(403);
-      res.end(`[bouncer:proxy] DENY push to ${repo} — cross-repo\n`);
-      return;
+      res.writeHead(403)
+      res.end(`[bouncer:proxy] DENY push to ${repo} — cross-repo\n`)
+      return
     }
 
     // Buffer the request body to inspect ref updates
-    const body = await readRequestBody(req);
-    const refs = parseGitReceivePack(body);
-    const result = evaluateGitPush(refs, config.githubPolicy);
+    const body = await readRequestBody(req)
+    const refs = parseGitReceivePack(body)
+    const result = evaluateGitPush(refs, config.githubPolicy)
 
     if (!result.allowed) {
       config.onPolicyEvent({
         timestamp: Date.now(),
-        tool: "proxy",
+        tool: 'proxy',
         operation: `git push ${result.deniedRef}`,
-        decision: "deny",
+        decision: 'deny',
         reason: `ref not in allowed list`,
-      });
-      res.writeHead(403);
-      res.end(`[bouncer:proxy] DENY push to ${result.deniedRef}\n`);
-      return;
+      })
+      res.writeHead(403)
+      res.end(`[bouncer:proxy] DENY push to ${result.deniedRef}\n`)
+      return
     }
 
     // Forward the buffered body to upstream
-    const upstreamRes = await forwardToUpstreamWithBody(req, "github.com", body);
-    pipeResponse(upstreamRes, res);
-    return;
+    const upstreamRes = await forwardToUpstreamWithBody(req, 'github.com', body)
+    pipeResponse(upstreamRes, res)
+    return
   }
 
   // All other github.com requests (ref advertisement, web UI, etc.) — forward
-  const upstreamRes = await forwardToUpstream(req, "github.com");
-  pipeResponse(upstreamRes, res);
+  const upstreamRes = await forwardToUpstream(req, 'github.com')
+  pipeResponse(upstreamRes, res)
 }
 ```
 
 ### `parseGitReceivePack` implementation details
 
 The git pkt-line format:
+
 - Each line starts with a 4-character hex length prefix (including the prefix itself)
 - `0000` is the flush packet (end of section)
 - The first ref update line may have capabilities appended after a NUL byte
@@ -649,39 +675,39 @@ The git pkt-line format:
 
 ```typescript
 export function parseGitReceivePack(body: Buffer): Array<{
-  oldSha: string;
-  newSha: string;
-  refName: string;
+  oldSha: string
+  newSha: string
+  refName: string
 }> {
-  const refs: Array<{ oldSha: string; newSha: string; refName: string }> = [];
-  let offset = 0;
+  const refs: Array<{ oldSha: string; newSha: string; refName: string }> = []
+  let offset = 0
 
   while (offset < body.length) {
-    const lenHex = body.subarray(offset, offset + 4).toString("ascii");
-    const len = parseInt(lenHex, 16);
+    const lenHex = body.subarray(offset, offset + 4).toString('ascii')
+    const len = parseInt(lenHex, 16)
 
-    if (len === 0) break; // flush packet
-    if (len < 4) break;   // invalid
+    if (len === 0) break // flush packet
+    if (len < 4) break // invalid
 
-    const line = body.subarray(offset + 4, offset + len).toString("utf-8");
-    offset += len;
+    const line = body.subarray(offset + 4, offset + len).toString('utf-8')
+    offset += len
 
     // Strip capabilities (after NUL byte)
-    const nulIdx = line.indexOf("\0");
-    const payload = nulIdx !== -1 ? line.substring(0, nulIdx) : line;
+    const nulIdx = line.indexOf('\0')
+    const payload = nulIdx !== -1 ? line.substring(0, nulIdx) : line
 
     // Parse: "<old-sha> <new-sha> <ref-name>\n"
-    const parts = payload.trim().split(" ");
+    const parts = payload.trim().split(' ')
     if (parts.length >= 3) {
       refs.push({
         oldSha: parts[0],
         newSha: parts[1],
         refName: parts[2],
-      });
+      })
     }
   }
 
-  return refs;
+  return refs
 }
 ```
 
@@ -694,18 +720,19 @@ export function evaluateGitPush(
 ): { allowed: boolean; deniedRef?: string } {
   for (const ref of refs) {
     // Extract branch name from "refs/heads/branch-name"
-    const branch = ref.refName.replace(/^refs\/heads\//, "");
+    const branch = ref.refName.replace(/^refs\/heads\//, '')
     if (!policy.allowedPushRefs.includes(branch)) {
-      return { allowed: false, deniedRef: ref.refName };
+      return { allowed: false, deniedRef: ref.refName }
     }
   }
-  return { allowed: true };
+  return { allowed: true }
 }
 ```
 
 ### Testing
 
 Unit tests for `parseGitReceivePack`:
+
 - Construct a valid pkt-line buffer with known ref updates, verify parsing
 - Single ref update with capabilities on first line
 - Multiple ref updates
@@ -713,6 +740,7 @@ Unit tests for `parseGitReceivePack`:
 - Malformed input — returns empty array (fail closed)
 
 Integration test (requires proxy + container):
+
 1. Set up a test git repo with a GitHub remote
 2. Configure proxy with `allowedPushRefs: ["test-branch"]`
 3. From inside the container:
@@ -722,6 +750,7 @@ Integration test (requires proxy + container):
 4. Verify policy events logged for both allow and deny
 
 ### Exit criteria
+
 - Git push ref enforcement works at the network level
 - `--no-verify` does not bypass the proxy
 - Pkt-line parser handles real git push payloads correctly
@@ -736,11 +765,12 @@ Integration test (requires proxy + container):
 ### Changes to `src/main/session-manager.ts`
 
 **New fields on `SessionState`:**
+
 ```typescript
 interface SessionState {
   // ... existing fields ...
-  proxyHandle: ProxyHandle | null;
-  sessionNetwork: SessionNetwork | null;
+  proxyHandle: ProxyHandle | null
+  sessionNetwork: SessionNetwork | null
 }
 ```
 
@@ -748,11 +778,11 @@ interface SessionState {
 
 ```typescript
 // --- Network proxy (M7) ---
-let proxyHandle: ProxyHandle | null = null;
-let sessionNetwork: SessionNetwork | null = null;
+let proxyHandle: ProxyHandle | null = null
+let sessionNetwork: SessionNetwork | null = null
 
-if (dockerAvailable && template?.network?.access === "filtered") {
-  const ca = await ensureCA();
+if (dockerAvailable && template?.network?.access === 'filtered') {
+  const ca = await ensureCA()
 
   proxyHandle = await startProxy({
     sessionId: id,
@@ -762,21 +792,21 @@ if (dockerAvailable && template?.network?.access === "filtered") {
     githubPolicy: session.githubPolicy,
     ca: { cert: ca.cert, key: ca.key },
     onPolicyEvent: (event) => {
-      this.emit("session-update", {
+      this.emit('session-update', {
         sessionId: id,
-        type: "policy-event",
+        type: 'policy-event',
         event,
-      });
+      })
       // Persist policy state if PR was captured
-      if (session.githubPolicy && event.operation.startsWith("captured PR")) {
-        writePolicyState(id, session.githubPolicy).catch(() => {});
+      if (session.githubPolicy && event.operation.startsWith('captured PR')) {
+        writePolicyState(id, session.githubPolicy).catch(() => {})
       }
     },
-  });
-  session.proxyHandle = proxyHandle;
+  })
+  session.proxyHandle = proxyHandle
 
-  sessionNetwork = await createSessionNetwork(id, proxyHandle.port);
-  session.sessionNetwork = sessionNetwork;
+  sessionNetwork = await createSessionNetwork(id, proxyHandle.port)
+  session.sessionNetwork = sessionNetwork
 }
 ```
 
@@ -785,13 +815,13 @@ Then, when building the `ContainerConfig`:
 ```typescript
 // If proxy is active, use proxy network mode
 if (proxyHandle && sessionNetwork) {
-  containerConfig.networkMode = "proxy";
-  containerConfig.networkName = sessionNetwork.networkName;
+  containerConfig.networkMode = 'proxy'
+  containerConfig.networkName = sessionNetwork.networkName
 
   // Add proxy env vars
-  containerEnv.HTTP_PROXY = `http://host.docker.internal:${proxyHandle.port}`;
-  containerEnv.HTTPS_PROXY = `http://host.docker.internal:${proxyHandle.port}`;
-  containerEnv.NO_PROXY = "localhost,127.0.0.1";
+  containerEnv.HTTP_PROXY = `http://host.docker.internal:${proxyHandle.port}`
+  containerEnv.HTTPS_PROXY = `http://host.docker.internal:${proxyHandle.port}`
+  containerEnv.NO_PROXY = 'localhost,127.0.0.1'
 }
 ```
 
@@ -800,43 +830,46 @@ if (proxyHandle && sessionNetwork) {
 **`policyToContainerConfig` additions:**
 
 Add CA cert mount when proxy is active:
+
 ```typescript
 // New field in ContainerSessionContext:
 export interface ContainerSessionContext {
   // ... existing fields ...
   /** Bouncer CA cert path (for proxy TLS interception) */
-  caCertPath?: string;
+  caCertPath?: string
   /** Proxy port (for git http.proxy config) */
-  proxyPort?: number;
+  proxyPort?: number
 }
 ```
 
 In `policyToContainerConfig`:
+
 ```typescript
 if (ctx.caCertPath) {
   mounts.push({
     hostPath: ctx.caCertPath,
-    containerPath: "/usr/local/share/ca-certificates/bouncer/bouncer-ca.crt",
+    containerPath: '/usr/local/share/ca-certificates/bouncer/bouncer-ca.crt',
     readOnly: true,
-  });
+  })
 }
 ```
 
 **`generateGitconfig` additions:**
 
 Add `[http] proxy` when a proxy port is provided:
+
 ```typescript
 export function generateGitconfig(opts: {
-  hooksPath: string;
-  credentialHelperPath: string;
-  userName?: string;
-  userEmail?: string;
-  proxyUrl?: string;  // New
+  hooksPath: string
+  credentialHelperPath: string
+  userName?: string
+  userEmail?: string
+  proxyUrl?: string // New
 }): string {
   // ... existing lines ...
   if (opts.proxyUrl) {
-    lines.push("[http]");
-    lines.push(`    proxy = ${opts.proxyUrl}`);
+    lines.push('[http]')
+    lines.push(`    proxy = ${opts.proxyUrl}`)
   }
   // ...
 }
@@ -847,23 +880,25 @@ export function generateGitconfig(opts: {
 ```typescript
 // Stop proxy and remove network
 if (session.proxyHandle) {
-  await session.proxyHandle.stop();
+  await session.proxyHandle.stop()
 }
 if (session.sessionNetwork) {
-  await session.sessionNetwork.cleanup();
+  await session.sessionNetwork.cleanup()
 }
 ```
 
 ### Changes to orphan cleanup
 
 In `startup` / `cleanupOrphans`:
+
 ```typescript
-await cleanupOrphanNetworks(activeSessionIds);
+await cleanupOrphanNetworks(activeSessionIds)
 ```
 
 ### Testing
 
 End-to-end test — full PR workflow through proxy:
+
 1. Create a Claude Code session with `standard-pr` policy
 2. Agent edits files, commits, pushes to session branch → succeeds (git push through proxy, ref allowed)
 3. Agent runs `gh pr create` → succeeds (shim catches first for UX, REST API allowed by proxy)
@@ -874,6 +909,7 @@ End-to-end test — full PR workflow through proxy:
 8. Close session → proxy stopped, network removed, container removed
 
 ### Exit criteria
+
 - Proxy starts and stops with the session lifecycle
 - Container routes all traffic through the proxy
 - Policy events from the proxy appear in the UI event log
@@ -889,27 +925,30 @@ End-to-end test — full PR workflow through proxy:
 ### Changes to `src/main/types.ts`
 
 Update `NetworkPolicy`:
+
 ```typescript
 export type NetworkPolicy =
-  | { access: "full" }
-  | { access: "none" }
-  | { access: "filtered"; allowedDomains: string[]; inspectedDomains: string[] };
+  | { access: 'full' }
+  | { access: 'none' }
+  | { access: 'filtered'; allowedDomains: string[]; inspectedDomains: string[] }
 ```
 
 Update `PolicyEvent.tool`:
+
 ```typescript
 export interface PolicyEvent {
-  timestamp: number;
-  tool: "gh" | "git" | "proxy";
-  operation: string;
-  decision: "allow" | "deny";
-  reason?: string;
+  timestamp: number
+  tool: 'gh' | 'git' | 'proxy'
+  operation: string
+  decision: 'allow' | 'deny'
+  reason?: string
 }
 ```
 
 ### Changes to `src/main/policy-templates.ts`
 
 Update `standardPrTemplate`:
+
 ```typescript
 network: {
   access: "filtered",
@@ -936,18 +975,21 @@ network: {
 ### Changes to `src/main/policy-event-parser.ts`
 
 Update the regex to match `[bouncer:proxy]`:
+
 ```typescript
-const POLICY_LINE_RE = /^\[bouncer:(gh|git|proxy)\] (ALLOW|DENY) (.+)$/;
+const POLICY_LINE_RE = /^\[bouncer:(gh|git|proxy)\] (ALLOW|DENY) (.+)$/
 ```
 
 Update the tool type:
+
 ```typescript
-const tool = match[1] as "gh" | "git" | "proxy";
+const tool = match[1] as 'gh' | 'git' | 'proxy'
 ```
 
 ### UI changes
 
 **`SessionList.tsx`**: Add network policy badge next to the sandbox backend badge:
+
 - `"filtered"` → "Filtered Network" badge (with tooltip showing allowed domains)
 - `"full"` → "Full Network" badge
 - `"none"` → "No Network" badge
@@ -955,12 +997,14 @@ const tool = match[1] as "gh" | "git" | "proxy";
 **`SandboxLog.tsx`**: Already handles `PolicyEvent` objects generically — proxy events appear automatically. Optionally, add an icon or color for `tool: "proxy"` events to distinguish them from `gh` shim and git hook events.
 
 **`ChatPanel.tsx` or session details**: Add proxy status line:
+
 - "Network: Filtered via proxy (port {N})" when proxy is active
 - "Network: Bridge (no proxy)" when proxy is not active
 
 ### Validation checklist
 
 **Proxy enforcement — REST API:**
+
 - [ ] `GET /repos/{owner}/{repo}/pulls` → allowed
 - [ ] `POST /repos/{owner}/{repo}/pulls` (with `canCreatePr`) → allowed, PR captured
 - [ ] `PATCH /repos/{owner}/{repo}/pulls/{ownedPr}` → allowed
@@ -974,26 +1018,31 @@ const tool = match[1] as "gh" | "git" | "proxy";
 - [ ] Unknown endpoint → denied
 
 **Proxy enforcement — git push:**
+
 - [ ] `git push origin {session-branch}` → allowed
 - [ ] `git push origin main` → denied by proxy
 - [ ] `git push --no-verify origin main` → denied by proxy (hook bypass doesn't help)
 - [ ] Push to different repo → denied
 
 **Proxy enforcement — domain filtering:**
+
 - [ ] `curl https://registry.npmjs.org/` (from container) → tunneled, succeeds
 - [ ] `curl https://evil.example.com/` (from container) → blocked by proxy (403 CONNECT)
 
 **Config integrity:**
+
 - [ ] Agent can't modify `/etc/gitconfig` proxy setting (read-only mount)
 - [ ] Proxy env vars set at container start and respected by standard tooling
 
 **Session lifecycle:**
+
 - [ ] Proxy starts with session, stops on close
 - [ ] Docker network created with session, removed on close
 - [ ] Orphan proxies/networks cleaned up on app restart
 - [ ] Safehouse fallback still works (no proxy, bridge network)
 
 **UX:**
+
 - [ ] `gh` shim denies with friendly error before proxy (fast-reject)
 - [ ] Git hook denies with friendly error before proxy (fast-reject)
 - [ ] Proxy deny events visible in sandbox event log
@@ -1007,6 +1056,7 @@ const tool = match[1] as "gh" | "git" | "proxy";
 - Verify all three policy templates work correctly with the new network infrastructure
 
 ### Exit criteria
+
 - All validation checklist items pass
 - Roadmap updated
 - No regressions in M6 functionality
@@ -1045,13 +1095,13 @@ Phase 4 (policy engine extraction) can be developed in parallel with Phases 1-3.
 
 After each phase merges, verify:
 
-| After Phase | Check |
-|---|---|
-| Phase 1 | CA generates, persists across restarts, host certs form valid chain |
-| Phase 2 | Proxy tunnels, blocks, and MITM's correctly; no resource leaks under concurrent connections |
-| Phase 3 | Container on session network routes traffic through proxy; proxy blocks denied domains; CA trusted by all tools in container |
-| Phase 4 | All existing `gh-shim` tests pass; esbuild bundle includes shared module |
-| Phase 5 | REST allowlist enforced at proxy; PR captured from response; cross-repo denied |
-| Phase 6 | Git push ref enforcement works; `--no-verify` does not bypass proxy |
-| Phase 7 | Full session lifecycle works with proxy; no orphan resources on crash |
-| Phase 8 | All validation items pass; no regressions |
+| After Phase | Check                                                                                                                        |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1     | CA generates, persists across restarts, host certs form valid chain                                                          |
+| Phase 2     | Proxy tunnels, blocks, and MITM's correctly; no resource leaks under concurrent connections                                  |
+| Phase 3     | Container on session network routes traffic through proxy; proxy blocks denied domains; CA trusted by all tools in container |
+| Phase 4     | All existing `gh-shim` tests pass; esbuild bundle includes shared module                                                     |
+| Phase 5     | REST allowlist enforced at proxy; PR captured from response; cross-repo denied                                               |
+| Phase 6     | Git push ref enforcement works; `--no-verify` does not bypass proxy                                                          |
+| Phase 7     | Full session lifecycle works with proxy; no orphan resources on crash                                                        |
+| Phase 8     | All validation items pass; no regressions                                                                                    |
