@@ -13,8 +13,5 @@
     "target": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
-  "include": [
-    "src/renderer/src/**/*",
-    "src/main/types.ts"
-  ]
+  "include": ["src/renderer/src/**/*", "src/main/types.ts"]
 }

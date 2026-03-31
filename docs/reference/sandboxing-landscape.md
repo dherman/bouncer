@@ -6,17 +6,17 @@ Research conducted March 2026 to inform Bouncer's architecture.
 
 Every mature sandboxing system defines a **boundary upfront** and lets the process run freely within it. None try to inspect each action and decide "is this one okay?"
 
-| System | Abstraction Level | Policy Model |
-|--------|-------------------|-------------|
-| Capsicum/CloudABI | Object capabilities (fd rights) | Boundary upfront — capabilities granted at process start |
-| Seccomp-BPF | Syscall numbers + args | BPF filter installed upfront, inspects each syscall against fixed program |
-| Landlock | Filesystem paths, network ports | Boundary upfront — stackable rulesets, unprivileged |
-| macOS Seatbelt | Mach/BSD operations + paths | Boundary upfront — SBPL profile compiled at process launch |
-| WASI | Module imports | Boundary upfront — host-granted capability handles |
-| Containers (Docker) | Namespaces + layered policies | Boundary upfront — multi-layer (seccomp + AppArmor + netpol) |
-| gVisor | Syscall emulation | Each syscall intercepted + emulated by user-space kernel |
-| Firecracker | Hardware virtualization (KVM) | Hardware-enforced boundary — VM config at creation |
-| Agent sandboxes (E2B, etc.) | VM or container boundary | Boundary upfront — SDK/API at creation |
+| System                      | Abstraction Level               | Policy Model                                                              |
+| --------------------------- | ------------------------------- | ------------------------------------------------------------------------- |
+| Capsicum/CloudABI           | Object capabilities (fd rights) | Boundary upfront — capabilities granted at process start                  |
+| Seccomp-BPF                 | Syscall numbers + args          | BPF filter installed upfront, inspects each syscall against fixed program |
+| Landlock                    | Filesystem paths, network ports | Boundary upfront — stackable rulesets, unprivileged                       |
+| macOS Seatbelt              | Mach/BSD operations + paths     | Boundary upfront — SBPL profile compiled at process launch                |
+| WASI                        | Module imports                  | Boundary upfront — host-granted capability handles                        |
+| Containers (Docker)         | Namespaces + layered policies   | Boundary upfront — multi-layer (seccomp + AppArmor + netpol)              |
+| gVisor                      | Syscall emulation               | Each syscall intercepted + emulated by user-space kernel                  |
+| Firecracker                 | Hardware virtualization (KVM)   | Hardware-enforced boundary — VM config at creation                        |
+| Agent sandboxes (E2B, etc.) | VM or container boundary        | Boundary upfront — SDK/API at creation                                    |
 
 This pattern directly informed Bouncer's pivot from per-action tool-use classification to boundary-based sandboxing.
 
@@ -43,6 +43,7 @@ Filters are inherited by child processes and can only be made more restrictive. 
 Operates at the filesystem and network access level. A process creates a "ruleset" specifying handled access types, adds rules mapping paths/ports to allowed operations, then enforces the ruleset on itself via `landlock_restrict_self()`.
 
 Key properties:
+
 - **Unprivileged** — any process can sandbox itself without root
 - **Stackable** — each enforcement adds a layer; access granted only if all layers permit
 - **Filesystem + network** — since Linux 6.7, controls both path access and network ports

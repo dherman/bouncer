@@ -8,13 +8,13 @@ Auto-approve Read, Grep, Glob, and TodoWrite tool uses with 0% false positives, 
 
 From analysis of 7,188 tool uses across 615 sessions:
 
-| Tool | Count | % of Total | Rejections |
-|------|------:|----------:|-----------:|
-| Read | 2,129 | 29.6% | 2 (collateral, not safety-motivated) |
-| Grep | 374 | 5.2% | 1 (collateral) |
-| Glob | 260 | 3.6% | 1 (collateral) |
-| TodoWrite | 353 | 4.9% | 0 |
-| **Total** | **3,116** | **43.3%** | **~0 legitimate** |
+| Tool      |     Count | % of Total |                           Rejections |
+| --------- | --------: | ---------: | -----------------------------------: |
+| Read      |     2,129 |      29.6% | 2 (collateral, not safety-motivated) |
+| Grep      |       374 |       5.2% |                       1 (collateral) |
+| Glob      |       260 |       3.6% |                       1 (collateral) |
+| TodoWrite |       353 |       4.9% |                                    0 |
+| **Total** | **3,116** |  **43.3%** |                    **~0 legitimate** |
 
 The handful of rejections were collateral — the user was rejecting the agent's overall approach (e.g., shutting down a subagent), not objecting to the read operation itself.
 
@@ -29,6 +29,7 @@ These tools are inherently safe because they don't mutate state. The only risk v
 **Question**: What % of Read operations target files outside the project directory?
 
 **Method**:
+
 1. Extract all Read tool inputs from session history (the `file_path` field)
 2. Compare each path against the project directory (from the session's `cwd` or project path)
 3. Categorize: in-project, in-home-dir, system-level, other
@@ -36,6 +37,7 @@ These tools are inherently safe because they don't mutate state. The only risk v
 **Expected output**: A table showing the distribution. If >95% are in-project, path-scoping is a strong policy lever.
 
 **Command to run**:
+
 ```bash
 python3 -c "
 import json, os
@@ -88,6 +90,7 @@ print(f'System-level: {system_level} ({100*system_level/total:.1f}%)')
 **Question**: Are there files within the project tree that should still be gated?
 
 **Method**:
+
 1. From the Read paths collected in Task 1, check for patterns like `.env`, `credentials`, `secrets`, `*.pem`, `*.key`, etc.
 2. Also check: do any Grep/Glob operations target sensitive patterns?
 
@@ -98,6 +101,7 @@ print(f'System-level: {system_level} ({100*system_level/total:.1f}%)')
 **Question**: Do Grep/Glob operations ever have safety-relevant characteristics?
 
 **Method**:
+
 1. Extract all Grep inputs — check the `path` and `pattern` fields
 2. Extract all Glob inputs — check the `pattern` and `path` fields
 3. Look for any that target sensitive locations or patterns
@@ -117,17 +121,17 @@ policy:
     - tool: Read
       decision: approve
       conditions:
-        - path_within: "${project_dir}"
+        - path_within: '${project_dir}'
         - path_not_matches:
-            - "**/.env"
-            - "**/.env.*"
-            - "**/credentials*"
-            - "**/*.pem"
-            - "**/*.key"
+            - '**/.env'
+            - '**/.env.*'
+            - '**/credentials*'
+            - '**/*.pem'
+            - '**/*.key'
     - tool: Read
       decision: ask
       conditions:
-        - path_not_within: "${project_dir}"
+        - path_not_within: '${project_dir}'
     - tool: Grep
       decision: approve
     - tool: Glob
@@ -143,7 +147,7 @@ Extract all read-only tool uses from session history into a labeled dataset:
 ```json
 {
   "tool": "Read",
-  "input": {"file_path": "/Users/dherman/Code/thinkwell/src/index.ts"},
+  "input": { "file_path": "/Users/dherman/Code/thinkwell/src/index.ts" },
   "context": {
     "project": "/Users/dherman/Code/thinkwell",
     "session": "abc123"
