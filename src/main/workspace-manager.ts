@@ -615,7 +615,7 @@ export class WorkspaceManager {
           let ghTokenFilePath: string | undefined;
           if (ghToken) {
             ghTokenFilePath = join(POLICY_DIR, `${id}-gh-token`);
-            await writeFile(ghTokenFilePath, ghToken, { mode: 0o644 });
+            await writeFile(ghTokenFilePath, ghToken, { mode: 0o600 });
             workspace.ghTokenFilePath = ghTokenFilePath;
           }
 

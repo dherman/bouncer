@@ -76,7 +76,13 @@ function handleGitHubApiRequest(
     `[proxy-github] ${method} ${path} → ${decision.action} (canCreatePr=${policy.canCreatePr}, ownedPrNumber=${policy.ownedPrNumber})`,
   );
 
-  // Log the policy event
+  if (decision.action === 'inspect-graphql') {
+    // Defer policy event — handleGraphQLInspection logs after body inspection
+    handleGraphQLInspection(req, res, hostname, upstreamPort, config, upstream);
+    return;
+  }
+
+  // Log the policy event (skip for inspect-graphql which logs its own)
   config.onPolicyEvent({
     timestamp: Date.now(),
     tool: 'proxy',
@@ -84,12 +90,6 @@ function handleGitHubApiRequest(
     decision: decision.action === 'deny' ? 'deny' : 'allow',
     reason: decision.action === 'deny' ? decision.reason : undefined,
   });
-
-  if (decision.action === 'inspect-graphql') {
-    // Buffer the request body, parse the GraphQL mutation, and evaluate
-    handleGraphQLInspection(req, res, hostname, upstreamPort, config, upstream);
-    return;
-  }
 
   if (decision.action === 'deny') {
     res.writeHead(403, { 'Content-Type': 'text/plain' });

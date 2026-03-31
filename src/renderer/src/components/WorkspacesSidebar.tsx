@@ -146,7 +146,13 @@ function RepoGroup({
                   className="github-badge pr-link"
                   href={ws.prUrl}
                   title={ws.prUrl}
-                  onClick={(e) => e.stopPropagation()}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    window.open(ws.prUrl!, '_blank');
+                  }}
                 >
                   #{ws.ownedPrNumber}
                 </a>

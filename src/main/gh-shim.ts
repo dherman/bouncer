@@ -654,8 +654,10 @@ async function apiPrCreate(
     title: parsed.flags.title ?? 'Untitled PR',
     body: parsed.flags.body ?? '',
     head: parsed.flags.head,
-    base: parsed.flags.base ?? 'main',
   };
+  if (parsed.flags.base) {
+    body.base = parsed.flags.base;
+  }
   if (parsed.flags.draft) {
     body.draft = true;
   }

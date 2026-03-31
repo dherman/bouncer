@@ -159,9 +159,9 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
   }
 
   args.push('-w', config.workdir);
-  // NET_ADMIN is needed for iptables rules that enforce proxy usage
-  args.push('--cap-add=NET_ADMIN');
   if (config.networkMode === 'proxy') {
+    // NET_ADMIN is needed for iptables rules that enforce proxy usage
+    args.push('--cap-add=NET_ADMIN');
     if (!config.networkName) {
       throw new Error('ContainerConfig.networkName is required when networkMode is "proxy"');
     }

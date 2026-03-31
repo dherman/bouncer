@@ -78,21 +78,18 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       allowed=true
       break
     fi
-    # Wildcard match: refs/heads/* matches any branch
+    # Wildcard match: e.g. refs/heads/* matches any branch
     case "$ref" in
       */\\*)
         prefix="\${ref%\\*}"
-        if [ "refs/heads/$remote_branch" != "\${refs/heads/$remote_branch#$prefix}" ]; then
-          allowed=true
-          break
-        fi
+        case "refs/heads/$remote_branch" in
+          "$prefix"*)
+            allowed=true
+            break
+            ;;
+        esac
         ;;
     esac
-    # Simple wildcard: refs/heads/*
-    if [ "$ref" = "refs/heads/*" ]; then
-      allowed=true
-      break
-    fi
   done < "$ALLOWED_REFS_FILE"
 
   if [ "$allowed" = false ]; then

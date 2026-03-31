@@ -256,10 +256,15 @@ export function ChatPanel({
 
   const handleCopyTranscript = () => {
     const text = formatTranscript(messages);
-    navigator.clipboard.writeText(text).then(() => {
-      setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 1500);
-    });
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopyFeedback(true);
+        setTimeout(() => setCopyFeedback(false), 1500);
+      },
+      (err) => {
+        console.error('Failed to copy transcript:', err);
+      },
+    );
   };
 
   return (
