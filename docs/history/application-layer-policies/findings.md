@@ -57,6 +57,7 @@ End-to-end validation confirmed that the application-layer policy system works: 
 ### Shim architecture
 
 The esbuild bundle approach is strictly better than tsx-at-runtime:
+
 - **Faster startup**: No tsx/esbuild initialization overhead per `gh` invocation
 - **Sandbox-compatible**: No `process.cwd()` calls, no module resolution from worktree
 - **Self-contained**: Single JS file with no external dependencies
@@ -69,6 +70,7 @@ The `gh-shim-wrapper.sh` template from the original design was removed. The wrap
 Allow events from the gh shim are not currently visible in the UI policy log — only deny events appear. This is an acceptable trade-off: deny events are the security-relevant ones. Allow events from the pre-push hook still appear (git hooks write to the push caller's stderr, not captured as tool output).
 
 Future options for allow-event observability:
+
 - Write to a dedicated log file that the session manager watches
 - Use fd 3 as a log channel (requires session manager to open it)
 - Parse the agent's ACP tool call stream for `gh` invocations
@@ -76,6 +78,7 @@ Future options for allow-event observability:
 ### Dev vs. production shim path
 
 The session manager resolves the shim source path based on `app.isPackaged`:
+
 - Dev: `src/main/gh-shim.ts` (bundled by esbuild at runtime)
 - Prod: `dist/main/gh-shim.js` (pre-built by electron-vite)
 
@@ -83,15 +86,15 @@ The esbuild bundle step at session creation handles dev mode. For production, th
 
 ## Test Coverage
 
-| Test suite | Count | CI |
-|---|---|---|
-| `test:github-policy` | 15 | Yes |
-| `test:gh-shim` | 89 | Yes |
-| `test:hooks` | 10 | Yes |
-| `test:app-layer-policy` | 14 | Yes |
-| `test:policy-event-parser` | 14 | Yes |
-| `test:policy-sandbox` | 3 | Yes |
-| **Total** | **145** | |
+| Test suite                 | Count   | CI  |
+| -------------------------- | ------- | --- |
+| `test:github-policy`       | 15      | Yes |
+| `test:gh-shim`             | 89      | Yes |
+| `test:hooks`               | 10      | Yes |
+| `test:app-layer-policy`    | 14      | Yes |
+| `test:policy-event-parser` | 14      | Yes |
+| `test:policy-sandbox`      | 3       | Yes |
+| **Total**                  | **145** |     |
 
 All tests pass in CI (Ubuntu) and locally (macOS).
 

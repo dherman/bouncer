@@ -100,28 +100,29 @@ The project is structured as an **Electron app** (formerly codenamed "Glitter Ba
 
 ### Key Technologies
 
-| Component | Technology | Notes |
-|-----------|-----------|-------|
-| App shell | Electron | Native app, no server to spin up |
-| UI | React + TypeScript | Chat interface + session management |
-| Agent protocol | ACP (`@agentclientprotocol/sdk`) | JSON-RPC over stdio; sessions, streaming, tool calls, permission requests |
-| Claude Code adapter | `@zed-industries/claude-agent-acp` | Official ACP adapter for Claude Code |
-| OS sandbox (primary) | Containers (Docker/OrbStack) | Isolated filesystem, read-only policy mounts, cross-platform |
-| OS sandbox (fallback) | [agent-safehouse](https://agent-safehouse.dev) | Curated Seatbelt profiles, macOS only; used when Docker unavailable |
-| Worktree management | git CLI | `git worktree add/remove` per session |
-| App-layer policy (M5) | CLI wrappers (`gh` shim, git hooks) | Policy enforcement at the tool level |
-| Container sandbox (M6) | OrbStack (Docker-compatible) | Isolated filesystem, read-only policy mounts |
-| Network boundary (M7) | HTTP proxy + container networking | Authoritative policy enforcement, domain allowlisting |
+| Component              | Technology                                     | Notes                                                                     |
+| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
+| App shell              | Electron                                       | Native app, no server to spin up                                          |
+| UI                     | React + TypeScript                             | Chat interface + session management                                       |
+| Agent protocol         | ACP (`@agentclientprotocol/sdk`)               | JSON-RPC over stdio; sessions, streaming, tool calls, permission requests |
+| Claude Code adapter    | `@zed-industries/claude-agent-acp`             | Official ACP adapter for Claude Code                                      |
+| OS sandbox (primary)   | Containers (Docker/OrbStack)                   | Isolated filesystem, read-only policy mounts, cross-platform              |
+| OS sandbox (fallback)  | [agent-safehouse](https://agent-safehouse.dev) | Curated Seatbelt profiles, macOS only; used when Docker unavailable       |
+| Worktree management    | git CLI                                        | `git worktree add/remove` per session                                     |
+| App-layer policy (M5)  | CLI wrappers (`gh` shim, git hooks)            | Policy enforcement at the tool level                                      |
+| Container sandbox (M6) | OrbStack (Docker-compatible)                   | Isolated filesystem, read-only policy mounts                              |
+| Network boundary (M7)  | HTTP proxy + container networking              | Authoritative policy enforcement, domain allowlisting                     |
 
 ### Sandbox Primitive: Seatbelt vs. Containers
 
 The project's sandbox enforcement layer is designed to be swappable. We currently use macOS Seatbelt (via agent-safehouse) for fast iteration, with a planned migration to containers. This section captures the tradeoff analysis.
 
-**The carveout problem with Seatbelt.** Seatbelt works by starting with "deny everything" and adding back exceptions for every path the agent needs — toolchain caches, shell config, git config, SSH keys, system libraries, Mach IPC services, etc. Every new tool integration is another set of paths to enumerate. Agent-safehouse demonstrates this vividly: separate profile modules for Node, Rust, Python, Go, Java, Ruby, Perl, PHP, Bun, Deno, plus optional integrations for Docker, kubectl, Playwright, Xcode, and more. The profile library *is* the product, and it's always chasing the long tail.
+**The carveout problem with Seatbelt.** Seatbelt works by starting with "deny everything" and adding back exceptions for every path the agent needs — toolchain caches, shell config, git config, SSH keys, system libraries, Mach IPC services, etc. Every new tool integration is another set of paths to enumerate. Agent-safehouse demonstrates this vividly: separate profile modules for Node, Rust, Python, Go, Java, Ruby, Perl, PHP, Bun, Deno, plus optional integrations for Docker, kubectl, Playwright, Xcode, and more. The profile library _is_ the product, and it's always chasing the long tail.
 
 **Containers flip the model.** Instead of subtracting from the host, you build up a known-good environment. The agent gets its own filesystem root with exactly the tools it needs, and the boundary is "nothing outside the container" rather than "everything except these enumerated paths." You don't need to know where pnpm stores its cache on macOS vs. Linux — the container has its own copy. Adding a toolchain means updating a Dockerfile, not discovering and whitelisting a dozen host paths.
 
 **Where containers are clearly better:**
+
 - **Cross-platform**: Docker works on macOS, Linux, and Windows. Seatbelt is macOS-only.
 - **Reproducibility**: A container image is a snapshot. Same image = identical environment across sessions and machines.
 - **The carveout problem goes away**: No need to enumerate global paths. The container has its own copies of everything.
@@ -129,6 +130,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 - **Ecosystem maturity**: E2B, Daytona, Modal, and Kubernetes Agent Sandbox all use containers or VMs.
 
 **Where Seatbelt/safehouse is clearly better:**
+
 - **Startup latency**: Near-zero overhead vs. 500ms-2s for container start.
 - **Host integration**: Agent sees the user's actual git config, SSH keys, shell environment. In a container, these must be explicitly mounted or copied.
 - **Simplicity for prototyping**: A single CLI call vs. Docker daemon, images, volumes, networking config.
@@ -197,6 +199,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 **Design use case**: A session where the agent creates and iterates on a pull request. The PR identity (repo, branch, PR number) is static for the session — known at session start. See [M5 design investigation](reference/m5-app-layer-design.md) for the full analysis.
 
 **`gh` shim:**
+
 - A policy-aware wrapper placed on the agent's `PATH` that intercepts `gh` commands
 - Parses the `gh` subcommand grammar and enforces session policy:
   - **Allow**: `gh pr create`, `gh pr edit` (for this session's PR), `gh pr view`, `gh issue list/view`, repo metadata reads
@@ -206,16 +209,19 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 - GitHub auth: read the user's existing `gh auth` token (zero setup); consider OAuth device flow as a future upgrade for tighter scoping
 
 **Git hooks:**
+
 - `pre-push` hook restricting which remote refs the agent can push to (e.g., allow `agent/feature-branch`, deny `main`/`master`)
 - Installed in the worktree during session setup via `core.hooksPath` pointing to a Bouncer-managed directory
 - On Seatbelt, these are guardrails (the agent could bypass them); the container migration (M6) makes them harder to tamper with via read-only mounts
 
 **ACP observability:**
+
 - Log `gh` and `git` invocations (allowed and denied) via ACP for UI visibility
 - Surface policy violations in the session event log
 - ACP is the observability layer, not the enforcement layer
 
 **Known gaps (addressed in M6-M7):**
+
 - Agent can bypass the `gh` shim via `curl` to `api.github.com` (closed by M7 network proxy)
 - Agent can bypass git hooks via `--no-verify` or by unsetting `core.hooksPath` (mitigated by M6 read-only mounts, closed by M7 network proxy)
 - The real `gh` binary is still accessible on the host filesystem (closed by M6 container isolation)
@@ -227,6 +233,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 **Status**: Complete. See [design](history/container-migration/design.md) and [implementation plan](history/container-migration/plan.md).
 
 **What was built:**
+
 - `docker/agent.Dockerfile`: agent container image based on `docker/sandbox-templates:claude-code`, with Rust toolchain and no real `gh` binary
 - `src/main/container.ts`: Docker availability detection, content-hash-tagged image builds, container spawn/teardown/orphan cleanup with label-based discovery
 - `src/main/policy-container.ts`: converts PolicyTemplate + session context into ContainerConfig with the full mount table (worktree, git common dir, agent binary, node_modules, hooks, shim, policy state, gitconfig, credential helper, Claude config)
@@ -244,6 +251,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 **Status**: Complete. See [design](history/network-boundary/design.md) and [implementation plan](history/network-boundary/plan.md).
 
 **What was built:**
+
 - `src/main/proxy-tls.ts`: Self-signed CA generation and per-hostname certificate minting for TLS MITM
 - `src/main/proxy.ts`: HTTP proxy server with domain allowlisting, HTTPS CONNECT tunneling, and selective TLS MITM
 - `src/main/proxy-github.ts`: GitHub-specific MITM handler — REST API policy enforcement and git push ref enforcement
@@ -255,12 +263,12 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 
 **Enforcement roles after M7:**
 
-| Mechanism | Role |
-|---|---|
-| `gh` shim | UX (better error messages) + fast-reject optimization |
-| Git hooks | UX (better error messages) |
-| Network proxy | **Authoritative security boundary** |
-| ACP | Observability and session event logging |
+| Mechanism     | Role                                                  |
+| ------------- | ----------------------------------------------------- |
+| `gh` shim     | UX (better error messages) + fast-reject optimization |
+| Git hooks     | UX (better error messages)                            |
+| Network proxy | **Authoritative security boundary**                   |
+| ACP           | Observability and session event logging               |
 
 ### Milestone 8: Workspaces Sidebar
 
@@ -269,6 +277,7 @@ The project's sandbox enforcement layer is designed to be swappable. We currentl
 **Status**: Complete. See [design](history/workspaces-sidebar/design.md) and [implementation plan](history/workspaces-sidebar/plan.md).
 
 **What was built:**
+
 - Terminology rename: "session" → "workspace", "glitterball" → "bouncer" across the entire codebase
 - `src/main/repository-store.ts`: Persistent repository list at `~/.config/bouncer/repositories.json` with auto-detection of repo name and GitHub remote
 - `Repository` type with configurable defaults (policy template, agent type)
