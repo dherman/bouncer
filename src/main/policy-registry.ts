@@ -1,9 +1,9 @@
-import type { PolicyTemplate, PolicyTemplateSummary } from "./types.js";
+import type { PolicyTemplate, PolicyTemplateSummary } from './types.js';
 import {
   standardPrTemplate,
   researchOnlyTemplate,
   permissiveTemplate,
-} from "./policy-templates.js";
+} from './policy-templates.js';
 
 const BUILT_IN_TEMPLATES: PolicyTemplate[] = [
   standardPrTemplate,

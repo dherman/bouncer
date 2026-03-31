@@ -6,12 +6,12 @@
  *
  * Usage: npx tsx scripts/test-worktree.ts
  */
-import { WorktreeManager } from "../src/main/worktree-manager.js";
-import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { access } from "node:fs/promises";
-import { join } from "node:path";
+import { WorktreeManager } from '../src/main/worktree-manager.js';
+import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 const manager = new WorktreeManager();
@@ -42,23 +42,19 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 async function branchExists(branch: string, cwd: string): Promise<boolean> {
-  const { stdout } = await execFileAsync(
-    "git",
-    ["branch", "--list", branch],
-    { cwd }
-  );
+  const { stdout } = await execFileAsync('git', ['branch', '--list', branch], { cwd });
   return stdout.trim().length > 0;
 }
 
-console.log("=== WorktreeManager Test ===\n");
+console.log('=== WorktreeManager Test ===\n');
 
 // --- validateGitRepo ---
-console.log("1. validateGitRepo()");
+console.log('1. validateGitRepo()');
 const isGitRepo = await manager.validateGitRepo(projectDir);
-assert(isGitRepo, "bouncer root is a git repo");
+assert(isGitRepo, 'bouncer root is a git repo');
 
-const notGitRepo = await manager.validateGitRepo("/tmp");
-assert(!notGitRepo, "/tmp is not a git repo");
+const notGitRepo = await manager.validateGitRepo('/tmp');
+assert(!notGitRepo, '/tmp is not a git repo');
 
 // --- create / verify / remove ---
 let info: Awaited<ReturnType<typeof manager.create>> | undefined;
@@ -70,53 +66,34 @@ try {
   console.log(`   path:   ${info.path}`);
   console.log(`   branch: ${info.branch}`);
 
-  assert(await pathExists(info.path), "worktree directory exists");
-  assert(
-    await branchExists(info.branch, projectDir),
-    `branch ${info.branch} exists`
-  );
+  assert(await pathExists(info.path), 'worktree directory exists');
+  assert(await branchExists(info.branch, projectDir), `branch ${info.branch} exists`);
 
-  assert(
-    await pathExists(join(info.path, "package.json")),
-    "worktree contains package.json"
-  );
+  assert(await pathExists(join(info.path, 'package.json')), 'worktree contains package.json');
 
-  const { stdout: worktreeList } = await execFileAsync(
-    "git",
-    ["worktree", "list"],
-    { cwd: projectDir }
-  );
-  assert(
-    worktreeList.includes(info.path),
-    "worktree appears in git worktree list"
-  );
+  const { stdout: worktreeList } = await execFileAsync('git', ['worktree', 'list'], {
+    cwd: projectDir,
+  });
+  assert(worktreeList.includes(info.path), 'worktree appears in git worktree list');
 
   // --- remove ---
-  console.log("\n3. remove()");
+  console.log('\n3. remove()');
   await manager.remove(info);
   removed = true;
 
-  assert(!(await pathExists(info.path)), "worktree directory removed");
-  assert(
-    !(await branchExists(info.branch, projectDir)),
-    `branch ${info.branch} deleted`
-  );
+  assert(!(await pathExists(info.path)), 'worktree directory removed');
+  assert(!(await branchExists(info.branch, projectDir)), `branch ${info.branch} deleted`);
 
-  const { stdout: worktreeListAfter } = await execFileAsync(
-    "git",
-    ["worktree", "list"],
-    { cwd: projectDir }
-  );
-  assert(
-    !worktreeListAfter.includes(info.path),
-    "worktree gone from git worktree list"
-  );
+  const { stdout: worktreeListAfter } = await execFileAsync('git', ['worktree', 'list'], {
+    cwd: projectDir,
+  });
+  assert(!worktreeListAfter.includes(info.path), 'worktree gone from git worktree list');
 } finally {
   if (info && !removed) {
     try {
       await manager.remove(info);
     } catch (err) {
-      console.error("Failed to clean up worktree in test harness:", err);
+      console.error('Failed to clean up worktree in test harness:', err);
     }
   }
 }

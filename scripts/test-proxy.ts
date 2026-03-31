@@ -5,23 +5,23 @@
 //
 // Usage: npx tsx scripts/test-proxy.ts
 
-import assert from "node:assert/strict";
-import http from "node:http";
-import https from "node:https";
-import tls from "node:tls";
-import net from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { X509Certificate } from "node:crypto";
-import { ensureCA, type BouncerCA } from "../src/main/proxy-tls.js";
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import https from 'node:https';
+import tls from 'node:tls';
+import net from 'node:net';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { X509Certificate } from 'node:crypto';
+import { ensureCA, type BouncerCA } from '../src/main/proxy-tls.js';
 import {
   domainMatches,
   startProxy,
   type ProxyConfig,
   type ProxyHandle,
-} from "../src/main/proxy.js";
-import type { PolicyEvent } from "../src/main/types.js";
+} from '../src/main/proxy.js';
+import type { PolicyEvent } from '../src/main/types.js';
 
 let passed = 0;
 let failed = 0;
@@ -41,16 +41,16 @@ function test(name: string, fn: () => void | Promise<void>): Promise<void> {
 
 // --- Helpers ---
 
-const tempDir = mkdtempSync(join(tmpdir(), "bouncer-proxy-test-"));
+const tempDir = mkdtempSync(join(tmpdir(), 'bouncer-proxy-test-'));
 let ca: BouncerCA;
 
 function makeConfig(overrides: Partial<ProxyConfig> = {}): ProxyConfig {
   const events: PolicyEvent[] = [];
   return {
-    sessionId: "test-session",
+    sessionId: 'test-session',
     port: 0,
-    listenHost: "127.0.0.1",
-    allowedDomains: ["*"],
+    listenHost: '127.0.0.1',
+    allowedDomains: ['*'],
     inspectedDomains: [],
     githubPolicy: null,
     ca,
@@ -70,21 +70,19 @@ function httpViaProxy(
     const url = new URL(targetUrl);
     const req = http.request(
       {
-        host: "127.0.0.1",
+        host: '127.0.0.1',
         port: proxyPort,
         path: targetUrl,
-        method: "GET",
+        method: 'GET',
         headers: { host: url.host },
       },
       (res) => {
-        let body = "";
-        res.on("data", (chunk: Buffer) => (body += chunk.toString()));
-        res.on("end", () =>
-          resolve({ status: res.statusCode ?? 0, body }),
-        );
+        let body = '';
+        res.on('data', (chunk: Buffer) => (body += chunk.toString()));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
       },
     );
-    req.on("error", reject);
+    req.on('error', reject);
     req.end();
   });
 }
@@ -97,15 +95,15 @@ function connectViaProxy(
 ): Promise<{ status: number; socket: net.Socket }> {
   return new Promise((resolve, reject) => {
     const req = http.request({
-      host: "127.0.0.1",
+      host: '127.0.0.1',
       port: proxyPort,
-      method: "CONNECT",
+      method: 'CONNECT',
       path: `${host}:${port}`,
     });
-    req.on("connect", (res, socket) => {
+    req.on('connect', (res, socket) => {
       resolve({ status: res.statusCode ?? 0, socket });
     });
-    req.on("error", reject);
+    req.on('error', reject);
     req.end();
   });
 }
@@ -114,100 +112,94 @@ function connectViaProxy(
 // Tests
 // =========================================================================
 
-console.log("\nproxy tests\n");
+console.log('\nproxy tests\n');
 
 // --- Setup ---
 ca = await ensureCA(tempDir);
 
 // --- domainMatches unit tests ---
 
-console.log("  domainMatches:");
+console.log('  domainMatches:');
 
-await test("* matches any hostname", () => {
-  assert.ok(domainMatches("anything.example.com", "*"));
-  assert.ok(domainMatches("localhost", "*"));
+await test('* matches any hostname', () => {
+  assert.ok(domainMatches('anything.example.com', '*'));
+  assert.ok(domainMatches('localhost', '*'));
 });
 
-await test("exact match", () => {
-  assert.ok(domainMatches("example.com", "example.com"));
-  assert.ok(!domainMatches("other.com", "example.com"));
+await test('exact match', () => {
+  assert.ok(domainMatches('example.com', 'example.com'));
+  assert.ok(!domainMatches('other.com', 'example.com'));
 });
 
-await test("wildcard *.example.com matches subdomains", () => {
-  assert.ok(domainMatches("foo.example.com", "*.example.com"));
-  assert.ok(domainMatches("bar.baz.example.com", "*.example.com"));
+await test('wildcard *.example.com matches subdomains', () => {
+  assert.ok(domainMatches('foo.example.com', '*.example.com'));
+  assert.ok(domainMatches('bar.baz.example.com', '*.example.com'));
 });
 
-await test("wildcard *.example.com does NOT match bare domain", () => {
-  assert.ok(!domainMatches("example.com", "*.example.com"));
+await test('wildcard *.example.com does NOT match bare domain', () => {
+  assert.ok(!domainMatches('example.com', '*.example.com'));
 });
 
-await test("no match returns false", () => {
-  assert.ok(!domainMatches("evil.com", "example.com"));
-  assert.ok(!domainMatches("evil.com", "*.example.com"));
+await test('no match returns false', () => {
+  assert.ok(!domainMatches('evil.com', 'example.com'));
+  assert.ok(!domainMatches('evil.com', '*.example.com'));
 });
 
-await test("matching is case-insensitive", () => {
-  assert.ok(domainMatches("Example.COM", "example.com"));
-  assert.ok(domainMatches("FOO.example.com", "*.Example.COM"));
+await test('matching is case-insensitive', () => {
+  assert.ok(domainMatches('Example.COM', 'example.com'));
+  assert.ok(domainMatches('FOO.example.com', '*.Example.COM'));
 });
 
-await test("trailing dots are ignored", () => {
-  assert.ok(domainMatches("example.com.", "example.com"));
-  assert.ok(domainMatches("example.com", "example.com."));
+await test('trailing dots are ignored', () => {
+  assert.ok(domainMatches('example.com.', 'example.com'));
+  assert.ok(domainMatches('example.com', 'example.com.'));
 });
 
 // --- Proxy: plain HTTP domain filtering ---
 
-console.log("\n  plain HTTP filtering:");
+console.log('\n  plain HTTP filtering:');
 
 // Start a simple upstream HTTP server for testing
 const upstream = http.createServer((_req, res) => {
   res.writeHead(200);
-  res.end("upstream ok");
+  res.end('upstream ok');
 });
-await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
 const upstreamPort = (upstream.address() as net.AddressInfo).port;
 
-await test("allowed domain: plain HTTP request is forwarded", async () => {
+await test('allowed domain: plain HTTP request is forwarded', async () => {
   const events: PolicyEvent[] = [];
   const proxy = await startProxy(
     makeConfig({
-      allowedDomains: ["127.0.0.1"],
+      allowedDomains: ['127.0.0.1'],
       onPolicyEvent: (e) => events.push(e),
     }),
   );
   try {
-    const res = await httpViaProxy(
-      proxy.port,
-      `http://127.0.0.1:${upstreamPort}/test`,
-    );
+    const res = await httpViaProxy(proxy.port, `http://127.0.0.1:${upstreamPort}/test`);
     assert.equal(res.status, 200);
-    assert.equal(res.body, "upstream ok");
-    assert.equal(events.length, 0, "no deny events for allowed domain");
+    assert.equal(res.body, 'upstream ok');
+    assert.equal(events.length, 0, 'no deny events for allowed domain');
   } finally {
     await proxy.stop();
   }
 });
 
-await test("denied domain: plain HTTP request gets 403", async () => {
+await test('denied domain: plain HTTP request gets 403', async () => {
   const events: PolicyEvent[] = [];
   const proxy = await startProxy(
     makeConfig({
-      allowedDomains: ["other.com"],
+      allowedDomains: ['other.com'],
       onPolicyEvent: (e) => events.push(e),
     }),
   );
   try {
-    const res = await httpViaProxy(
-      proxy.port,
-      `http://127.0.0.1:${upstreamPort}/test`,
-    );
+    const res = await httpViaProxy(proxy.port, `http://127.0.0.1:${upstreamPort}/test`);
     assert.equal(res.status, 403);
-    assert.ok(res.body.includes("not in the allowed domain list"));
+    assert.ok(res.body.includes('not in the allowed domain list'));
     assert.equal(events.length, 1);
-    assert.equal(events[0].decision, "deny");
-    assert.equal(events[0].tool, "proxy");
+    assert.equal(events[0].decision, 'deny');
+    assert.equal(events[0].tool, 'proxy');
   } finally {
     await proxy.stop();
   }
@@ -215,64 +207,54 @@ await test("denied domain: plain HTTP request gets 403", async () => {
 
 // --- Proxy: CONNECT domain filtering ---
 
-console.log("\n  CONNECT filtering:");
+console.log('\n  CONNECT filtering:');
 
-await test("CONNECT to allowed non-inspected domain: tunnel established", async () => {
+await test('CONNECT to allowed non-inspected domain: tunnel established', async () => {
   // Start a TCP server that echoes back what it receives.
   // Using echo (wait for data) instead of immediate write avoids a race
   // where the server sends before the proxy tunnel is fully piped.
   const echo = net.createServer((socket) => {
-    socket.on("data", (chunk) => {
+    socket.on('data', (chunk) => {
       socket.write(`echo: ${chunk.toString()}`);
       socket.end();
     });
   });
-  await new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => echo.listen(0, '127.0.0.1', resolve));
   const echoPort = (echo.address() as net.AddressInfo).port;
 
-  const proxy = await startProxy(
-    makeConfig({ allowedDomains: ["127.0.0.1"] }),
-  );
+  const proxy = await startProxy(makeConfig({ allowedDomains: ['127.0.0.1'] }));
   try {
-    const { status, socket } = await connectViaProxy(
-      proxy.port,
-      "127.0.0.1",
-      echoPort,
-    );
+    const { status, socket } = await connectViaProxy(proxy.port, '127.0.0.1', echoPort);
     assert.equal(status, 200);
 
     // Send data through the tunnel and wait for the echo
-    socket.write("ping");
+    socket.write('ping');
     const data = await new Promise<string>((resolve) => {
-      let buf = "";
-      socket.on("data", (chunk: Buffer) => (buf += chunk.toString()));
-      socket.on("end", () => resolve(buf));
+      let buf = '';
+      socket.on('data', (chunk: Buffer) => (buf += chunk.toString()));
+      socket.on('end', () => resolve(buf));
     });
-    assert.equal(data, "echo: ping");
+    assert.equal(data, 'echo: ping');
   } finally {
     await proxy.stop();
     echo.close();
   }
 });
 
-await test("CONNECT to denied domain: gets 403", async () => {
+await test('CONNECT to denied domain: gets 403', async () => {
   const events: PolicyEvent[] = [];
   const proxy = await startProxy(
     makeConfig({
-      allowedDomains: ["allowed.com"],
+      allowedDomains: ['allowed.com'],
       onPolicyEvent: (e) => events.push(e),
     }),
   );
   try {
-    const { status, socket } = await connectViaProxy(
-      proxy.port,
-      "denied.example.com",
-      443,
-    );
+    const { status, socket } = await connectViaProxy(proxy.port, 'denied.example.com', 443);
     assert.equal(status, 403);
     socket.destroy();
     assert.equal(events.length, 1);
-    assert.equal(events[0].decision, "deny");
+    assert.equal(events[0].decision, 'deny');
   } finally {
     await proxy.stop();
   }
@@ -280,83 +262,69 @@ await test("CONNECT to denied domain: gets 403", async () => {
 
 // --- Proxy: TLS MITM ---
 
-console.log("\n  TLS MITM:");
+console.log('\n  TLS MITM:');
 
 await test("MITM'd domain: client sees cert signed by Bouncer CA", async () => {
   // Start a real HTTPS upstream server
-  const upstreamCert = (await import("../src/main/proxy-tls.js")).generateHostCert(
-    "localhost",
-    ca,
-  );
+  const upstreamCert = (await import('../src/main/proxy-tls.js')).generateHostCert('localhost', ca);
   const httpsUpstream = https.createServer(
     { cert: upstreamCert.cert, key: upstreamCert.key },
     (_req, res) => {
       res.writeHead(200);
-      res.end("mitm upstream ok");
+      res.end('mitm upstream ok');
     },
   );
-  await new Promise<void>((resolve) =>
-    httpsUpstream.listen(0, "127.0.0.1", resolve),
-  );
+  await new Promise<void>((resolve) => httpsUpstream.listen(0, '127.0.0.1', resolve));
   const httpsPort = (httpsUpstream.address() as net.AddressInfo).port;
 
   const proxy = await startProxy(
     makeConfig({
-      allowedDomains: ["localhost"],
-      inspectedDomains: ["localhost"],
+      allowedDomains: ['localhost'],
+      inspectedDomains: ['localhost'],
     }),
   );
 
   try {
     // CONNECT through the proxy
-    const { status, socket } = await connectViaProxy(
-      proxy.port,
-      "localhost",
-      httpsPort,
-    );
+    const { status, socket } = await connectViaProxy(proxy.port, 'localhost', httpsPort);
     assert.equal(status, 200);
 
     // Upgrade to TLS and verify the cert chain
-    const tlsSocket = tls.connect(
-      {
-        socket,
-        ca: ca.cert,
-        servername: "localhost",
-      },
-    );
+    const tlsSocket = tls.connect({
+      socket,
+      ca: ca.cert,
+      servername: 'localhost',
+    });
 
     await new Promise<void>((resolve, reject) => {
-      tlsSocket.on("secureConnect", () => {
-        assert.ok(tlsSocket.authorized, "TLS connection should be authorized");
+      tlsSocket.on('secureConnect', () => {
+        assert.ok(tlsSocket.authorized, 'TLS connection should be authorized');
 
         // Verify cert is signed by our CA
         const peerCert = tlsSocket.getPeerX509Certificate();
-        assert.ok(peerCert, "should have peer certificate");
+        assert.ok(peerCert, 'should have peer certificate');
         assert.ok(
-          peerCert.issuer.includes("Bouncer Proxy CA"),
-          "cert should be issued by Bouncer CA",
+          peerCert.issuer.includes('Bouncer Proxy CA'),
+          'cert should be issued by Bouncer CA',
         );
-        assert.ok(
-          peerCert.subject.includes("CN=localhost"),
-          "cert CN should match hostname",
-        );
+        assert.ok(peerCert.subject.includes('CN=localhost'), 'cert CN should match hostname');
 
         // Make an HTTP request through the MITM'd connection
         const req = http.request(
           {
             createConnection: () => tlsSocket as unknown as net.Socket,
-            hostname: "localhost",
-            path: "/test",
-            method: "GET",
-            headers: { host: "localhost" },
+            hostname: 'localhost',
+            path: '/test',
+            method: 'GET',
+            headers: { host: 'localhost' },
           },
           (res) => {
-            let body = "";
-            res.on("data", (chunk: Buffer) => (body += chunk.toString()));
-            res.on("end", () => {
+            let body = '';
+            res.on('data', (chunk: Buffer) => (body += chunk.toString()));
+            res.on('end', () => {
               try {
                 assert.equal(res.statusCode, 200);
-                assert.equal(body, "mitm upstream ok");
+                assert.equal(body, 'mitm upstream ok');
                 resolve();
               } catch (e) {
                 reject(e);
@@ -364,10 +332,10 @@ await test("MITM'd domain: client sees cert signed by Bouncer CA", async () => {
             });
           },
         );
-        req.on("error", reject);
+        req.on('error', reject);
         req.end();
       });
-      tlsSocket.on("error", reject);
+      tlsSocket.on('error', reject);
     });
   } finally {
     await proxy.stop();
@@ -377,68 +345,62 @@ await test("MITM'd domain: client sees cert signed by Bouncer CA", async () => {
 
 await test("MITM'd domain with onMitmRequest handler: handler is called", async () => {
   // Simple upstream HTTPS server
-  const upstreamCert = (await import("../src/main/proxy-tls.js")).generateHostCert(
-    "handler-test.local",
+  const upstreamCert = (await import('../src/main/proxy-tls.js')).generateHostCert(
+    'handler-test.local',
     ca,
   );
   const httpsUpstream = https.createServer(
     { cert: upstreamCert.cert, key: upstreamCert.key },
     (_req, res) => {
       res.writeHead(200);
-      res.end("should not see this");
+      res.end('should not see this');
     },
   );
-  await new Promise<void>((resolve) =>
-    httpsUpstream.listen(0, "127.0.0.1", resolve),
-  );
+  await new Promise<void>((resolve) => httpsUpstream.listen(0, '127.0.0.1', resolve));
   const httpsPort = (httpsUpstream.address() as net.AddressInfo).port;
 
   let handlerCalled = false;
   const proxy = await startProxy(
     makeConfig({
-      allowedDomains: ["handler-test.local"],
-      inspectedDomains: ["handler-test.local"],
+      allowedDomains: ['handler-test.local'],
+      inspectedDomains: ['handler-test.local'],
       onMitmRequest: (req, res, hostname, _upstream) => {
         handlerCalled = true;
-        assert.equal(hostname, "handler-test.local");
+        assert.equal(hostname, 'handler-test.local');
         // Return a custom response instead of forwarding
         res.writeHead(403);
-        res.end("blocked by handler");
+        res.end('blocked by handler');
       },
     }),
   );
 
   try {
-    const { socket } = await connectViaProxy(
-      proxy.port,
-      "handler-test.local",
-      httpsPort,
-    );
+    const { socket } = await connectViaProxy(proxy.port, 'handler-test.local', httpsPort);
 
     const tlsSocket = tls.connect({
       socket,
       ca: ca.cert,
-      servername: "handler-test.local",
+      servername: 'handler-test.local',
     });
 
     await new Promise<void>((resolve, reject) => {
-      tlsSocket.on("secureConnect", () => {
+      tlsSocket.on('secureConnect', () => {
         const req = http.request(
           {
             createConnection: () => tlsSocket as unknown as net.Socket,
-            hostname: "handler-test.local",
-            path: "/test",
-            method: "GET",
-            headers: { host: "handler-test.local" },
+            hostname: 'handler-test.local',
+            path: '/test',
+            method: 'GET',
+            headers: { host: 'handler-test.local' },
           },
           (res) => {
-            let body = "";
-            res.on("data", (chunk: Buffer) => (body += chunk.toString()));
-            res.on("end", () => {
+            let body = '';
+            res.on('data', (chunk: Buffer) => (body += chunk.toString()));
+            res.on('end', () => {
               try {
                 assert.equal(res.statusCode, 403);
-                assert.equal(body, "blocked by handler");
-                assert.ok(handlerCalled, "handler should have been called");
+                assert.equal(body, 'blocked by handler');
+                assert.ok(handlerCalled, 'handler should have been called');
                 resolve();
               } catch (e) {
                 reject(e);
@@ -446,10 +408,10 @@ await test("MITM'd domain with onMitmRequest handler: handler is called", async 
             });
           },
         );
-        req.on("error", reject);
+        req.on('error', reject);
         req.end();
       });
-      tlsSocket.on("error", reject);
+      tlsSocket.on('error', reject);
     });
   } finally {
     await proxy.stop();
@@ -457,14 +419,12 @@ await test("MITM'd domain with onMitmRequest handler: handler is called", async 
   }
 });
 
-await test("updatePolicy() updates the config", async () => {
-  const proxy = await startProxy(
-    makeConfig({ githubPolicy: null }),
-  );
+await test('updatePolicy() updates the config', async () => {
+  const proxy = await startProxy(makeConfig({ githubPolicy: null }));
   try {
     const newPolicy = {
-      repo: "owner/repo",
-      allowedPushRefs: ["feature"],
+      repo: 'owner/repo',
+      allowedPushRefs: ['feature'],
       ownedPrNumber: 42,
       canCreatePr: false,
     };
@@ -476,35 +436,33 @@ await test("updatePolicy() updates the config", async () => {
   }
 });
 
-await test("stop() cleans up all connections", async () => {
+await test('stop() cleans up all connections', async () => {
   // Start a TCP server that holds connections open
   const holder = net.createServer((socket) => {
     // Just hold the connection open
-    socket.on("error", () => {});
+    socket.on('error', () => {});
   });
-  await new Promise<void>((resolve) => holder.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => holder.listen(0, '127.0.0.1', resolve));
   const holderPort = (holder.address() as net.AddressInfo).port;
 
-  const proxy = await startProxy(
-    makeConfig({ allowedDomains: ["127.0.0.1"] }),
-  );
+  const proxy = await startProxy(makeConfig({ allowedDomains: ['127.0.0.1'] }));
 
   // Open a CONNECT tunnel to the holder
-  const { socket } = await connectViaProxy(proxy.port, "127.0.0.1", holderPort);
+  const { socket } = await connectViaProxy(proxy.port, '127.0.0.1', holderPort);
 
   await proxy.stop();
 
   // Wait for socket close to propagate
   if (!socket.destroyed) {
     await new Promise<void>((resolve) => {
-      socket.on("close", resolve);
+      socket.on('close', resolve);
       // Timeout safety — if it doesn't close in 500ms, proceed
       setTimeout(resolve, 500);
     });
   }
   assert.ok(
     socket.destroyed || socket.readableEnded || !socket.writable,
-    "socket should be closed after stop()",
+    'socket should be closed after stop()',
   );
   holder.close();
 });

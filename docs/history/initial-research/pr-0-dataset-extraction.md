@@ -15,18 +15,18 @@ Produce a clean, anonymized, minimal dataset of tool use requests and their outc
 
 For each tool use in the session history, we need one record:
 
-| Field | Source | Description |
-|-------|--------|-------------|
-| `id` | Synthetic | Sequential integer, stable ordering |
-| `tool` | `tool_use.name` | Tool name (Read, Bash, Edit, etc.) |
-| `input` | `tool_use.input` | Tool input parameters (scrubbed) |
-| `outcome` | Derived | `approved`, `rejected`, or `error` |
-| `error_type` | Derived | For errors: `user_rejected` or `system_error` |
-| `project` | Derived | Anonymized project identifier (e.g., `project-01`) |
-| `session` | Derived | Anonymized session identifier (e.g., `session-042`) |
-| `is_subagent` | `isSidechain` / filename | Whether this occurred in a subagent |
-| `permission_mode` | `permissionMode` | The active permission mode at time of request |
-| `timestamp_relative` | Derived | Seconds since start of session (not wall-clock time) |
+| Field                | Source                   | Description                                          |
+| -------------------- | ------------------------ | ---------------------------------------------------- |
+| `id`                 | Synthetic                | Sequential integer, stable ordering                  |
+| `tool`               | `tool_use.name`          | Tool name (Read, Bash, Edit, etc.)                   |
+| `input`              | `tool_use.input`         | Tool input parameters (scrubbed)                     |
+| `outcome`            | Derived                  | `approved`, `rejected`, or `error`                   |
+| `error_type`         | Derived                  | For errors: `user_rejected` or `system_error`        |
+| `project`            | Derived                  | Anonymized project identifier (e.g., `project-01`)   |
+| `session`            | Derived                  | Anonymized session identifier (e.g., `session-042`)  |
+| `is_subagent`        | `isSidechain` / filename | Whether this occurred in a subagent                  |
+| `permission_mode`    | `permissionMode`         | The active permission mode at time of request        |
+| `timestamp_relative` | Derived                  | Seconds since start of session (not wall-clock time) |
 
 ### Fields Intentionally Excluded
 
@@ -43,16 +43,17 @@ For each tool use in the session history, we need one record:
 
 All file paths are transformed:
 
-| Raw Path | Anonymized |
-|----------|------------|
-| `/Users/dherman/Code/thinkwell/src/index.ts` | `{project}/src/index.ts` |
-| `/Users/dherman/Code/cadmus/packages/server/src/db.ts` | `{project}/packages/server/src/db.ts` |
-| `/Users/dherman/.claude/settings.json` | `{home}/.claude/settings.json` |
-| `/Users/dherman/.zshrc` | `{home}/.zshrc` |
-| `/etc/hosts` | `/etc/hosts` (system paths left as-is) |
-| `/tmp/foo` | `/tmp/foo` (temp paths left as-is) |
+| Raw Path                                               | Anonymized                             |
+| ------------------------------------------------------ | -------------------------------------- |
+| `/Users/dherman/Code/thinkwell/src/index.ts`           | `{project}/src/index.ts`               |
+| `/Users/dherman/Code/cadmus/packages/server/src/db.ts` | `{project}/packages/server/src/db.ts`  |
+| `/Users/dherman/.claude/settings.json`                 | `{home}/.claude/settings.json`         |
+| `/Users/dherman/.zshrc`                                | `{home}/.zshrc`                        |
+| `/etc/hosts`                                           | `/etc/hosts` (system paths left as-is) |
+| `/tmp/foo`                                             | `/tmp/foo` (temp paths left as-is)     |
 
 Rules:
+
 1. Replace the user's home directory prefix with `{home}`
 2. Replace the project directory prefix with `{project}` (the project directory is derived from the session's project path)
 3. Leave system paths (`/etc`, `/usr`, `/tmp`, `/var`) unchanged
@@ -62,12 +63,12 @@ Rules:
 
 Each unique project directory maps to a stable anonymous name:
 
-| Raw Project | Anonymous ID |
-|-------------|-------------|
+| Raw Project                     | Anonymous ID |
+| ------------------------------- | ------------ |
 | `/Users/dherman/Code/thinkwell` | `project-01` |
-| `/Users/dherman/Code/cadmus` | `project-02` |
-| `/Users/dherman/Code/bouncer` | `project-03` |
-| ... | `project-NN` |
+| `/Users/dherman/Code/cadmus`    | `project-02` |
+| `/Users/dherman/Code/bouncer`   | `project-03` |
+| ...                             | `project-NN` |
 
 Assignment order: sorted alphabetically by original path, then numbered sequentially. This ensures stable IDs across re-extractions.
 
@@ -75,11 +76,11 @@ Assignment order: sorted alphabetically by original path, then numbered sequenti
 
 Each unique session UUID maps to a sequential ID:
 
-| Raw Session | Anonymous ID |
-|-------------|-------------|
+| Raw Session                            | Anonymous ID  |
+| -------------------------------------- | ------------- |
 | `0805e6a3-f2d9-4df8-a0eb-2970477c3c34` | `session-001` |
 | `6133ee45-5d2c-4803-aff2-5e4ff1890450` | `session-002` |
-| ... | `session-NNN` |
+| ...                                    | `session-NNN` |
 
 Assignment order: sorted by first-seen timestamp.
 
@@ -96,6 +97,7 @@ Bash commands need special handling because they contain arbitrary text:
 ### Other String Scrubbing
 
 For non-Bash tool inputs:
+
 - **Edit `old_string` / `new_string`**: Keep the code content (it's the thing we're classifying), but apply path scrubbing within it
 - **Write `content`**: Replace entirely with `{file_content}` (we don't need file contents for policy research)
 - **Grep `pattern`**: Keep as-is (search patterns are not PII)
@@ -164,12 +166,14 @@ Metadata about the extraction:
 ### Task 1: Build the Extraction Script
 
 Write `scripts/extract-dataset.py` that:
+
 1. Walks `~/.claude/projects/` to find all `.jsonl` session files
 2. Parses each file, correlating tool_use with tool_result messages
 3. Applies anonymization rules
 4. Outputs `data/tool-use-dataset.jsonl` and `data/dataset-summary.json`
 
 The script should:
+
 - Be idempotent (safe to re-run)
 - Accept `--source-dir` argument (default: `~/.claude/projects`)
 - Accept `--output-dir` argument (default: `./data`)
@@ -195,6 +199,7 @@ The script should:
 ### Task 3: Validate Dataset Completeness
 
 Compare extraction stats against the raw data analysis we already did:
+
 - Total tool uses should be ~7,188
 - Bash count should be ~2,460
 - Rejection count should be ~13
@@ -205,6 +210,7 @@ Any significant discrepancies indicate a parsing bug.
 ### Task 4: Update PR 1 and PR 2 Plans
 
 Once the dataset exists, update both PR plans to:
+
 - Reference `data/tool-use-dataset.jsonl` instead of raw session data
 - Remove inline extraction scripts (they're now redundant)
 - Add filtering commands for their specific needs, e.g.:

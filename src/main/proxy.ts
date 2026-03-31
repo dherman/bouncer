@@ -3,14 +3,14 @@
 // HTTP proxy server with domain filtering and selective TLS MITM.
 // One instance per session — started by the session manager.
 
-import http from "node:http";
-import https from "node:https";
-import net from "node:net";
-import tls from "node:tls";
-import { Duplex } from "node:stream";
-import { generateHostCert } from "./proxy-tls.js";
-import type { BouncerCA } from "./proxy-tls.js";
-import type { GitHubPolicy, PolicyEvent } from "./types.js";
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import tls from 'node:tls';
+import { Duplex } from 'node:stream';
+import { generateHostCert } from './proxy-tls.js';
+import type { BouncerCA } from './proxy-tls.js';
+import type { GitHubPolicy, PolicyEvent } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,10 +43,7 @@ export type MitmRequestHandler = (
   req: http.IncomingMessage,
   res: http.ServerResponse,
   hostname: string,
-  upstream: (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => void,
+  upstream: (req: http.IncomingMessage, res: http.ServerResponse) => void,
   /** The upstream port from the original CONNECT request */
   upstreamPort: number,
 ) => void;
@@ -66,7 +63,7 @@ export interface ProxyHandle {
 
 function normalize(s: string): string {
   const lower = s.toLowerCase();
-  return lower.endsWith(".") ? lower.slice(0, -1) : lower;
+  return lower.endsWith('.') ? lower.slice(0, -1) : lower;
 }
 
 /**
@@ -78,10 +75,10 @@ function normalize(s: string): string {
  * Matching is case-insensitive and ignores trailing dots.
  */
 export function domainMatches(hostname: string, pattern: string): boolean {
-  if (pattern === "*") return true;
+  if (pattern === '*') return true;
   const h = normalize(hostname);
   const p = normalize(pattern);
-  if (p.startsWith("*.")) {
+  if (p.startsWith('*.')) {
     const suffix = p.slice(1); // ".example.com"
     return h.endsWith(suffix) && h.length > suffix.length;
   }
@@ -92,10 +89,7 @@ function domainAllowed(hostname: string, allowedDomains: string[]): boolean {
   return allowedDomains.some((p) => domainMatches(hostname, p));
 }
 
-function domainInspected(
-  hostname: string,
-  inspectedDomains: string[],
-): boolean {
+function domainInspected(hostname: string, inspectedDomains: string[]): boolean {
   return inspectedDomains.some((p) => domainMatches(hostname, p));
 }
 
@@ -108,19 +102,19 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
 
   function trackSocket(socket: net.Socket | Duplex): void {
     openSockets.add(socket);
-    socket.on("close", () => openSockets.delete(socket));
+    socket.on('close', () => openSockets.delete(socket));
   }
 
   const server = http.createServer();
 
   // Track all incoming connections for clean shutdown
-  server.on("connection", trackSocket);
+  server.on('connection', trackSocket);
 
   // --- Plain HTTP requests ---
-  server.on("request", (req, res) => {
+  server.on('request', (req, res) => {
     if (!req.url) {
       res.writeHead(400);
-      res.end("Bad request\n");
+      res.end('Bad request\n');
       return;
     }
 
@@ -128,11 +122,11 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
     try {
       // Proxy clients typically send absolute URLs (http://host/path).
       // Some may send origin-form (/path) with a Host header instead.
-      if (req.url.startsWith("/")) {
+      if (req.url.startsWith('/')) {
         const host = req.headers.host;
         if (!host) {
           res.writeHead(400);
-          res.end("Bad request: origin-form URL without Host header\n");
+          res.end('Bad request: origin-form URL without Host header\n');
           return;
         }
         url = new URL(req.url, `http://${host}`);
@@ -141,7 +135,7 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
       }
     } catch {
       res.writeHead(400);
-      res.end("Bad request URL\n");
+      res.end('Bad request URL\n');
       return;
     }
 
@@ -156,17 +150,14 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
   });
 
   // --- CONNECT requests (HTTPS tunneling) ---
-  server.on("connect", (req, clientSocket, head) => {
+  server.on('connect', (req, clientSocket, head) => {
     trackSocket(clientSocket);
-    const [host, portStr] = (req.url ?? "").split(":");
+    const [host, portStr] = (req.url ?? '').split(':');
     const port = parseInt(portStr) || 443;
 
     if (!host || !domainAllowed(host, config.allowedDomains)) {
-      emitDenyEvent(config, host ?? "unknown", `CONNECT ${req.url}`);
-      clientSocket.end(
-        "HTTP/1.1 403 Forbidden\r\n\r\n" +
-          formatDenyMessage(host ?? "unknown"),
-      );
+      emitDenyEvent(config, host ?? 'unknown', `CONNECT ${req.url}`);
+      clientSocket.end('HTTP/1.1 403 Forbidden\r\n\r\n' + formatDenyMessage(host ?? 'unknown'));
       return;
     }
 
@@ -177,19 +168,19 @@ export async function startProxy(config: ProxyConfig): Promise<ProxyHandle> {
 
     // Tunnel: connect directly to upstream
     const upstream = net.connect(port, host, () => {
-      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
       if (head.length > 0) upstream.write(head);
       upstream.pipe(clientSocket);
       clientSocket.pipe(upstream);
     });
     trackSocket(upstream);
-    upstream.on("error", () => clientSocket.destroy());
-    clientSocket.on("error", () => upstream.destroy());
+    upstream.on('error', () => clientSocket.destroy());
+    clientSocket.on('error', () => upstream.destroy());
   });
 
   // Start listening
   await new Promise<void>((resolve) => {
-    server.listen(config.port, config.listenHost ?? "0.0.0.0", resolve);
+    server.listen(config.port, config.listenHost ?? '0.0.0.0', resolve);
   });
 
   const addr = server.address() as net.AddressInfo;
@@ -222,9 +213,7 @@ function handleMitm(
   const hostCert = generateHostCert(hostname, config.ca);
 
   // Tell the client the tunnel is established
-  (clientSocket as net.Socket).write(
-    "HTTP/1.1 200 Connection Established\r\n\r\n",
-  );
+  (clientSocket as net.Socket).write('HTTP/1.1 200 Connection Established\r\n\r\n');
 
   // Wrap the client socket in TLS (we are the server to the client)
   const tlsSocket = new tls.TLSSocket(clientSocket, {
@@ -236,10 +225,7 @@ function handleMitm(
 
   // Create an HTTP server to parse requests from the decrypted stream
   const mitmServer = http.createServer((req, res) => {
-    const doUpstreamForward = (
-      inReq: http.IncomingMessage,
-      inRes: http.ServerResponse,
-    ) => {
+    const doUpstreamForward = (inReq: http.IncomingMessage, inRes: http.ServerResponse) => {
       forwardToUpstream(hostname, port, inReq, inRes, config.insecureUpstreamTls);
     };
 
@@ -252,19 +238,19 @@ function handleMitm(
   });
 
   // Feed the TLS socket into the HTTP server
-  mitmServer.emit("connection", tlsSocket);
+  mitmServer.emit('connection', tlsSocket);
   if (head.length > 0) {
     tlsSocket.unshift(head);
   }
 
   // Clean up the per-connection MITM server when the socket closes
   const closeMitm = () => mitmServer.close();
-  tlsSocket.on("close", closeMitm);
+  tlsSocket.on('close', closeMitm);
 
-  tlsSocket.on("error", () => {
+  tlsSocket.on('error', () => {
     clientSocket.destroy();
   });
-  clientSocket.on("error", () => {
+  clientSocket.on('error', () => {
     tlsSocket.destroy();
   });
 }
@@ -291,9 +277,9 @@ function forwardHttpRequest(
     proxyRes.pipe(clientRes);
   });
 
-  proxyReq.on("error", () => {
+  proxyReq.on('error', () => {
     clientRes.writeHead(502);
-    clientRes.end("Bad Gateway\n");
+    clientRes.end('Bad Gateway\n');
   });
 
   clientReq.pipe(proxyReq);
@@ -320,9 +306,9 @@ function forwardToUpstream(
     proxyRes.pipe(clientRes);
   });
 
-  proxyReq.on("error", () => {
+  proxyReq.on('error', () => {
     clientRes.writeHead(502);
-    clientRes.end("Bad Gateway\n");
+    clientRes.end('Bad Gateway\n');
   });
 
   clientReq.pipe(proxyReq);
@@ -336,16 +322,12 @@ function formatDenyMessage(hostname: string): string {
   return `Bouncer: domain "${hostname}" is not in the allowed domain list.\n`;
 }
 
-function emitDenyEvent(
-  config: ProxyConfig,
-  hostname: string,
-  operation: string,
-): void {
+function emitDenyEvent(config: ProxyConfig, hostname: string, operation: string): void {
   config.onPolicyEvent({
     timestamp: Date.now(),
-    tool: "proxy",
+    tool: 'proxy',
     operation,
-    decision: "deny",
+    decision: 'deny',
     reason: `Domain "${hostname}" not in allowedDomains`,
   });
 }
