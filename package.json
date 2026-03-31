@@ -23,6 +23,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test:echo-agent": "tsx scripts/test-echo-agent.ts",
     "test:worktree": "tsx scripts/test-worktree.ts",
     "test:claude-agent": "tsx scripts/test-claude-agent.ts",
@@ -51,6 +53,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^41.0.3",
     "electron-vite": "^5.0.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
