@@ -12,6 +12,7 @@ import type { GitHubPolicy } from './types.js';
 export type PolicyDecision =
   | { action: 'allow' }
   | { action: 'allow-and-capture-pr' }
+  | { action: 'inspect-graphql' }
   | { action: 'deny'; reason: string };
 
 export interface ApiEndpointMatch {
@@ -44,6 +45,10 @@ export function parseApiEndpoint(
   let path = endpoint.split('?')[0].split('#')[0];
   if (path.length > 1 && path.endsWith('/')) {
     path = path.slice(0, -1);
+  }
+  // Ensure leading slash — gh CLI omits it for convenience (e.g., "repos/owner/repo/pulls")
+  if (path && !path.startsWith('/')) {
+    path = '/' + path;
   }
 
   // GraphQL
@@ -101,14 +106,48 @@ export function expandPlaceholder(ownerRepo: string): string | null {
 // ---------------------------------------------------------------------------
 
 export function evaluateApiPulls(match: ApiEndpointMatch, policy: GitHubPolicy): PolicyDecision {
+  // PUT /pulls/{number}/merge — always deny with explicit message
+  if (match.method === 'PUT' && match.subResource === 'merge') {
+    return {
+      action: 'deny',
+      reason: 'Merging PRs is not allowed in this sandbox. The PR is ready for human review.',
+    };
+  }
+
+  // Sub-resources on a specific PR (reviews, comments, requested_reviewers)
+  if (match.number !== null && match.subResource) {
+    // POST to comment/review endpoints is denied (propose, don't post)
+    if (
+      match.method === 'POST' &&
+      (match.subResource === 'comments' ||
+        match.subResource === 'reviews' ||
+        match.subResource.startsWith('reviews/'))
+    ) {
+      return {
+        action: 'deny',
+        reason: 'Posting review comments is not allowed. Propose responses to the user instead.',
+      };
+    }
+
+    // POST /pulls/{n}/requested_reviewers — request a review (allowed for owned PR)
+    if (match.method === 'POST' && match.subResource === 'requested_reviewers') {
+      return checkOwnedPrApi(match.number, policy, 'request reviewers');
+    }
+
+    // GET on sub-resources (reviews, comments, requested_reviewers) — allow for owned PR
+    if (match.method === 'GET') {
+      return checkOwnedPrApi(match.number, policy, `read ${match.subResource}`);
+    }
+
+    return {
+      action: 'deny',
+      reason: `API pulls/${match.subResource} ${match.method} is not allowed`,
+    };
+  }
+
   // GET /pulls or /pulls/{number} — read-only, allow
   if (match.method === 'GET') {
     return { action: 'allow' };
-  }
-
-  // PUT /pulls/{number}/merge — deny
-  if (match.method === 'PUT' && match.subResource === 'merge') {
-    return { action: 'deny', reason: 'merging PRs via API is not allowed' };
   }
 
   // POST /pulls — create PR
@@ -121,22 +160,31 @@ export function evaluateApiPulls(match: ApiEndpointMatch, policy: GitHubPolicy):
 
   // PATCH /pulls/{number} — edit PR
   if (match.method === 'PATCH' && match.number !== null) {
-    if (policy.ownedPrNumber !== null && match.number === policy.ownedPrNumber) {
-      return { action: 'allow' };
-    }
-    if (policy.ownedPrNumber === null) {
-      return {
-        action: 'deny',
-        reason: `cannot edit PR #${match.number}: no PR owned by this session`,
-      };
-    }
-    return {
-      action: 'deny',
-      reason: `cannot edit PR #${match.number}: not owned (owned: #${policy.ownedPrNumber})`,
-    };
+    return checkOwnedPrApi(match.number, policy, 'edit');
   }
 
   return { action: 'deny', reason: `API pulls ${match.method} is not allowed` };
+}
+
+/** Check if a PR number matches the session's owned PR. */
+function checkOwnedPrApi(
+  prNumber: number,
+  policy: GitHubPolicy,
+  operation: string,
+): PolicyDecision {
+  if (policy.ownedPrNumber !== null && prNumber === policy.ownedPrNumber) {
+    return { action: 'allow' };
+  }
+  if (policy.ownedPrNumber === null) {
+    return {
+      action: 'deny',
+      reason: `cannot ${operation} PR #${prNumber}: no PR owned by this session`,
+    };
+  }
+  return {
+    action: 'deny',
+    reason: `cannot ${operation} PR #${prNumber}: not owned (owned: #${policy.ownedPrNumber})`,
+  };
 }
 
 export function evaluateApiIssues(match: ApiEndpointMatch): PolicyDecision {
@@ -147,6 +195,47 @@ export function evaluateApiIssues(match: ApiEndpointMatch): PolicyDecision {
     action: 'deny',
     reason: `API issues ${match.method} is not allowed`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// GraphQL mutation allowlist
+// ---------------------------------------------------------------------------
+
+/** Mutations allowed through the proxy, with their required policy checks. */
+const ALLOWED_GRAPHQL_MUTATIONS = new Set(['markPullRequestReadyForReview']);
+
+/**
+ * Evaluate a GraphQL request body against policy.
+ * Only specific allowlisted mutations are permitted.
+ */
+export function evaluateGraphQLBody(body: string, policy: GitHubPolicy): PolicyDecision {
+  try {
+    const parsed = JSON.parse(body);
+    const query = (parsed.query ?? '') as string;
+    // Extract the mutation name from `mutation ... { mutationName(...) { ... } }`
+    const mutationMatch = query.match(/mutation\b[^{]*\{\s*(\w+)/);
+    if (!mutationMatch) {
+      return { action: 'deny', reason: 'GraphQL queries are not allowed, only specific mutations' };
+    }
+    const mutationName = mutationMatch[1];
+    if (!ALLOWED_GRAPHQL_MUTATIONS.has(mutationName)) {
+      return { action: 'deny', reason: `GraphQL mutation '${mutationName}' is not allowed` };
+    }
+    // markPullRequestReadyForReview — session must have created a PR.
+    // Check canCreatePr (set to false after PR creation) rather than ownedPrNumber,
+    // because the proxy's response capture may not have set ownedPrNumber yet
+    // (e.g. if the response was compressed and capture failed silently).
+    // The gh-shim validates PR ownership at the CLI level before reaching here.
+    if (mutationName === 'markPullRequestReadyForReview') {
+      if (policy.canCreatePr) {
+        return { action: 'deny', reason: 'no PR created in this session' };
+      }
+      return { action: 'allow' };
+    }
+    return { action: 'allow' };
+  } catch {
+    return { action: 'deny', reason: 'could not parse GraphQL request body' };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -165,9 +254,9 @@ export function evaluateGitHubRequest(
 ): PolicyDecision {
   const match = parseApiEndpoint(path, { method });
 
-  // GraphQL: deny (opaque — can't inspect query content)
+  // GraphQL: can't evaluate from URL alone — defer to caller to inspect body
   if (match.isGraphQL) {
-    return { action: 'deny', reason: 'GraphQL endpoint is not allowed' };
+    return { action: 'inspect-graphql' };
   }
 
   // DELETE is always denied
@@ -196,6 +285,48 @@ export function evaluateGitHubRequest(
   // /repos/{owner}/{repo}/issues
   if (match.resource === 'issues') {
     return evaluateApiIssues(match);
+  }
+
+  // /repos/{owner}/{repo}/actions — CI/Actions (read-only)
+  if (match.resource === 'actions') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API actions ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/check-runs, check-suites — CI checks (read-only)
+  if (match.resource === 'check-runs' || match.resource === 'check-suites') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API ${match.resource} ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/commits — commit status/checks (read-only)
+  if (match.resource === 'commits') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API commits ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/statuses — commit statuses (read-only)
+  if (match.resource === 'statuses') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API statuses ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/branches — branch listing and info (read-only)
+  if (match.resource === 'branches') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API branches ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/git — git refs, trees, blobs (read-only)
+  if (match.resource === 'git') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API git ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/contents — file contents (read-only)
+  if (match.resource === 'contents') {
+    if (match.method === 'GET') return { action: 'allow' };
+    return { action: 'deny', reason: `API contents ${match.method} is not allowed` };
   }
 
   // Default deny
@@ -288,8 +419,42 @@ export function parseGitReceivePack(body: Buffer): ReceivePackResult {
 }
 
 /**
+ * Check if a ref matches the allowed push refs list.
+ * Supports exact matches and wildcard patterns (e.g., "refs/heads/*").
+ */
+function refMatchesAllowed(refName: string, allowedPushRefs: string[]): boolean {
+  for (const pattern of allowedPushRefs) {
+    if (pattern === refName) return true;
+    // Wildcard: "refs/heads/*" matches any ref under refs/heads/
+    if (pattern.endsWith('/*')) {
+      const prefix = pattern.slice(0, -1); // "refs/heads/"
+      if (refName.startsWith(prefix)) return true;
+    }
+    // Legacy: bare branch name matching (e.g., "bouncer/abc-123")
+    const branch = refName.replace(/^refs\/heads\//, '');
+    if (pattern === branch) return true;
+  }
+  return false;
+}
+
+/**
+ * Check if a ref targets a protected branch.
+ */
+function isProtectedRef(refName: string, protectedBranches: string[]): boolean {
+  const branch = refName.replace(/^refs\/heads\//, '');
+  return protectedBranches.includes(branch);
+}
+
+/**
+ * Check if the policy is in the pre-ratchet state (has wildcard push refs).
+ */
+export function isPushWildcard(policy: GitHubPolicy): boolean {
+  return policy.allowedPushRefs.some((r) => r.includes('*'));
+}
+
+/**
  * Check if a git push is allowed by the session policy.
- * Each ref update is checked against the allowed push refs.
+ * Each ref update is checked against the allowed push refs and protected branches.
  * Fails closed: if parsing failed or the body is non-empty but yields
  * no refs, the push is denied.
  */
@@ -300,10 +465,17 @@ export function evaluateGitPush(
   if (!parseResult.ok) {
     return { allowed: false, reason: 'malformed pkt-line stream' };
   }
+  const protectedBranches = policy.protectedBranches ?? [];
   for (const ref of parseResult.refs) {
-    // Extract the branch name from refs/heads/{branch}
-    const branch = ref.refName.replace(/^refs\/heads\//, '');
-    if (!policy.allowedPushRefs.includes(branch)) {
+    // Protected branches are always denied, regardless of allowedPushRefs
+    if (isProtectedRef(ref.refName, protectedBranches)) {
+      return {
+        allowed: false,
+        deniedRef: ref.refName,
+        reason: `push to protected branch '${ref.refName.replace(/^refs\/heads\//, '')}' is not allowed`,
+      };
+    }
+    if (!refMatchesAllowed(ref.refName, policy.allowedPushRefs)) {
       return { allowed: false, deniedRef: ref.refName };
     }
   }

@@ -37,6 +37,7 @@ function makePolicy(overrides: Partial<GitHubPolicy> = {}): GitHubPolicy {
   return {
     repo: 'owner/repo',
     allowedPushRefs: ['feature-branch'],
+    protectedBranches: ['main'],
     ownedPrNumber: null,
     canCreatePr: true,
     ...overrides,

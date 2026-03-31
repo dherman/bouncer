@@ -86,8 +86,20 @@ async function resolveDockerfilePath(): Promise<string> {
 
 export async function ensureAgentImage(): Promise<string> {
   const dockerfilePath = await resolveDockerfilePath();
-  const content = await readFile(dockerfilePath, 'utf-8');
-  const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
+  const dockerDir = dirname(dockerfilePath);
+  const hasher = createHash('sha256');
+  // Version salt: bump this when the hash inputs change (e.g. adding new files)
+  // to avoid collisions with images built under an older hashing scheme.
+  hasher.update('v2:');
+  hasher.update(await readFile(dockerfilePath, 'utf-8'));
+  // Include entrypoint.sh in the hash — it's COPY'd into the image and changes
+  // to it (e.g. proxy setup, iptables rules) must trigger a rebuild.
+  try {
+    hasher.update(await readFile(join(dockerDir, 'entrypoint.sh'), 'utf-8'));
+  } catch {
+    // entrypoint.sh not found — hash Dockerfile only
+  }
+  const hash = hasher.digest('hex').slice(0, 12);
   const imageTag = `${AGENT_IMAGE_PREFIX}:${hash}`;
 
   try {
@@ -100,7 +112,6 @@ export async function ensureAgentImage(): Promise<string> {
     // Image doesn't exist — build it
   }
 
-  const dockerDir = dirname(dockerfilePath);
   console.log(`[container] Building image ${imageTag}...`);
   await execFileAsync('docker', ['build', '-t', imageTag, '-f', dockerfilePath, dockerDir], {
     timeout: 600_000,
@@ -149,6 +160,8 @@ export function buildDockerRunArgs(config: ContainerConfig): string[] {
 
   args.push('-w', config.workdir);
   if (config.networkMode === 'proxy') {
+    // NET_ADMIN is needed for iptables rules that enforce proxy usage
+    args.push('--cap-add=NET_ADMIN');
     if (!config.networkName) {
       throw new Error('ContainerConfig.networkName is required when networkMode is "proxy"');
     }
@@ -224,8 +237,9 @@ export async function cleanupOrphanContainers(activeSessionIds: Set<string>): Pr
       { timeout: 10_000 },
     );
     stdout = result.stdout;
-  } catch {
-    return; // Docker not available or error — nothing to clean up
+  } catch (err) {
+    console.warn('[container] Failed to list containers for orphan cleanup:', err);
+    return;
   }
 
   const lines = stdout.trim().split('\n').filter(Boolean);

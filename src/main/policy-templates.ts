@@ -22,10 +22,12 @@ export const standardPrTemplate: PolicyTemplate = {
       'api.anthropic.com',
       // Claude Code OAuth — required for token refresh / re-authentication
       'platform.claude.com',
-      // GitHub (code hosting, API, uploads)
+      // GitHub (code hosting, API, uploads, release asset CDN)
       'github.com',
       'api.github.com',
       'uploads.github.com',
+      'objects.githubusercontent.com',
+      'release-assets.githubusercontent.com',
       // Package registries
       'registry.npmjs.org',
       'crates.io',
@@ -44,6 +46,7 @@ export const standardPrTemplate: PolicyTemplate = {
   github: {
     repo: '', // Populated per-session
     allowedPushRefs: [], // Populated per-session
+    protectedBranches: ['main'],
     ownedPrNumber: null,
     canCreatePr: true,
   },

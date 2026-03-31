@@ -425,6 +425,7 @@ await test('updatePolicy() updates the config', async () => {
     const newPolicy = {
       repo: 'owner/repo',
       allowedPushRefs: ['feature'],
+      protectedBranches: ['main'],
       ownedPrNumber: 42,
       canCreatePr: false,
     };

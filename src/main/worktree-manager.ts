@@ -34,7 +34,7 @@ export class WorktreeManager {
     }
   }
 
-  /** Create a worktree for a session, branched from HEAD. */
+  /** Create a worktree for a session, branched from origin/main. */
   async create(sessionId: string, projectDir: string): Promise<WorktreeInfo> {
     if (!UUID_RE.test(sessionId)) {
       throw new Error(`Invalid session ID (expected UUID): ${sessionId}`);
@@ -45,7 +45,24 @@ export class WorktreeManager {
 
     await mkdir(this.basePath, { recursive: true });
 
-    await execFileAsync('git', ['worktree', 'add', '-b', branch, '--', worktreePath, 'HEAD'], {
+    // Fetch the latest main branch from origin so the worktree starts from
+    // the current remote state rather than whatever HEAD happens to be locally.
+    try {
+      await execFileAsync('git', ['fetch', 'origin', 'main'], { cwd: projectDir });
+    } catch {
+      // Fetch may fail (offline, no remote) — fall back to local HEAD below
+    }
+
+    // Prefer origin/main as the base; fall back to HEAD if unavailable
+    let startPoint = 'HEAD';
+    try {
+      await execFileAsync('git', ['rev-parse', '--verify', 'origin/main'], { cwd: projectDir });
+      startPoint = 'origin/main';
+    } catch {
+      // origin/main doesn't exist — use HEAD
+    }
+
+    await execFileAsync('git', ['worktree', 'add', '-b', branch, '--', worktreePath, startPoint], {
       cwd: projectDir,
     });
 

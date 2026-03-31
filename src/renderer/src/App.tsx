@@ -106,12 +106,34 @@ function App() {
 
         case 'stream-chunk': {
           const segments = streamingTextRef.current.get(update.messageId) ?? [''];
+          // When a new segment index appears, add a text part to the message's
+          // parts array so the renderer knows to display it.  Without this,
+          // text between tool groups is invisible until stream-end.
+          const isNewSegment = update.segmentIndex >= segments.length;
           // Expand array if needed for new segment index
           while (segments.length <= update.segmentIndex) {
             segments.push('');
           }
           segments[update.segmentIndex] += update.text;
           streamingTextRef.current.set(update.messageId, segments);
+          if (isNewSegment && update.segmentIndex > 0) {
+            setMessagesByWorkspace((prev) => {
+              const next = new Map(prev);
+              const msgs = next.get(update.workspaceId);
+              if (msgs) {
+                next.set(
+                  update.workspaceId,
+                  msgs.map((m) => {
+                    if (m.id !== update.messageId) return m;
+                    const parts = m.parts ? [...m.parts] : [{ type: 'text' as const, index: 0 }];
+                    parts.push({ type: 'text' as const, index: update.segmentIndex });
+                    return { ...m, parts };
+                  }),
+                );
+              }
+              return next;
+            });
+          }
           scheduleStreamTick();
           break;
         }

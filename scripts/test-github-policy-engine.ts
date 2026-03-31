@@ -35,6 +35,7 @@ function makePolicy(overrides: Partial<GitHubPolicy> = {}): GitHubPolicy {
   return {
     repo: 'owner/repo',
     allowedPushRefs: ['feature-branch'],
+    protectedBranches: ['main'],
     ownedPrNumber: null,
     canCreatePr: true,
     ...overrides,
@@ -72,10 +73,9 @@ await test('PUT /repos/owner/repo/pulls/42/merge → deny', () => {
   assert.equal(d.action, 'deny');
 });
 
-await test('POST /graphql → deny', () => {
+await test('POST /graphql → inspect-graphql', () => {
   const d = evaluateGitHubRequest('POST', '/graphql', makePolicy());
-  assert.equal(d.action, 'deny');
-  assert.ok(d.action === 'deny' && d.reason.includes('GraphQL'));
+  assert.equal(d.action, 'inspect-graphql');
 });
 
 await test('DELETE /repos/owner/repo/pulls/42 → deny', () => {

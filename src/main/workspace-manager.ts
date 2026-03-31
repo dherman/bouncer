@@ -38,6 +38,7 @@ import {
   cleanupHooks,
   generatePrePushHookForContainer,
   allowedRefsPath,
+  updateAllowedRefs,
 } from './hooks.js';
 import {
   policyToContainerConfig,
@@ -55,6 +56,7 @@ import type {
   SandboxBackend,
   SandboxViolationInfo,
   WorkspaceSummary,
+  WorkspacePhase,
   WorkspaceUpdate,
   ToolCallInfo,
 } from './types.js';
@@ -220,11 +222,17 @@ interface WorkspaceState {
   sessionNetwork: SessionNetwork | null;
   policyId: string | null;
   githubPolicy: GitHubPolicy | null;
+  phase: WorkspacePhase | null;
+  prUrl: string | null;
   /** Flush any batched stream-chunk events. Called before stream-end. */
   flushChunks: () => void;
   promptCount: number;
   /** Message queued while workspace was still initializing. */
   pendingMessage: string | null;
+  /** Periodic GH token refresh timer (cleared on close). */
+  ghTokenRefreshTimer: ReturnType<typeof setInterval> | null;
+  /** Host-side path to the GH token file (for cleanup). */
+  ghTokenFilePath: string | null;
 }
 
 export class WorkspaceManager {
@@ -304,9 +312,13 @@ export class WorkspaceManager {
       sessionNetwork: null,
       policyId: resolvedPolicyId,
       githubPolicy: null,
+      phase: null,
+      prUrl: null,
       flushChunks: () => {},
       promptCount: 0,
       pendingMessage: null,
+      ghTokenRefreshTimer: null,
+      ghTokenFilePath: null,
     };
     this.workspaces.set(id, workspace);
     this.emit('workspace-update', {
@@ -388,8 +400,14 @@ export class WorkspaceManager {
           const githubPolicy = buildSessionPolicy(repo, worktree.branch);
           // Set on workspace before side effects so error cleanup can find it
           workspace.githubPolicy = githubPolicy;
+          workspace.phase = 'implementing';
           await writePolicyState(id, githubPolicy);
-          await installHooks(id, workingDir, githubPolicy.allowedPushRefs);
+          await installHooks(
+            id,
+            workingDir,
+            githubPolicy.allowedPushRefs,
+            githubPolicy.protectedBranches,
+          );
 
           // Configure the worktree for HTTPS push with gh credential helper.
           // SSH push fails in the sandbox (SSH_AUTH_SOCK socket is blocked),
@@ -590,6 +608,17 @@ export class WorkspaceManager {
           }
           const ghToken =
             shimEnv.GH_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
+
+          // Write GH token to a file that the container can read. The host
+          // refreshes this file periodically so long-running sessions don't
+          // lose GitHub access when the OAuth token expires.
+          let ghTokenFilePath: string | undefined;
+          if (ghToken) {
+            ghTokenFilePath = join(POLICY_DIR, `${id}-gh-token`);
+            await writeFile(ghTokenFilePath, ghToken, { mode: 0o600 });
+            workspace.ghTokenFilePath = ghTokenFilePath;
+          }
+
           const containerEnv: Record<string, string> = {
             ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
             ...(ghToken ? { GH_TOKEN: ghToken } : {}),
@@ -632,9 +661,32 @@ export class WorkspaceManager {
                   type: 'policy-event',
                   event,
                 });
-                // Persist policy state if PR was captured
-                if (workspace.githubPolicy && event.operation.startsWith('captured PR')) {
-                  writePolicyState(id, workspace.githubPolicy).catch(() => {});
+                // Persist policy state on ratchet events
+                if (workspace.githubPolicy) {
+                  if (event.operation.startsWith('branch-ratchet:')) {
+                    writePolicyState(id, workspace.githubPolicy).catch(() => {});
+                    updateAllowedRefs(id, workspace.githubPolicy.allowedPushRefs).catch(() => {});
+                  }
+                  if (event.operation.startsWith('captured PR')) {
+                    writePolicyState(id, workspace.githubPolicy).catch(() => {});
+                    // Extract PR URL from event operation if present
+                    const urlMatch = event.operation.match(/https:\/\/\S+/);
+                    if (urlMatch) {
+                      workspace.prUrl = urlMatch[0];
+                    }
+                    workspace.phase = 'pr-open';
+                    // Emit a summary update so the UI picks up the phase/prUrl change
+                    this.summarize(workspace)
+                      .then((summary) => {
+                        this.emit('workspace-update', {
+                          workspaceId: id,
+                          type: 'status-change',
+                          status: workspace.status,
+                          summary,
+                        });
+                      })
+                      .catch(() => {});
+                  }
                 }
               },
             };
@@ -671,6 +723,9 @@ export class WorkspaceManager {
             containerEnv.https_proxy = proxyEnvUrl;
             containerEnv.NO_PROXY = 'localhost,127.0.0.1,::1';
             containerEnv.no_proxy = 'localhost,127.0.0.1,::1';
+            // Entrypoint uses these for iptables proxy enforcement
+            containerEnv.BOUNCER_PROXY_HOST = 'host.docker.internal';
+            containerEnv.BOUNCER_PROXY_PORT = String(workspace.proxyHandle.port);
 
             // Regenerate gitconfig with proxy setting if it was already created
             if (containerGitconfigFile) {
@@ -722,6 +777,7 @@ export class WorkspaceManager {
             })(),
             claudeConfigDir: join((await import('node:os')).homedir(), '.claude'),
             claudeCredentialsPath,
+            ghTokenFilePath,
           };
 
           containerConfig = policyToContainerConfig(template, ctx, containerEnv, imageTag, [
@@ -798,6 +854,28 @@ export class WorkspaceManager {
         });
       }
       workspace.agentProcess = agentProcess;
+
+      // Start periodic GH token refresh for container sessions.
+      // The OAuth token can expire during long sessions; refreshing the
+      // token file keeps GitHub API access alive.
+      if (workspace.ghTokenFilePath && containerConfig) {
+        const GH_TOKEN_REFRESH_MS = 30 * 60 * 1000; // 30 minutes
+        const tokenFilePath = workspace.ghTokenFilePath;
+        workspace.ghTokenRefreshTimer = setInterval(async () => {
+          try {
+            const { execFile: ef } = await import('node:child_process');
+            const { promisify: p } = await import('node:util');
+            const { stdout } = await p(ef)('gh', ['auth', 'token']);
+            const newToken = stdout.trim();
+            if (newToken) {
+              await writeFile(tokenFilePath, newToken, { mode: 0o644 });
+              console.log(`[workspace] Refreshed GH token for workspace ${id}`);
+            }
+          } catch (err) {
+            console.warn(`[workspace] Failed to refresh GH token for workspace ${id}:`, err);
+          }
+        }, GH_TOKEN_REFRESH_MS);
+      }
 
       // Capture stderr for error reporting and parse policy events.
       // Use StringDecoder to handle multibyte characters (e.g. em-dash)
@@ -1201,11 +1279,32 @@ export class WorkspaceManager {
     // Send prompt via ACP
     const promptBlocks: Array<{ type: 'text'; text: string }> = [];
 
-    // On the first prompt, inject UI formatting guidance
+    // On the first prompt, inject behavioral and formatting guidance
     if (workspace.promptCount === 0) {
+      const hasGitHub = !!workspace.githubPolicy;
+      const systemParts: string[] = [
+        'Formatting guidance: After completing tool calls, when you present the results to the user, always start with a brief summary sentence that contextualizes the data before showing it. Do not output raw data or listings without a lead-in. Before making tool calls, keep your introductory text minimal — just proceed to the tool calls without unnecessary preamble.',
+      ];
+      if (hasGitHub) {
+        systemParts.push(
+          'Autonomy guidance: You are running inside a sandboxed environment. Work autonomously through the full task without stopping to ask for permission at intermediate steps. Specifically:',
+          '1. Implement the requested changes, committing as needed.',
+          '2. Push your branch and create a draft PR (use `gh pr create --draft`).',
+          '3. Check CI status with `gh pr checks`. If checks fail, read the logs, fix the issues, push again, and re-check. Repeat until CI is green.',
+          '4. Once CI is green, mark the PR as ready for review: `gh pr ready`',
+          "5. Check if Copilot has been assigned as a reviewer: `gh pr view` and look at the `requested_reviewers` field for a reviewer with login containing 'copilot'.",
+          '6. If Copilot is assigned, poll for the review to appear: `gh api repos/{owner}/{repo}/pulls/{number}/reviews`. Wait until a review from Copilot shows up (it may take a minute or two). Once it appears, read the review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments`.',
+          '7. For each review comment, implement the suggested fixes if they are actionable improvements. Push and re-check CI.',
+          '8. If Copilot is NOT assigned as a reviewer, skip steps 6-7.',
+          '9. When CI is green and all review comments are addressed (or skipped), report the final status to the user.',
+          'Do NOT stop to ask the user for confirmation between these steps. The sandbox prevents any dangerous operations (merging, pushing to protected branches, posting review comments). Work through the entire workflow in one shot.',
+          'Do NOT attempt to merge the PR — that is a human-only operation and the sandbox will block it.',
+          'Do NOT attempt to request reviewers — Copilot review is configured to be automatically assigned by the repository.',
+        );
+      }
       promptBlocks.push({
         type: 'text',
-        text: '<system-instruction>\nFormatting guidance: After completing tool calls, when you present the results to the user, always start with a brief summary sentence that contextualizes the data before showing it. Do not output raw data or listings without a lead-in. Before making tool calls, keep your introductory text minimal — just proceed to the tool calls without unnecessary preamble.\n</system-instruction>',
+        text: `<system-instruction>\n${systemParts.join('\n')}\n</system-instruction>`,
       });
     }
     workspace.promptCount++;
@@ -1312,6 +1411,10 @@ export class WorkspaceManager {
     workspace.flushChunks();
     workspace.sandboxMonitor?.stop();
     workspace.containerMonitor?.stop();
+    if (workspace.ghTokenRefreshTimer) {
+      clearInterval(workspace.ghTokenRefreshTimer);
+      workspace.ghTokenRefreshTimer = null;
+    }
     if (workspace.containerHandle) {
       workspace.containerHandle.kill();
     } else {
@@ -1339,6 +1442,7 @@ export class WorkspaceManager {
         () => {},
       );
       await rm(join(POLICY_DIR, `${workspaceId}-user-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-gh-token`), { force: true }).catch(() => {});
     }
 
     // Stop proxy and remove workspace network (M7)
@@ -1401,6 +1505,7 @@ export class WorkspaceManager {
 
   /** Remove orphan worktree directories, sandbox policies, containers, and container artifacts left behind by a previous crash. */
   async cleanupOrphans(): Promise<void> {
+    console.log('[cleanup] Starting orphan cleanup...');
     const activeIds = new Set(this.workspaces.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
     await cleanupOrphanPolicies(activeIds);
@@ -1422,6 +1527,7 @@ export class WorkspaceManager {
         '-claude-credentials.json',
         '-credential-helper.js',
         '-user-gitconfig',
+        '-gh-token',
       ];
       for (const f of files) {
         for (const suffix of suffixes) {
@@ -1436,6 +1542,7 @@ export class WorkspaceManager {
     } catch {
       // Best effort
     }
+    console.log('[cleanup] Orphan cleanup complete.');
   }
 
   getSandboxViolations(workspaceId: string): SandboxViolationInfo[] {
@@ -1454,17 +1561,28 @@ export class WorkspaceManager {
       }
     }
 
-    // Read live policy state from disk (the gh shim may have updated it)
+    // Read live policy state from disk (the gh shim may have updated it).
+    // Only sync forward: take disk values that represent progress (PR created,
+    // canCreatePr cleared). Never regress in-memory state, since the proxy may
+    // have updated it before the disk write completes.
     let githubRepo = workspace.githubPolicy?.repo ?? null;
     let ownedPrNumber = workspace.githubPolicy?.ownedPrNumber ?? null;
     if (workspace.githubPolicy) {
       try {
         const livePolicy = await readPolicyState(policyStatePath(workspace.id));
         githubRepo = livePolicy.repo;
-        ownedPrNumber = livePolicy.ownedPrNumber;
-        // Sync in-memory state
-        workspace.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
-        workspace.githubPolicy.canCreatePr = livePolicy.canCreatePr;
+        // Only adopt disk ownedPrNumber if in-memory is still null
+        if (workspace.githubPolicy.ownedPrNumber === null && livePolicy.ownedPrNumber !== null) {
+          ownedPrNumber = livePolicy.ownedPrNumber;
+          workspace.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
+        } else {
+          ownedPrNumber = workspace.githubPolicy.ownedPrNumber;
+        }
+        // Only adopt disk canCreatePr if it transitions from true → false
+        // (meaning the gh shim captured a PR). Never go from false → true.
+        if (workspace.githubPolicy.canCreatePr && !livePolicy.canCreatePr) {
+          workspace.githubPolicy.canCreatePr = false;
+        }
       } catch {
         // Policy file may have been cleaned up — use in-memory state
       }
@@ -1484,6 +1602,8 @@ export class WorkspaceManager {
       policyName,
       githubRepo,
       ownedPrNumber,
+      prUrl: workspace.prUrl,
+      phase: workspace.phase,
       networkAccess: workspace.proxyHandle ? 'filtered' : 'full',
     };
   }

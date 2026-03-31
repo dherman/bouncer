@@ -12,6 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { readPolicyState, writePolicyState } from './github-policy.js';
 import type { GitHubPolicy } from './types.js';
 import {
@@ -21,6 +22,23 @@ import {
   type ApiEndpointMatch,
   type PolicyDecision,
 } from './github-policy-engine.js';
+
+// Node.js built-in fetch() uses undici internally but does NOT respect HTTP_PROXY
+// env vars or http.globalAgent patches (which global-agent sets). We create a
+// ProxyAgent and pass it as the `dispatcher` option on each fetch() call — this
+// is the only reliable way to route fetch() through the proxy in Node 20+.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _proxyDispatcher: any;
+const _proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+if (_proxyUrl && process.env.BOUNCER_GITHUB_POLICY) {
+  try {
+    // @ts-expect-error — undici is a Node.js built-in available at runtime
+    const undici = await import('undici');
+    _proxyDispatcher = new undici.ProxyAgent(_proxyUrl);
+  } catch {
+    // undici not available — fetch will connect directly
+  }
+}
 
 // Re-export types and functions that tests import from this module
 export { parseApiEndpoint, type ApiEndpointMatch, type PolicyDecision };
@@ -39,6 +57,7 @@ export interface ParsedGhCommand {
     body?: string;
     base?: string;
     head?: string;
+    draft?: boolean;
     fields: Array<{ key: string; value: string }>;
   };
   /** The raw args to forward to real gh (everything after "gh"). */
@@ -70,6 +89,13 @@ const FLAGS_WITH_VALUES = new Set([
   '--field',
   '-F',
   '--raw-field',
+  '-H',
+  '--header',
+  '--jq',
+  '--template',
+  '-p',
+  '--preview',
+  '-t',
 ]);
 
 /** Flags whose presence implies a POST body. */
@@ -178,7 +204,10 @@ export function parseGhArgs(args: string[]): ParsedGhCommand {
   while (i < args.length) {
     const arg = args[i];
     if (arg.startsWith('-')) {
-      if (FLAGS_WITH_VALUES.has(arg) && i + 1 < args.length) {
+      if (arg === '--draft') {
+        result.flags.draft = true;
+        i++;
+      } else if (FLAGS_WITH_VALUES.has(arg) && i + 1 < args.length) {
         extractFlag(result, arg, args[i + 1]);
         i += 2;
       } else {
@@ -303,15 +332,7 @@ export function evaluatePolicy(parsed: ParsedGhCommand, policy: GitHubPolicy): P
 
 const PR_READ_ONLY = new Set(['view', 'list', 'status', 'checks', 'diff']);
 const PR_OWNED_ONLY = new Set(['edit', 'comment', 'ready', 'update-branch']);
-const PR_ALWAYS_DENY = new Set([
-  'checkout',
-  'close',
-  'merge',
-  'reopen',
-  'review',
-  'lock',
-  'unlock',
-]);
+const PR_ALWAYS_DENY = new Set(['checkout', 'close', 'reopen', 'lock', 'unlock']);
 
 function evaluatePrPolicy(
   subcommand: string | null,
@@ -319,6 +340,22 @@ function evaluatePrPolicy(
   policy: GitHubPolicy,
 ): PolicyDecision {
   if (!subcommand || subcommand === '--help') return { action: 'allow' };
+
+  // Explicit merge deny with clear message
+  if (subcommand === 'merge') {
+    return {
+      action: 'deny',
+      reason: 'Merging PRs is not allowed in this sandbox. The PR is ready for human review.',
+    };
+  }
+
+  // Review: allow requesting reviews (owned PR only), deny posting reviews
+  if (subcommand === 'review') {
+    return {
+      action: 'deny',
+      reason: 'Posting reviews is not allowed. Propose responses to the user instead.',
+    };
+  }
 
   if (PR_ALWAYS_DENY.has(subcommand)) {
     return { action: 'deny', reason: `'pr ${subcommand}' is not allowed` };
@@ -406,7 +443,7 @@ function evaluateReleasePolicy(subcommand: string | null): PolicyDecision {
 
 // --- Run Policy ---
 
-const RUN_READ_ONLY = new Set(['view', 'list']);
+const RUN_READ_ONLY = new Set(['view', 'list', 'watch']);
 
 function evaluateRunPolicy(subcommand: string | null): PolicyDecision {
   if (!subcommand || subcommand === '--help') return { action: 'allow' };
@@ -475,6 +512,26 @@ function evaluateApiPolicy(
   return { action: 'deny', reason: `API endpoint '${endpoint}' (${match.method}) is not allowed` };
 }
 
+// --- Token resolution ---
+
+/** Token file path inside the container, refreshed by the host. */
+const GH_TOKEN_FILE = '/etc/bouncer/gh-token';
+
+/**
+ * Resolve the GitHub token. Reads from the host-refreshed token file first
+ * (which stays fresh for long-running sessions), falls back to the GH_TOKEN
+ * env var (set at container creation, may expire).
+ */
+function resolveGhToken(): string | undefined {
+  try {
+    const fromFile = readFileSync(GH_TOKEN_FILE, 'utf-8').trim();
+    if (fromFile) return fromFile;
+  } catch {
+    // File doesn't exist or isn't readable — fall back to env
+  }
+  return process.env.GH_TOKEN || undefined;
+}
+
 // --- Direct API Mode (Phase 6) ---
 
 /**
@@ -487,9 +544,11 @@ async function executeViaApi(
   policy: GitHubPolicy,
   policyPath: string,
 ): Promise<void> {
-  const token = process.env.GH_TOKEN;
+  const token = resolveGhToken();
   if (!token) {
-    process.stderr.write('[bouncer:gh] error: GH_TOKEN is required for API mode\n');
+    process.stderr.write(
+      '[bouncer:gh] error: GH_TOKEN is required for API mode (no token file or env var)\n',
+    );
     process.exit(1);
   }
 
@@ -499,10 +558,16 @@ async function executeViaApi(
     await apiPrCreate(parsed, policy, policyPath, token, decision);
   } else if (command === 'pr' && subcommand === 'view') {
     await apiPrView(parsed, policy, token);
+  } else if (command === 'pr' && subcommand === 'ready') {
+    await apiPrReady(parsed, policy, token);
   } else if (command === 'pr' && subcommand === 'edit') {
     await apiPrEdit(parsed, policy, token);
   } else if (command === 'pr' && subcommand === 'list') {
-    await apiPrList(policy, token);
+    await apiPrList(parsed, policy, token);
+  } else if (command === 'pr' && subcommand === 'checks') {
+    await apiPrChecks(parsed, policy, token);
+  } else if (command === 'run' && (subcommand === 'view' || subcommand === 'list')) {
+    await apiRunViewOrList(parsed, policy, token);
   } else if (command === 'issue' && subcommand === 'list') {
     await apiIssueList(policy, token);
   } else if (command === 'issue' && subcommand === 'view') {
@@ -525,8 +590,12 @@ async function githubFetch(
   token: string,
   opts: { method?: string; body?: Record<string, unknown> } = {},
 ): Promise<unknown> {
-  const url = path.startsWith('http') ? path : `https://api.github.com${path}`;
-  const resp = await fetch(url, {
+  // Ensure leading slash for relative paths (gh CLI accepts both "repos/..." and "/repos/...")
+  const normalizedPath = path.startsWith('http') || path.startsWith('/') ? path : `/${path}`;
+  const url = normalizedPath.startsWith('http')
+    ? normalizedPath
+    : `https://api.github.com${normalizedPath}`;
+  const fetchOpts: RequestInit & { dispatcher?: unknown } = {
     method: opts.method ?? 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -535,7 +604,14 @@ async function githubFetch(
       ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  };
+  // Pass undici ProxyAgent as dispatcher so fetch() routes through the proxy.
+  // This is a Node.js-specific extension to the Fetch API.
+  if (_proxyDispatcher) {
+    fetchOpts.dispatcher = _proxyDispatcher;
+  }
+
+  const resp = await fetch(url, fetchOpts as RequestInit);
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -553,8 +629,24 @@ async function apiPrCreate(
   token: string,
   decision: PolicyDecision,
 ): Promise<void> {
+  // Auto-detect --head from the current git branch if not provided
   if (!parsed.flags.head) {
-    process.stderr.write('[bouncer:gh] error: --head is required for pr create\n');
+    try {
+      const branch = execFileSync('git', ['branch', '--show-current'], {
+        encoding: 'utf-8',
+      }).trim();
+      if (branch) {
+        parsed.flags.head = branch;
+        process.stderr.write(`[bouncer:gh] auto-detected --head=${branch}\n`);
+      }
+    } catch {
+      // git not available or not in a repo
+    }
+  }
+  if (!parsed.flags.head) {
+    process.stderr.write(
+      '[bouncer:gh] error: --head is required for pr create (could not auto-detect)\n',
+    );
     process.exit(1);
   }
 
@@ -563,9 +655,11 @@ async function apiPrCreate(
     body: parsed.flags.body ?? '',
     head: parsed.flags.head,
   };
-  // Only include base if explicitly provided — let GitHub default to the repo's default branch
   if (parsed.flags.base) {
     body.base = parsed.flags.base;
+  }
+  if (parsed.flags.draft) {
+    body.draft = true;
   }
 
   const data = (await githubFetch(`/repos/${policy.repo}/pulls`, token, {
@@ -597,8 +691,34 @@ async function apiPrView(
     process.stderr.write('[bouncer:gh] error: PR number required\n');
     process.exit(1);
   }
-  const data = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token);
-  process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const data = (await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token)) as Record<
+    string,
+    unknown
+  >;
+  // Summarize to key fields to avoid overwhelming the agent with verbose JSON
+  const reviewers = Array.isArray(data.requested_reviewers)
+    ? (data.requested_reviewers as Array<Record<string, unknown>>).map((r) => ({
+        login: r.login,
+        type: r.type,
+      }))
+    : [];
+  const summary = {
+    number: data.number,
+    title: data.title,
+    state: data.state,
+    draft: data.draft,
+    html_url: data.html_url,
+    head: {
+      ref: (data.head as Record<string, unknown>)?.ref,
+      sha: (data.head as Record<string, unknown>)?.sha,
+    },
+    base: { ref: (data.base as Record<string, unknown>)?.ref },
+    mergeable: data.mergeable,
+    mergeable_state: data.mergeable_state,
+    requested_reviewers: reviewers,
+    body: data.body,
+  };
+  process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
 }
 
 async function apiPrEdit(
@@ -622,8 +742,90 @@ async function apiPrEdit(
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 }
 
-async function apiPrList(policy: GitHubPolicy, token: string): Promise<void> {
-  const data = await githubFetch(`/repos/${policy.repo}/pulls`, token);
+async function apiPrReady(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write('[bouncer:gh] error: PR number required\n');
+    process.exit(1);
+  }
+  // GitHub REST API does NOT support changing draft status — must use GraphQL.
+  // First, get the PR's node_id from the REST API.
+  const pr = (await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token)) as Record<
+    string,
+    unknown
+  >;
+  const nodeId = pr.node_id as string;
+  if (!nodeId) {
+    process.stderr.write('[bouncer:gh] error: could not get PR node_id\n');
+    process.exit(1);
+  }
+
+  // Use GraphQL mutation to mark PR as ready for review
+  const mutation = `mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { number isDraft url } } }`;
+  const graphqlBody = { query: mutation, variables: { id: nodeId } };
+  const url = 'https://api.github.com/graphql';
+  const fetchOpts: RequestInit & { dispatcher?: unknown } = {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(graphqlBody),
+  };
+  if (_proxyDispatcher) {
+    fetchOpts.dispatcher = _proxyDispatcher;
+  }
+  const resp = await fetch(url, fetchOpts as RequestInit);
+  if (!resp.ok) {
+    const text = await resp.text();
+    process.stderr.write(`[bouncer:gh] GraphQL HTTP error: ${resp.status} ${text}\n`);
+    process.exit(1);
+  }
+  const result = (await resp.json()) as {
+    data?: {
+      markPullRequestReadyForReview?: {
+        pullRequest?: { number: number; isDraft: boolean; url: string };
+      };
+    };
+    errors?: Array<{ message: string }>;
+  };
+
+  if (result.errors?.length) {
+    process.stderr.write(
+      `[bouncer:gh] GraphQL error: ${result.errors.map((e) => e.message).join(', ')}\n`,
+    );
+    process.exit(1);
+  }
+
+  const resultPr = result.data?.markPullRequestReadyForReview?.pullRequest;
+  process.stderr.write(`[bouncer:gh] PR #${prNumber} marked as ready for review\n`);
+  process.stdout.write(
+    JSON.stringify(
+      {
+        number: resultPr?.number ?? prNumber,
+        draft: resultPr?.isDraft ?? false,
+        html_url: resultPr?.url ?? pr.html_url,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+}
+
+async function apiPrList(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const params = new URLSearchParams();
+  if (parsed.flags.head) params.set('head', `${policy.repo.split('/')[0]}:${parsed.flags.head}`);
+  if (parsed.flags.base) params.set('base', parsed.flags.base);
+  const qs = params.toString();
+  const data = await githubFetch(`/repos/${policy.repo}/pulls${qs ? `?${qs}` : ''}`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 }
 
@@ -644,6 +846,82 @@ async function apiIssueView(
   }
   const data = await githubFetch(`/repos/${policy.repo}/issues/${issueNumber}`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+}
+
+async function apiPrChecks(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write('[bouncer:gh] error: PR number required\n');
+    process.exit(1);
+  }
+  // Get the PR to find the head SHA
+  const pr = (await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token)) as {
+    head: { sha: string };
+  };
+  const data = (await githubFetch(
+    `/repos/${policy.repo}/commits/${pr.head.sha}/check-runs`,
+    token,
+  )) as { total_count: number; check_runs: Array<Record<string, unknown>> };
+  // Summarize check runs to just the essential fields
+  const summary = {
+    total_count: data.total_count,
+    check_runs: (data.check_runs ?? []).map((cr) => ({
+      name: cr.name,
+      status: cr.status,
+      conclusion: cr.conclusion,
+      html_url: cr.html_url,
+      started_at: cr.started_at,
+      completed_at: cr.completed_at,
+    })),
+  };
+  process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+}
+
+async function apiRunViewOrList(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const { subcommand } = parsed;
+  if (subcommand === 'list') {
+    const data = await githubFetch(`/repos/${policy.repo}/actions/runs`, token);
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+  // run view
+  const runId = parsed.positionalArgs[0];
+  if (!runId) {
+    process.stderr.write('[bouncer:gh] error: run ID required\n');
+    process.exit(1);
+  }
+  // Check if --log flag is present
+  const wantsLog = parsed.rawArgs.includes('--log');
+  if (wantsLog) {
+    // Download logs — this returns a redirect to a zip file.
+    const logUrl = `https://api.github.com/repos/${policy.repo}/actions/runs/${runId}/logs`;
+    const fetchOpts: RequestInit & { dispatcher?: unknown } = {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+      },
+      redirect: 'follow',
+    };
+    if (_proxyDispatcher) fetchOpts.dispatcher = _proxyDispatcher;
+    const resp = await fetch(logUrl, fetchOpts as RequestInit);
+    if (!resp.ok) {
+      process.stderr.write(`[bouncer:gh] API error: ${resp.status}\n`);
+      process.exit(1);
+    }
+    const body = Buffer.from(await resp.arrayBuffer());
+    process.stdout.write(body);
+  } else {
+    const data = await githubFetch(`/repos/${policy.repo}/actions/runs/${runId}`, token);
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  }
 }
 
 async function apiDirect(

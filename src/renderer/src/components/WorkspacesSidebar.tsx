@@ -136,11 +136,31 @@ function RepoGroup({
                   {ws.policyName}
                 </span>
               )}
-              {ws.githubRepo && (
-                <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
-                  {ws.ownedPrNumber != null ? `#${ws.ownedPrNumber}` : ''}
+              {ws.phase && (
+                <span className={`phase-badge phase-${ws.phase}`}>
+                  {ws.phase === 'implementing' ? 'Impl' : ws.phase === 'pr-open' ? 'PR' : 'Ready'}
                 </span>
               )}
+              {ws.prUrl ? (
+                <a
+                  className="github-badge pr-link"
+                  href={ws.prUrl}
+                  title={ws.prUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    window.open(ws.prUrl!, '_blank');
+                  }}
+                >
+                  #{ws.ownedPrNumber}
+                </a>
+              ) : ws.githubRepo && ws.ownedPrNumber != null ? (
+                <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
+                  #{ws.ownedPrNumber}
+                </span>
+              ) : null}
               {(violationCounts.get(ws.id) ?? 0) > 0 && (
                 <span className="violation-count">{violationCounts.get(ws.id)}</span>
               )}

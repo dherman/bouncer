@@ -404,6 +404,28 @@ body {
   background-color: #151110;
 }
 
+.chat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px;
+  border-bottom: 1px solid #2a2420;
+  flex-shrink: 0;
+}
+
+.copy-transcript-btn {
+  background: none;
+  border: 1px solid #3a3430;
+  color: #8b8580;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.copy-transcript-btn:hover {
+  background-color: #2a2420;
+  color: #c0b8b0;
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -582,17 +604,9 @@ body {
   font-weight: 600;
 }
 
-/* Streaming cursor: pseudo-element on the last text node */
-.step-content.streaming > :last-child::after,
-.step-content.streaming > p:last-of-type::after {
-  content: '|';
-  animation: blink 0.8s step-end infinite;
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
+/* Agent text: no text cursor (I-beam) on hover */
+.agent-text .step-content {
+  cursor: default;
 }
 
 /* Thinking indicator (video animation) */
@@ -976,6 +990,36 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: middle;
+}
+
+.pr-link {
+  color: #58a6ff;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pr-link:hover {
+  text-decoration: underline;
+}
+
+.phase-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.phase-implementing {
+  background-color: #2d333b;
+  color: #8b949e;
+}
+.phase-pr-open {
+  background-color: #1a3a2a;
+  color: #3fb950;
+}
+.phase-ready {
+  background-color: #1a2a3a;
+  color: #58a6ff;
 }
 
 /* Agent turn wrapper */

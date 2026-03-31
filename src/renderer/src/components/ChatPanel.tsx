@@ -106,14 +106,19 @@ function ToolRunGroup({
   toolCallIds,
   toolCalls,
   isStreaming,
+  followedByText,
 }: {
   toolCallIds: string[];
   toolCalls: ToolCallInfo[];
   isStreaming: boolean;
+  /** True when a non-empty text segment appears after this tool group. */
+  followedByText: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  // Track turn completion: once streaming transitions false, the turn is done.
+  // A group should collapse when either:
+  // 1. The turn is complete (streaming ended), or
+  // 2. The agent has moved on to a text segment after this group
   const [turnComplete, setTurnComplete] = useState(!isStreaming);
   const prevStreaming = useRef(isStreaming);
   useEffect(() => {
@@ -123,16 +128,18 @@ function ToolRunGroup({
     prevStreaming.current = isStreaming;
   }, [isStreaming]);
 
+  const shouldCollapse = turnComplete || followedByText;
+
   const resolved = toolCallIds
     .map((id) => toolCalls.find((t) => t.id === id))
     .filter(Boolean) as ToolCallInfo[];
   const failCount = resolved.filter((tc) => tc.status === 'failed').length;
 
-  // Before the turn is complete, or if user expanded: show all tool calls individually
-  if (!turnComplete || expanded) {
+  // Before collapse, or if user expanded: show all tool calls individually
+  if (!shouldCollapse || expanded) {
     return (
       <>
-        {turnComplete && (
+        {shouldCollapse && (
           <button type="button" className="tool-group-summary" onClick={() => setExpanded(false)}>
             <span className="tool-step-chevron">{'\u25BE'}</span>
             <span className="tool-group-summary-text">
@@ -150,7 +157,7 @@ function ToolRunGroup({
     );
   }
 
-  // Turn complete and collapsed: single summary line
+  // Collapsed: single summary line
   return (
     <button type="button" className="tool-group-summary" onClick={() => setExpanded(true)}>
       <span className="tool-step-chevron">{'\u25B8'}</span>
@@ -160,6 +167,57 @@ function ToolRunGroup({
       </span>
     </button>
   );
+}
+
+/** Format all messages as a plain text transcript for clipboard. */
+function formatTranscript(messages: Message[]): string {
+  const lines: string[] = [];
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      lines.push(msg.text);
+      lines.push('');
+      continue;
+    }
+    // Agent message: interleave text and tool calls using parts
+    const segments = msg.textSegments ?? [msg.text];
+    const parts: MessagePart[] = msg.parts ?? [{ type: 'text', index: 0 }];
+    const toolCalls = msg.toolCalls ?? [];
+
+    for (const part of parts) {
+      if (part.type === 'text') {
+        const text = (segments[part.index] ?? '').trim();
+        if (text) {
+          lines.push(text);
+          lines.push('');
+        }
+      } else {
+        const tc = toolCalls.find((t) => t.id === part.toolCallId);
+        if (tc) {
+          const desc = tc.description || tc.title || '';
+          lines.push(`**${tc.name}** ${desc}`);
+          const isBash = tc.name === 'Bash';
+          const command = isBash && tc.input?.command ? String(tc.input.command) : null;
+          if (command) {
+            lines.push('');
+            lines.push('```');
+            lines.push(command);
+            lines.push('```');
+          }
+          if (tc.output) {
+            lines.push('');
+            lines.push('<output>');
+            lines.push(tc.output);
+            lines.push('</output>');
+          } else if (command) {
+            lines.push('');
+            lines.push('(Bash completed with no output)');
+          }
+          lines.push('');
+        }
+      }
+    }
+  }
+  return lines.join('\n');
 }
 
 export function ChatPanel({
@@ -178,6 +236,7 @@ export function ChatPanel({
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastScrollTime = useRef(0);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   const isStreaming = messages.some((m) => m.streaming);
   const hasPendingMessage =
@@ -195,8 +254,33 @@ export function ChatPanel({
     bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
   }, [messages, streamTick, isStreaming]);
 
+  const handleCopyTranscript = () => {
+    const text = formatTranscript(messages);
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopyFeedback(true);
+        setTimeout(() => setCopyFeedback(false), 1500);
+      },
+      (err) => {
+        console.error('Failed to copy transcript:', err);
+      },
+    );
+  };
+
   return (
     <div className="chat-panel">
+      {messages.length > 0 && (
+        <div className="chat-toolbar">
+          <button
+            type="button"
+            className="copy-transcript-btn"
+            onClick={handleCopyTranscript}
+            title="Copy transcript to clipboard"
+          >
+            {copyFeedback ? 'Copied!' : 'Copy transcript'}
+          </button>
+        </div>
+      )}
       <div className="messages">
         {messages.length === 0 &&
           (sessionStatus === 'ready' || sessionStatus === 'initializing') && (
@@ -235,6 +319,23 @@ export function ChatPanel({
           const activeSegmentIsLast =
             lastGroup?.type === 'text' && lastGroup.part.index === activeSegmentIndex;
           const showTrailingThinking = isStreaming && !activeSegmentIsLast;
+
+          // Precompute which tool groups are followed by a non-empty text segment
+          const toolGroupFollowedByText = new Set<number>();
+          for (let gi = 0; gi < grouped.length; gi++) {
+            if (grouped[gi].type === 'tools') {
+              for (let gj = gi + 1; gj < grouped.length; gj++) {
+                const later = grouped[gj];
+                if (later.type === 'text') {
+                  const text = (segments[later.part.index] ?? '').replace(/^\n+/, '');
+                  if (text) {
+                    toolGroupFollowedByText.add(gi);
+                    break;
+                  }
+                }
+              }
+            }
+          }
 
           return (
             <div key={msg.id} className="agent-turn">
@@ -277,6 +378,7 @@ export function ChatPanel({
                     toolCallIds={group.toolCallIds}
                     toolCalls={msg.toolCalls ?? []}
                     isStreaming={!!isStreaming}
+                    followedByText={toolGroupFollowedByText.has(i)}
                   />
                 );
               })}
