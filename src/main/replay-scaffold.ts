@@ -1,6 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join, relative, isAbsolute } from "node:path";
-import type { ReplayToolCall } from "./types.js";
+import { mkdir, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, join, relative, isAbsolute } from 'node:path';
+import type { ReplayToolCall } from './types.js';
 
 export interface ScaffoldPlan {
   /** Relative path → file content */
@@ -18,16 +18,16 @@ function looksLikeFile(path: string): boolean {
   const ext = extname(base);
   // extname(".github") returns ".github" — the whole name is the "extension"
   // A real file extension means the name has content before the dot
-  return ext !== "" && base !== ext;
+  return ext !== '' && base !== ext;
 }
 
 /**
  * Returns true if the raw (pre-deanonymized) path should be skipped for scaffolding.
  */
 function shouldSkipPath(raw: string): boolean {
-  if (raw.includes("{project-name}")) return true;
-  if (raw.includes(".claude/")) return true;
-  if (raw.includes("{home}")) return true;
+  if (raw.includes('{project-name}')) return true;
+  if (raw.includes('.claude/')) return true;
+  if (raw.includes('{home}')) return true;
   return false;
 }
 
@@ -39,7 +39,7 @@ function toRelativePath(absPath: string, worktreePath: string): string | null {
   if (!isAbsolute(absPath)) return null;
   const rel = relative(worktreePath, absPath);
   // Reject paths outside the worktree (../ or absolute)
-  if (rel.startsWith("..") || isAbsolute(rel)) return null;
+  if (rel.startsWith('..') || isAbsolute(rel)) return null;
   return rel;
 }
 
@@ -69,16 +69,16 @@ export function buildScaffoldPlan(
     const rel = toRelativePath(abs, worktreePath);
     if (!rel) return;
 
-    if (content != null && content !== "// stub\n") {
+    if (content != null && content !== '// stub\n') {
       // Meaningful content (e.g. old_string from Edit) — append if file already has content
       const existing = files.get(rel);
-      if (existing && existing !== "// stub\n") {
-        files.set(rel, existing + "\n" + content);
+      if (existing && existing !== '// stub\n') {
+        files.set(rel, existing + '\n' + content);
       } else {
         files.set(rel, content);
       }
     } else if (!files.has(rel)) {
-      files.set(rel, "// stub\n");
+      files.set(rel, '// stub\n');
     }
   }
 
@@ -93,12 +93,12 @@ export function buildScaffoldPlan(
   for (const call of toolCalls) {
     const input = call.input;
     switch (call.tool) {
-      case "Read": {
+      case 'Read': {
         const filePath = input.file_path as string | undefined;
-        if (filePath) addFile(filePath, "// stub\n");
+        if (filePath) addFile(filePath, '// stub\n');
         break;
       }
-      case "Write": {
+      case 'Write': {
         const filePath = input.file_path as string | undefined;
         if (filePath) {
           // Only create parent directory — Write creates the file itself
@@ -107,42 +107,42 @@ export function buildScaffoldPlan(
             const rel = toRelativePath(abs, worktreePath);
             if (rel) {
               const dir = dirname(rel);
-              if (dir !== ".") directories.add(dir);
+              if (dir !== '.') directories.add(dir);
             }
           }
         }
         break;
       }
-      case "Edit": {
+      case 'Edit': {
         const filePath = input.file_path as string | undefined;
         if (filePath) {
           const oldString = input.old_string as string | undefined;
-          addFile(filePath, oldString ?? "// stub\n");
+          addFile(filePath, oldString ?? '// stub\n');
         }
         break;
       }
-      case "Grep": {
+      case 'Grep': {
         const path = input.path as string | undefined;
         if (path) {
           if (looksLikeFile(path)) {
-            addFile(path, "// stub\n");
+            addFile(path, '// stub\n');
           } else {
             addDirectory(path);
           }
         }
         break;
       }
-      case "Glob": {
+      case 'Glob': {
         const path = input.path as string | undefined;
         if (path) addDirectory(path);
         break;
       }
-      case "Bash": {
+      case 'Bash': {
         const command = input.command as string | undefined;
         if (command) {
           for (const raw of extractProjectPaths(command)) {
             if (looksLikeFile(raw)) {
-              addFile(raw, "// stub\n");
+              addFile(raw, '// stub\n');
             } else {
               addDirectory(raw);
             }
@@ -160,10 +160,7 @@ export function buildScaffoldPlan(
  * Apply a scaffold plan to a worktree directory.
  * Returns the number of files created.
  */
-export async function applyScaffold(
-  worktreePath: string,
-  plan: ScaffoldPlan,
-): Promise<number> {
+export async function applyScaffold(worktreePath: string, plan: ScaffoldPlan): Promise<number> {
   // Create directories first
   for (const dir of plan.directories) {
     await mkdir(join(worktreePath, dir), { recursive: true });
@@ -174,10 +171,10 @@ export async function applyScaffold(
     const absPath = join(worktreePath, relPath);
     await mkdir(dirname(absPath), { recursive: true });
     try {
-      await writeFile(absPath, content, { encoding: "utf-8", flag: "wx" });
+      await writeFile(absPath, content, { encoding: 'utf-8', flag: 'wx' });
       created++;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
       throw err;
     }
   }

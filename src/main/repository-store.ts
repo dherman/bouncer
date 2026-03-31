@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
-import { homedir } from "node:os";
-import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
-import { execFile as execFileCb } from "node:child_process";
-import { promisify } from "node:util";
-import type { AgentType, Repository } from "./types.js";
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises';
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+import type { AgentType, Repository } from './types.js';
 
 const execFile = promisify(execFileCb);
 
@@ -13,19 +13,19 @@ export class RepositoryStore {
   private configPath: string;
 
   constructor(configDir?: string) {
-    const dir = configDir ?? join(homedir(), ".config", "bouncer");
-    this.configPath = join(dir, "repositories.json");
+    const dir = configDir ?? join(homedir(), '.config', 'bouncer');
+    this.configPath = join(dir, 'repositories.json');
   }
 
   async load(): Promise<void> {
     try {
-      const raw = await readFile(this.configPath, "utf-8");
+      const raw = await readFile(this.configPath, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         this.repos = parsed;
       }
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         // First run — no config file yet
         this.repos = [];
       } else {
@@ -35,12 +35,12 @@ export class RepositoryStore {
   }
 
   private async save(): Promise<void> {
-    const dir = join(this.configPath, "..");
+    const dir = join(this.configPath, '..');
     await mkdir(dir, { recursive: true });
-    const json = JSON.stringify(this.repos, null, 2) + "\n";
+    const json = JSON.stringify(this.repos, null, 2) + '\n';
     // Atomic write: write to temp file then rename
-    const tmpPath = this.configPath + ".tmp";
-    await writeFile(tmpPath, json, "utf-8");
+    const tmpPath = this.configPath + '.tmp';
+    await writeFile(tmpPath, json, 'utf-8');
     await rename(tmpPath, this.configPath);
   }
 
@@ -55,7 +55,7 @@ export class RepositoryStore {
   async add(localPath: string): Promise<Repository> {
     // Validate: must be a git repo
     try {
-      await execFile("git", ["-C", localPath, "rev-parse", "--git-dir"]);
+      await execFile('git', ['-C', localPath, 'rev-parse', '--git-dir']);
     } catch {
       throw new Error(`Not a git repository: ${localPath}`);
     }
@@ -66,12 +66,12 @@ export class RepositoryStore {
     }
 
     // Auto-detect name from directory basename
-    const name = localPath.split("/").pop() ?? localPath;
+    const name = localPath.split('/').pop() ?? localPath;
 
     // Auto-detect GitHub repo from origin remote
     let githubRepo: string | null = null;
     try {
-      const { stdout } = await execFile("git", ["-C", localPath, "remote", "get-url", "origin"]);
+      const { stdout } = await execFile('git', ['-C', localPath, 'remote', 'get-url', 'origin']);
       githubRepo = parseGitHubRepo(stdout.trim());
     } catch {
       // No origin remote or not a GitHub repo — that's fine
@@ -82,8 +82,8 @@ export class RepositoryStore {
       name,
       localPath,
       githubRepo,
-      defaultPolicyId: "standard-pr",
-      defaultAgentType: "claude-code" as AgentType,
+      defaultPolicyId: 'standard-pr',
+      defaultAgentType: 'claude-code' as AgentType,
       createdAt: Date.now(),
     };
 
@@ -92,7 +92,7 @@ export class RepositoryStore {
     return repo;
   }
 
-  async update(id: string, changes: Partial<Omit<Repository, "id" | "createdAt">>): Promise<void> {
+  async update(id: string, changes: Partial<Omit<Repository, 'id' | 'createdAt'>>): Promise<void> {
     const idx = this.repos.findIndex((r) => r.id === id);
     if (idx < 0) {
       throw new Error(`Repository not found: ${id}`);
@@ -123,9 +123,9 @@ export function parseGitHubRepo(url: string): string | null {
   // HTTPS format: https://github.com/owner/repo.git
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === "github.com") {
-      const path = parsed.pathname.replace(/^\//, "").replace(/\.git$/, "");
-      if (path.includes("/")) return path;
+    if (parsed.hostname === 'github.com') {
+      const path = parsed.pathname.replace(/^\//, '').replace(/\.git$/, '');
+      if (path.includes('/')) return path;
     }
   } catch {
     // Not a valid URL

@@ -1,7 +1,7 @@
-import { join } from "node:path";
-import type { PolicyTemplate } from "./types.js";
-import { POLICY_DIR, BASE_ENV_PASSTHROUGH } from "./sandbox.js";
-import type { SandboxConfig } from "./sandbox.js";
+import { join } from 'node:path';
+import type { PolicyTemplate } from './types.js';
+import { POLICY_DIR, BASE_ENV_PASSTHROUGH } from './sandbox.js';
+import type { SandboxConfig } from './sandbox.js';
 
 export interface SessionContext {
   sessionId: string;
@@ -9,7 +9,6 @@ export interface SessionContext {
   gitCommonDir?: string;
   readOnlyDirs?: string[];
 }
-
 
 export function policyToSandboxConfig(
   template: PolicyTemplate,
@@ -19,7 +18,7 @@ export function policyToSandboxConfig(
   const readOnlyDirs: string[] = [...(ctx.readOnlyDirs ?? [])];
 
   // Worktree access mode
-  if (template.filesystem.worktreeAccess === "read-write") {
+  if (template.filesystem.worktreeAccess === 'read-write') {
     writableDirs.push(ctx.worktreePath);
   } else {
     readOnlyDirs.push(ctx.worktreePath);
@@ -27,7 +26,7 @@ export function policyToSandboxConfig(
 
   // Git common dir follows worktree access mode
   if (ctx.gitCommonDir) {
-    if (template.filesystem.worktreeAccess === "read-write") {
+    if (template.filesystem.worktreeAccess === 'read-write') {
       writableDirs.push(ctx.gitCommonDir);
     } else {
       readOnlyDirs.push(ctx.gitCommonDir);
@@ -60,7 +59,7 @@ export function policyToSandboxConfig(
   }
 
   if (profileParts.length > 0) {
-    appendProfileContent = "(version 1)\n" + profileParts.join("\n") + "\n";
+    appendProfileContent = '(version 1)\n' + profileParts.join('\n') + '\n';
   }
 
   return {

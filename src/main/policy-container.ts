@@ -3,8 +3,8 @@
  * Parallel to policy-sandbox.ts, which does the same for safehouse.
  */
 
-import type { PolicyTemplate } from "./types.js";
-import type { ContainerConfig, ContainerMount } from "./container.js";
+import type { PolicyTemplate } from './types.js';
+import type { ContainerConfig, ContainerMount } from './container.js';
 
 export interface ContainerSessionContext {
   sessionId: string;
@@ -39,7 +39,7 @@ export interface ContainerSessionContext {
  * credential helper configuration.
  */
 export function sanitizeGitconfig(content: string): string {
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   const result: string[] = [];
   let inCredentialSection = false;
 
@@ -62,7 +62,7 @@ export function sanitizeGitconfig(content: string): string {
 
     result.push(line);
   }
-  return result.join("\n");
+  return result.join('\n');
 }
 
 /**
@@ -113,20 +113,20 @@ export function generateGitconfig(opts: {
   proxyUrl?: string;
 }): string {
   const lines: string[] = [];
-  lines.push("[core]");
+  lines.push('[core]');
   lines.push(`    hooksPath = ${opts.hooksPath}`);
   lines.push(`[credential "https://github.com"]`);
   lines.push(`    helper = !node ${opts.credentialHelperPath}`);
   if (opts.userName || opts.userEmail) {
-    lines.push("[user]");
+    lines.push('[user]');
     if (opts.userName) lines.push(`    name = ${opts.userName}`);
     if (opts.userEmail) lines.push(`    email = ${opts.userEmail}`);
   }
   if (opts.proxyUrl) {
-    lines.push("[http]");
+    lines.push('[http]');
     lines.push(`    proxy = ${opts.proxyUrl}`);
   }
-  return lines.join("\n") + "\n";
+  return lines.join('\n') + '\n';
 }
 
 /**
@@ -141,14 +141,14 @@ export function policyToContainerConfig(
   command: string[],
 ): ContainerConfig {
   const mounts: ContainerMount[] = [];
-  const isReadOnly = template.filesystem.worktreeAccess === "read-only";
+  const isReadOnly = template.filesystem.worktreeAccess === 'read-only';
 
   // --- Standard mounts (always present) ---
 
   // Worktree → /workspace
   mounts.push({
     hostPath: ctx.worktreePath,
-    containerPath: "/workspace",
+    containerPath: '/workspace',
     readOnly: isReadOnly,
   });
 
@@ -167,7 +167,7 @@ export function policyToContainerConfig(
   // Not read-only because Docker needs to create the node_modules mountpoint inside it.
   mounts.push({
     hostPath: ctx.agentBinPath,
-    containerPath: "/usr/local/lib/agent",
+    containerPath: '/usr/local/lib/agent',
     readOnly: false,
   });
 
@@ -176,7 +176,7 @@ export function policyToContainerConfig(
   // finds dependencies by walking up from the agent's package.json.
   mounts.push({
     hostPath: ctx.nodeModulesPath,
-    containerPath: "/usr/local/lib/agent/node_modules",
+    containerPath: '/usr/local/lib/agent/node_modules',
     readOnly: true,
   });
 
@@ -186,7 +186,7 @@ export function policyToContainerConfig(
     if (ctx.hooksDir) {
       mounts.push({
         hostPath: ctx.hooksDir,
-        containerPath: "/etc/bouncer/hooks",
+        containerPath: '/etc/bouncer/hooks',
         readOnly: true,
       });
     }
@@ -194,7 +194,7 @@ export function policyToContainerConfig(
     if (ctx.allowedRefsPath) {
       mounts.push({
         hostPath: ctx.allowedRefsPath,
-        containerPath: "/etc/bouncer/allowed-refs.txt",
+        containerPath: '/etc/bouncer/allowed-refs.txt',
         readOnly: true,
       });
     }
@@ -202,7 +202,7 @@ export function policyToContainerConfig(
     if (ctx.shimScriptPath) {
       mounts.push({
         hostPath: ctx.shimScriptPath,
-        containerPath: "/usr/local/bin/gh",
+        containerPath: '/usr/local/bin/gh',
         readOnly: true,
       });
     }
@@ -210,7 +210,7 @@ export function policyToContainerConfig(
     if (ctx.shimBundlePath) {
       mounts.push({
         hostPath: ctx.shimBundlePath,
-        containerPath: "/usr/local/lib/bouncer/gh-shim.js",
+        containerPath: '/usr/local/lib/bouncer/gh-shim.js',
         readOnly: true,
       });
     }
@@ -219,7 +219,7 @@ export function policyToContainerConfig(
       // Policy state is rw — the gh shim updates it (e.g. PR capture)
       mounts.push({
         hostPath: ctx.policyStatePath,
-        containerPath: "/etc/bouncer/github-policy.json",
+        containerPath: '/etc/bouncer/github-policy.json',
         readOnly: false,
       });
     }
@@ -227,7 +227,7 @@ export function policyToContainerConfig(
     if (ctx.gitconfigPath) {
       mounts.push({
         hostPath: ctx.gitconfigPath,
-        containerPath: "/etc/gitconfig",
+        containerPath: '/etc/gitconfig',
         readOnly: true,
       });
     }
@@ -235,7 +235,7 @@ export function policyToContainerConfig(
     if (ctx.credentialHelperPath) {
       mounts.push({
         hostPath: ctx.credentialHelperPath,
-        containerPath: "/usr/local/lib/bouncer/gh-credential-helper.js",
+        containerPath: '/usr/local/lib/bouncer/gh-credential-helper.js',
         readOnly: true,
       });
     }
@@ -249,7 +249,7 @@ export function policyToContainerConfig(
   if (ctx.userGitconfigPath) {
     mounts.push({
       hostPath: ctx.userGitconfigPath,
-      containerPath: "/home/agent/.gitconfig",
+      containerPath: '/home/agent/.gitconfig',
       readOnly: true,
     });
   }
@@ -257,9 +257,11 @@ export function policyToContainerConfig(
   // Claude Code config/state — the CLI reads and writes session state here.
   // The base image already has the claude binary; we only mount config dirs.
   if (ctx.claudeConfigDir) {
-    mounts.push(
-      { hostPath: ctx.claudeConfigDir, containerPath: "/home/agent/.claude", readOnly: false },
-    );
+    mounts.push({
+      hostPath: ctx.claudeConfigDir,
+      containerPath: '/home/agent/.claude',
+      readOnly: false,
+    });
   }
 
   // Credentials file extracted from macOS keychain — mounted into .claude dir
@@ -267,7 +269,7 @@ export function policyToContainerConfig(
   if (ctx.claudeCredentialsPath) {
     mounts.push({
       hostPath: ctx.claudeCredentialsPath,
-      containerPath: "/home/agent/.claude/.credentials.json",
+      containerPath: '/home/agent/.claude/.credentials.json',
       readOnly: true,
     });
   }
@@ -275,7 +277,7 @@ export function policyToContainerConfig(
   if (ctx.sshDir) {
     mounts.push({
       hostPath: ctx.sshDir,
-      containerPath: "/home/agent/.ssh",
+      containerPath: '/home/agent/.ssh',
       readOnly: true,
     });
   }
@@ -285,7 +287,7 @@ export function policyToContainerConfig(
   if (ctx.caCertPath) {
     mounts.push({
       hostPath: ctx.caCertPath,
-      containerPath: "/usr/local/share/ca-certificates/bouncer/bouncer-ca.crt",
+      containerPath: '/usr/local/share/ca-certificates/bouncer/bouncer-ca.crt',
       readOnly: true,
     });
   }
@@ -301,23 +303,23 @@ export function policyToContainerConfig(
   // --- Build env ---
 
   const containerEnv: Record<string, string> = {
-    NODE_PATH: "/usr/local/lib/agent/node_modules",
+    NODE_PATH: '/usr/local/lib/agent/node_modules',
     ...env,
   };
 
   if (template.github && ctx.policyStatePath) {
-    containerEnv.BOUNCER_GITHUB_POLICY = "/etc/bouncer/github-policy.json";
+    containerEnv.BOUNCER_GITHUB_POLICY = '/etc/bouncer/github-policy.json';
   }
 
   // --- Network mode ---
 
-  const networkMode = template.container?.networkMode ?? "bridge";
+  const networkMode = template.container?.networkMode ?? 'bridge';
 
   return {
     sessionId: ctx.sessionId,
     image: template.container?.image ?? imageTag,
     command,
-    workdir: "/workspace",
+    workdir: '/workspace',
     mounts,
     env: containerEnv,
     networkMode,

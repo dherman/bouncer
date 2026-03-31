@@ -16,12 +16,12 @@ Tested OrbStack bind-mount performance for a representative Node.js project to v
 
 ## Results
 
-| Operation | Native (ms) | OrbStack Bind Mount (ms) | Ratio |
-|---|---|---|---|
-| `git status` | 44 | 7 | 0.16x (faster) |
-| `find . -type f` (6,578 files) | 41 | 63 | 1.5x |
-| `find node_modules` (4,599 files) | 23 | 31 | 1.3x |
-| `tsc --noEmit` | 410 | 173 | 0.4x (faster) |
+| Operation                         | Native (ms) | OrbStack Bind Mount (ms) | Ratio          |
+| --------------------------------- | ----------- | ------------------------ | -------------- |
+| `git status`                      | 44          | 7                        | 0.16x (faster) |
+| `find . -type f` (6,578 files)    | 41          | 63                       | 1.5x           |
+| `find node_modules` (4,599 files) | 23          | 31                       | 1.3x           |
+| `tsc --noEmit`                    | 410         | 173                      | 0.4x (faster)  |
 
 ## Analysis
 

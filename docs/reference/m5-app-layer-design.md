@@ -10,15 +10,15 @@ OS-level sandboxes (Seatbelt, containers) enforce filesystem and network boundar
 
 The capability envelope for a PR session:
 
-| Capability | Access Level | Enforcement Layer |
-|---|---|---|
-| Worktree filesystem | Full read-write | OS sandbox (existing) |
-| Git: commit, branch, push to session branch | Allow | Git hooks (M5) |
-| Git: push to main/master | Deny | Git hooks (M5), network proxy (M7) |
-| `gh pr create/edit` for session's PR | Allow | `gh` shim (M5), network proxy (M7) |
-| `gh pr view`, `gh issue list/view`, repo reads | Allow (read-only) | `gh` shim (M5), network proxy (M7) |
-| `gh pr merge/close` for other PRs | Deny | `gh` shim (M5), network proxy (M7) |
-| Network: github.com, npm registry, etc. | Allowlisted domains | Network proxy (M7) |
+| Capability                                     | Access Level        | Enforcement Layer                  |
+| ---------------------------------------------- | ------------------- | ---------------------------------- |
+| Worktree filesystem                            | Full read-write     | OS sandbox (existing)              |
+| Git: commit, branch, push to session branch    | Allow               | Git hooks (M5)                     |
+| Git: push to main/master                       | Deny                | Git hooks (M5), network proxy (M7) |
+| `gh pr create/edit` for session's PR           | Allow               | `gh` shim (M5), network proxy (M7) |
+| `gh pr view`, `gh issue list/view`, repo reads | Allow (read-only)   | `gh` shim (M5), network proxy (M7) |
+| `gh pr merge/close` for other PRs              | Deny                | `gh` shim (M5), network proxy (M7) |
+| Network: github.com, npm registry, etc.        | Allowlisted domains | Network proxy (M7)                 |
 
 **Policy is static per session** — the PR identity (repo, branch, PR number) is known at session start. Dynamic policy (e.g., agent spawns sub-sessions) is deferred.
 
@@ -90,13 +90,13 @@ Each layer addresses a different part of the threat model. Each milestone makes 
 
 ### Role evolution across milestones
 
-| Mechanism | M5 Role | M6 Role | M7 Role |
-|---|---|---|---|
-| `gh` shim | Security (best-effort) | Security (stronger) | UX + fast-reject |
-| Git hooks | Security (best-effort) | Security (stronger, read-only) | UX |
-| Container | N/A | Filesystem isolation | Filesystem + network routing |
-| Network proxy | N/A | N/A | **Authoritative security** |
-| ACP | Observability | Observability | Observability |
+| Mechanism     | M5 Role                | M6 Role                        | M7 Role                      |
+| ------------- | ---------------------- | ------------------------------ | ---------------------------- |
+| `gh` shim     | Security (best-effort) | Security (stronger)            | UX + fast-reject             |
+| Git hooks     | Security (best-effort) | Security (stronger, read-only) | UX                           |
+| Container     | N/A                    | Filesystem isolation           | Filesystem + network routing |
+| Network proxy | N/A                    | N/A                            | **Authoritative security**   |
+| ACP           | Observability          | Observability                  | Observability                |
 
 ## Key Design Decisions
 
@@ -112,11 +112,11 @@ Each layer addresses a different part of the threat model. Each milestone makes 
 
 Git hooks are inherently bypassable (agent can `--no-verify`, unset `core.hooksPath`, or delete hook files). Mitigation options in containers:
 
-| Approach | Prevents deletion | Prevents config override | Prevents `--no-verify` |
-|---|---|---|---|
-| Read-only hook mount | Yes | No | No |
-| Read-only system gitconfig | Yes | Partially (can override at local level) | No |
-| Read-only `.git/config` | Yes | Yes | No (but breaks normal git ops) |
-| Network proxy | N/A | N/A | Yes (enforcement is external) |
+| Approach                   | Prevents deletion | Prevents config override                | Prevents `--no-verify`         |
+| -------------------------- | ----------------- | --------------------------------------- | ------------------------------ |
+| Read-only hook mount       | Yes               | No                                      | No                             |
+| Read-only system gitconfig | Yes               | Partially (can override at local level) | No                             |
+| Read-only `.git/config`    | Yes               | Yes                                     | No (but breaks normal git ops) |
+| Network proxy              | N/A               | N/A                                     | Yes (enforcement is external)  |
 
 **Conclusion**: Only the network proxy (M7) fully closes the git hook bypass gap. In M5-M6, git hooks are a guardrail, not a boundary.

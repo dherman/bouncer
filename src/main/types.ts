@@ -1,4 +1,4 @@
-export type AgentType = "echo" | "claude-code" | "replay";
+export type AgentType = 'echo' | 'claude-code' | 'replay';
 
 // --- Repository Types (M8) ---
 
@@ -12,13 +12,11 @@ export interface Repository {
   createdAt: number;
 }
 
-export type MessagePart =
-  | { type: "text"; index: number }
-  | { type: "tool"; toolCallId: string };
+export type MessagePart = { type: 'text'; index: number } | { type: 'tool'; toolCallId: string };
 
 export interface Message {
   id: string;
-  role: "user" | "agent";
+  role: 'user' | 'agent';
   text: string;
   timestamp: number;
   streaming?: boolean;
@@ -30,19 +28,19 @@ export interface Message {
 export interface ToolCallInfo {
   id: string;
   name: string;
-  status: "pending" | "in_progress" | "completed" | "failed";
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
   title?: string;
   description?: string;
   input?: Record<string, unknown>;
   output?: string;
 }
 
-export type SandboxBackend = "safehouse" | "container" | "none";
+export type SandboxBackend = 'safehouse' | 'container' | 'none';
 
 export interface WorkspaceSummary {
   id: string;
   repositoryId: string | null;
-  status: "initializing" | "ready" | "error" | "closed";
+  status: 'initializing' | 'ready' | 'error' | 'closed';
   messageCount: number;
   agentType: AgentType;
   projectDir: string;
@@ -53,7 +51,7 @@ export interface WorkspaceSummary {
   policyName: string | null;
   githubRepo: string | null;
   ownedPrNumber: number | null;
-  networkAccess: "full" | "none" | "filtered" | null;
+  networkAccess: 'full' | 'none' | 'filtered' | null;
 }
 
 // --- GitHub Application-Layer Policy Types (M5) ---
@@ -69,9 +67,9 @@ export interface GitHubPolicy {
 /** Logged when the gh shim, git hook, or proxy allows/denies an operation. */
 export interface PolicyEvent {
   timestamp: number;
-  tool: "gh" | "git" | "proxy";
+  tool: 'gh' | 'git' | 'proxy';
   operation: string;
-  decision: "allow" | "deny";
+  decision: 'allow' | 'deny';
   reason?: string;
 }
 
@@ -80,7 +78,7 @@ export interface PolicyEvent {
 export interface ContainerPolicy {
   image?: string;
   additionalMounts?: Array<{ hostPath: string; containerPath: string; readOnly: boolean }>;
-  networkMode?: "none" | "bridge" | "proxy";
+  networkMode?: 'none' | 'bridge' | 'proxy';
 }
 
 export interface PolicyTemplate {
@@ -97,15 +95,15 @@ export interface PolicyTemplate {
 }
 
 export interface FilesystemPolicy {
-  worktreeAccess: "read-write" | "read-only";
+  worktreeAccess: 'read-write' | 'read-only';
   additionalWritableDirs: string[];
   additionalReadOnlyDirs: string[];
 }
 
 export type NetworkPolicy =
-  | { access: "full" }
-  | { access: "none" }
-  | { access: "filtered"; allowedDomains: string[]; inspectedDomains: string[] };
+  | { access: 'full' }
+  | { access: 'none' }
+  | { access: 'filtered'; allowedDomains: string[]; inspectedDomains: string[] };
 
 export interface EnvPolicy {
   additional: string[];
@@ -137,16 +135,35 @@ export interface ReplayToolCall {
 export interface ReplayResult {
   id: number;
   tool: string;
-  replay_outcome: "allowed" | "blocked" | "skipped" | "error";
+  replay_outcome: 'allowed' | 'blocked' | 'skipped' | 'error';
   error_message?: string;
   original_outcome: string;
 }
 
 export type WorkspaceUpdate =
-  | { workspaceId: string; type: "status-change"; status: WorkspaceSummary["status"]; error?: string; errorKind?: "auth"; summary?: WorkspaceSummary }
-  | { workspaceId: string; type: "message"; message: Message }
-  | { workspaceId: string; type: "stream-chunk"; messageId: string; text: string; segmentIndex: number }
-  | { workspaceId: string; type: "stream-end"; messageId: string; textSegments: string[]; parts: MessagePart[] }
-  | { workspaceId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
-  | { workspaceId: string; type: "sandbox-violation"; violation: SandboxViolationInfo }
-  | { workspaceId: string; type: "policy-event"; event: PolicyEvent };
+  | {
+      workspaceId: string;
+      type: 'status-change';
+      status: WorkspaceSummary['status'];
+      error?: string;
+      errorKind?: 'auth';
+      summary?: WorkspaceSummary;
+    }
+  | { workspaceId: string; type: 'message'; message: Message }
+  | {
+      workspaceId: string;
+      type: 'stream-chunk';
+      messageId: string;
+      text: string;
+      segmentIndex: number;
+    }
+  | {
+      workspaceId: string;
+      type: 'stream-end';
+      messageId: string;
+      textSegments: string[];
+      parts: MessagePart[];
+    }
+  | { workspaceId: string; type: 'tool-call'; messageId: string; toolCall: ToolCallInfo }
+  | { workspaceId: string; type: 'sandbox-violation'; violation: SandboxViolationInfo }
+  | { workspaceId: string; type: 'policy-event'; event: PolicyEvent };
