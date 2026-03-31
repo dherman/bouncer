@@ -14,14 +14,14 @@
  * the parsed input has host=github.com and protocol=https.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync } from 'node:fs';
 
 /** Token file path inside the container, refreshed by the host. */
-const GH_TOKEN_FILE = "/etc/bouncer/gh-token";
+const GH_TOKEN_FILE = '/etc/bouncer/gh-token';
 
 function resolveGhToken(): string | undefined {
   try {
-    const fromFile = readFileSync(GH_TOKEN_FILE, "utf-8").trim();
+    const fromFile = readFileSync(GH_TOKEN_FILE, 'utf-8').trim();
     if (fromFile) return fromFile;
   } catch {
     // File doesn't exist — fall back to env
@@ -31,17 +31,19 @@ function resolveGhToken(): string | undefined {
 
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
-    let data = "";
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk: string) => { data += chunk; });
-    process.stdin.on("end", () => resolve(data));
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', (chunk: string) => {
+      data += chunk;
+    });
+    process.stdin.on('end', () => resolve(data));
   });
 }
 
 function parseCredentialInput(input: string): Record<string, string> {
   const kv: Record<string, string> = {};
   for (const line of input.split(/\r?\n/)) {
-    const idx = line.indexOf("=");
+    const idx = line.indexOf('=');
     if (idx === -1) continue;
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
@@ -52,7 +54,7 @@ function parseCredentialInput(input: string): Record<string, string> {
 
 async function main(): Promise<void> {
   // Only respond to "get" requests
-  if (process.argv[2] !== "get") {
+  if (process.argv[2] !== 'get') {
     process.exit(0);
   }
 
@@ -60,17 +62,17 @@ async function main(): Promise<void> {
   const kv = parseCredentialInput(input);
 
   // Exact host match — prevent github.com.evil.com from matching
-  if (kv["host"] !== "github.com") {
+  if (kv['host'] !== 'github.com') {
     process.exit(0);
   }
-  if (kv["protocol"] && kv["protocol"] !== "https") {
+  if (kv['protocol'] && kv['protocol'] !== 'https') {
     process.exit(0);
   }
 
   const token = resolveGhToken();
   if (!token) {
     // Exit 0 with no output so git can fall back to other helpers
-    process.stderr.write("gh-credential-helper: no token available (file or GH_TOKEN)\n");
+    process.stderr.write('gh-credential-helper: no token available (file or GH_TOKEN)\n');
     process.exit(0);
   }
 

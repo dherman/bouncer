@@ -1,6 +1,6 @@
-import { join } from "node:path";
-import { homedir } from "node:os";
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 
 interface Preferences {
   focusedRepoId?: string;
@@ -11,16 +11,16 @@ export class PreferencesStore {
   private configPath: string;
 
   constructor(configDir?: string) {
-    const dir = configDir ?? join(homedir(), ".config", "bouncer");
-    this.configPath = join(dir, "preferences.json");
+    const dir = configDir ?? join(homedir(), '.config', 'bouncer');
+    this.configPath = join(dir, 'preferences.json');
   }
 
   async load(): Promise<void> {
     try {
-      const raw = await readFile(this.configPath, "utf-8");
+      const raw = await readFile(this.configPath, 'utf-8');
       this.prefs = JSON.parse(raw);
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         this.prefs = {};
       } else {
         throw err;
@@ -29,11 +29,11 @@ export class PreferencesStore {
   }
 
   private async save(): Promise<void> {
-    const dir = join(this.configPath, "..");
+    const dir = join(this.configPath, '..');
     await mkdir(dir, { recursive: true });
-    const json = JSON.stringify(this.prefs, null, 2) + "\n";
-    const tmpPath = this.configPath + ".tmp";
-    await writeFile(tmpPath, json, "utf-8");
+    const json = JSON.stringify(this.prefs, null, 2) + '\n';
+    const tmpPath = this.configPath + '.tmp';
+    await writeFile(tmpPath, json, 'utf-8');
     await rename(tmpPath, this.configPath);
   }
 

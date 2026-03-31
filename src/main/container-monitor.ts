@@ -7,10 +7,10 @@
  * parsing and don't need a separate monitor.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { EventEmitter } from "node:events";
-import { createInterface, type Interface as ReadlineInterface } from "node:readline";
-import type { SandboxMonitorEvents } from "./sandbox-monitor.js";
+import { spawn, type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
+import type { SandboxMonitorEvents } from './sandbox-monitor.js';
 
 export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
   private dockerProcess: ChildProcess | null = null;
@@ -24,25 +24,21 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
     this.stop();
 
     this.dockerProcess = spawn(
-      "docker",
-      [
-        "events",
-        "--filter", `container=${containerName}`,
-        "--format", "{{json .}}",
-      ],
-      { stdio: ["ignore", "pipe", "ignore"] },
+      'docker',
+      ['events', '--filter', `container=${containerName}`, '--format', '{{json .}}'],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
     );
 
     this.rl = createInterface({ input: this.dockerProcess.stdout! });
-    this.rl.on("line", (line) => {
+    this.rl.on('line', (line) => {
       this.parseEvent(line, containerName);
     });
 
-    this.dockerProcess.on("error", (err) => {
+    this.dockerProcess.on('error', (err) => {
       console.warn(`[container-monitor] docker events error: ${err.message}`);
     });
 
-    this.dockerProcess.on("exit", (code) => {
+    this.dockerProcess.on('exit', (code) => {
       if (code !== null && code !== 0) {
         console.warn(`[container-monitor] docker events exited with code ${code}`);
       }
@@ -70,29 +66,27 @@ export class ContainerMonitor extends EventEmitter<SandboxMonitorEvents> {
         Actor?: { Attributes?: Record<string, string> };
       };
 
-      const action = event.Action ?? event.status ?? "";
+      const action = event.Action ?? event.status ?? '';
       // Use event timestamp from Docker when available
-      const timestamp = event.time
-        ? new Date(event.time * 1000)
-        : new Date();
+      const timestamp = event.time ? new Date(event.time * 1000) : new Date();
 
       // OOM kill
-      if (action === "oom") {
-        this.emit("violation", {
+      if (action === 'oom') {
+        this.emit('violation', {
           timestamp,
           pid: 0,
           processName: containerName,
-          operation: "oom-kill",
+          operation: 'oom-kill',
           path: undefined,
           raw: line,
         });
       }
 
       // Unexpected die (non-zero exit)
-      if (action === "die") {
+      if (action === 'die') {
         const exitCode = event.Actor?.Attributes?.exitCode;
-        if (exitCode && exitCode !== "0") {
-          this.emit("violation", {
+        if (exitCode && exitCode !== '0') {
+          this.emit('violation', {
             timestamp,
             pid: 0,
             processName: containerName,

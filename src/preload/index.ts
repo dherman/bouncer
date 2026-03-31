@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('bouncer', {
   repositories: {
@@ -10,14 +10,11 @@ contextBridge.exposeInMainWorld('bouncer', {
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),
-    create: (repositoryId: string) =>
-      ipcRenderer.invoke('workspaces:create', repositoryId),
-    getMessages: (workspaceId: string) =>
-      ipcRenderer.invoke('workspaces:getMessages', workspaceId),
+    create: (repositoryId: string) => ipcRenderer.invoke('workspaces:create', repositoryId),
+    getMessages: (workspaceId: string) => ipcRenderer.invoke('workspaces:getMessages', workspaceId),
     sendMessage: (workspaceId: string, text: string) =>
       ipcRenderer.invoke('workspaces:sendMessage', workspaceId, text),
-    close: (workspaceId: string) =>
-      ipcRenderer.invoke('workspaces:close', workspaceId),
+    close: (workspaceId: string) => ipcRenderer.invoke('workspaces:close', workspaceId),
     refreshCredentials: (workspaceId: string) =>
       ipcRenderer.invoke('workspaces:refreshCredentials', workspaceId),
     getSandboxViolations: (workspaceId: string) =>
@@ -26,9 +23,9 @@ contextBridge.exposeInMainWorld('bouncer', {
       ipcRenderer.invoke('workspaces:loadReplayData', datasetSessionId),
     onUpdate: (callback: (update: unknown) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, update: unknown): void =>
-        callback(update)
-      ipcRenderer.on('workspace-update', handler)
-      return () => ipcRenderer.removeListener('workspace-update', handler)
+        callback(update);
+      ipcRenderer.on('workspace-update', handler);
+      return () => ipcRenderer.removeListener('workspace-update', handler);
     },
   },
   preferences: {
@@ -41,4 +38,4 @@ contextBridge.exposeInMainWorld('bouncer', {
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
   },
-})
+});

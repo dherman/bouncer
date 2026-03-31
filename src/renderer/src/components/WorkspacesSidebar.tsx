@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import type { Repository, WorkspaceSummary } from '../../../main/types'
-import branchIcon from '../assets/icon-branch.png'
-import newFolderIcon from '../assets/icon-new-folder.png'
-import newFolderHoverIcon from '../assets/icon-new-folder-hover.png'
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { Repository, WorkspaceSummary } from '../../../main/types';
+import branchIcon from '../assets/icon-branch.png';
+import newFolderIcon from '../assets/icon-new-folder.png';
+import newFolderHoverIcon from '../assets/icon-new-folder-hover.png';
 
 function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
-  const [hovered, setHovered] = useState(false)
+  const [hovered, setHovered] = useState(false);
   return (
     <button
       type="button"
@@ -15,33 +15,37 @@ function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <img src={hovered ? newFolderHoverIcon : newFolderIcon} alt="Add repository" className="add-repo-icon" />
+      <img
+        src={hovered ? newFolderHoverIcon : newFolderIcon}
+        alt="Add repository"
+        className="add-repo-icon"
+      />
     </button>
-  )
+  );
 }
 
 interface Props {
-  repos: Repository[]
-  workspaces: WorkspaceSummary[]
-  activeWorkspaceId: string | null
-  focusedRepoId: string | null
-  violationCounts: Map<string, number>
-  policyDescriptions: Map<string, string>
-  onSelectWorkspace: (id: string) => void
-  onCreateWorkspace: (repositoryId: string) => void
-  onCloseWorkspace: (id: string) => void
-  onAddRepo: () => void
-  onRemoveRepo: (id: string) => void
-  onUpdateRepo: (id: string, changes: Partial<Repository>) => void
-  onOpenRepoSettings: (repoId: string) => void
-  style?: CSSProperties
+  repos: Repository[];
+  workspaces: WorkspaceSummary[];
+  activeWorkspaceId: string | null;
+  focusedRepoId: string | null;
+  violationCounts: Map<string, number>;
+  policyDescriptions: Map<string, string>;
+  onSelectWorkspace: (id: string) => void;
+  onCreateWorkspace: (repositoryId: string) => void;
+  onCloseWorkspace: (id: string) => void;
+  onAddRepo: () => void;
+  onRemoveRepo: (id: string) => void;
+  onUpdateRepo: (id: string, changes: Partial<Repository>) => void;
+  onOpenRepoSettings: (repoId: string) => void;
+  style?: CSSProperties;
 }
 
 function workspaceLabel(ws: WorkspaceSummary): string {
   if (ws.projectDir) {
-    return ws.projectDir.split('/').pop() ?? ws.id.slice(0, 8)
+    return ws.projectDir.split('/').pop() ?? ws.id.slice(0, 8);
   }
-  return ws.id.slice(0, 8)
+  return ws.id.slice(0, 8);
 }
 
 function RepoGroup({
@@ -57,32 +61,32 @@ function RepoGroup({
   onRemoveRepo,
   onOpenSettings,
 }: {
-  repo: Repository
-  workspaces: WorkspaceSummary[]
-  activeWorkspaceId: string | null
-  isFocused: boolean
-  violationCounts: Map<string, number>
-  policyDescriptions: Map<string, string>
-  onSelectWorkspace: (id: string) => void
-  onCreateWorkspace: (repositoryId: string) => void
-  onCloseWorkspace: (id: string) => void
-  onRemoveRepo: (id: string) => void
-  onOpenSettings: (repoId: string) => void
+  repo: Repository;
+  workspaces: WorkspaceSummary[];
+  activeWorkspaceId: string | null;
+  isFocused: boolean;
+  violationCounts: Map<string, number>;
+  policyDescriptions: Map<string, string>;
+  onSelectWorkspace: (id: string) => void;
+  onCreateWorkspace: (repositoryId: string) => void;
+  onCloseWorkspace: (id: string) => void;
+  onRemoveRepo: (id: string) => void;
+  onOpenSettings: (repoId: string) => void;
 }) {
-  const hasActive = workspaces.some((w) => w.status !== 'closed')
-  const [expanded, setExpanded] = useState(true)
-  const [showContextMenu, setShowContextMenu] = useState(false)
-  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
+  const hasActive = workspaces.some((w) => w.status !== 'closed');
+  const [expanded, setExpanded] = useState(true);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
 
   // Auto-expand when active workspaces appear
   useEffect(() => {
-    if (hasActive) setExpanded(true)
-  }, [hasActive])
+    if (hasActive) setExpanded(true);
+  }, [hasActive]);
 
   function handleContextMenu(e: React.MouseEvent) {
-    e.preventDefault()
-    setShowContextMenu(true)
-    setContextMenuPos({ x: e.clientX, y: e.clientY })
+    e.preventDefault();
+    setShowContextMenu(true);
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
   }
 
   return (
@@ -113,82 +117,74 @@ function RepoGroup({
           +
         </button>
       </div>
-      {expanded && workspaces.map((ws) => (
-        <div
-          key={ws.id}
-          className={`workspace-item ${ws.id === activeWorkspaceId ? 'active' : ''}`}
-          onClick={() => onSelectWorkspace(ws.id)}
-        >
-          <img
-            className="workspace-branch-icon"
-            src={branchIcon}
-            alt="Branch"
-          />
-          <span className="workspace-label">
-            {workspaceLabel(ws)}
-            {ws.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-            {ws.policyName && (
-              <span
-                className={`policy-badge policy-${ws.policyId ?? 'default'}`}
-                title={ws.policyId ? (policyDescriptions.get(ws.policyId) ?? ws.policyId) : ''}
+      {expanded &&
+        workspaces.map((ws) => (
+          <div
+            key={ws.id}
+            className={`workspace-item ${ws.id === activeWorkspaceId ? 'active' : ''}`}
+            onClick={() => onSelectWorkspace(ws.id)}
+          >
+            <img className="workspace-branch-icon" src={branchIcon} alt="Branch" />
+            <span className="workspace-label">
+              {workspaceLabel(ws)}
+              {ws.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
+              {ws.policyName && (
+                <span
+                  className={`policy-badge policy-${ws.policyId ?? 'default'}`}
+                  title={ws.policyId ? (policyDescriptions.get(ws.policyId) ?? ws.policyId) : ''}
+                >
+                  {ws.policyName}
+                </span>
+              )}
+              {ws.phase && (
+                <span className={`phase-badge phase-${ws.phase}`}>
+                  {ws.phase === 'implementing' ? 'Impl' : ws.phase === 'pr-open' ? 'PR' : 'Ready'}
+                </span>
+              )}
+              {ws.prUrl ? (
+                <a
+                  className="github-badge pr-link"
+                  href={ws.prUrl}
+                  title={ws.prUrl}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  #{ws.ownedPrNumber}
+                </a>
+              ) : ws.githubRepo && ws.ownedPrNumber != null ? (
+                <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
+                  #{ws.ownedPrNumber}
+                </span>
+              ) : null}
+              {(violationCounts.get(ws.id) ?? 0) > 0 && (
+                <span className="violation-count">{violationCounts.get(ws.id)}</span>
+              )}
+            </span>
+            <span className="workspace-status">{ws.status}</span>
+            {ws.status !== 'closed' && (
+              <button
+                type="button"
+                className="close-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseWorkspace(ws.id);
+                }}
+                aria-label="Close workspace"
               >
-                {ws.policyName}
-              </span>
+                ×
+              </button>
             )}
-            {ws.phase && (
-              <span className={`phase-badge phase-${ws.phase}`}>
-                {ws.phase === 'implementing' ? 'Impl' : ws.phase === 'pr-open' ? 'PR' : 'Ready'}
-              </span>
-            )}
-            {ws.prUrl ? (
-              <a
-                className="github-badge pr-link"
-                href={ws.prUrl}
-                title={ws.prUrl}
-                onClick={(e) => e.stopPropagation()}
-              >
-                #{ws.ownedPrNumber}
-              </a>
-            ) : ws.githubRepo && ws.ownedPrNumber != null ? (
-              <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
-                #{ws.ownedPrNumber}
-              </span>
-            ) : null}
-            {(violationCounts.get(ws.id) ?? 0) > 0 && (
-              <span className="violation-count">{violationCounts.get(ws.id)}</span>
-            )}
-          </span>
-          <span className="workspace-status">{ws.status}</span>
-          {ws.status !== 'closed' && (
-            <button
-              type="button"
-              className="close-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCloseWorkspace(ws.id)
-              }}
-              aria-label="Close workspace"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
-      {expanded && workspaces.length === 0 && (
-        <div className="repo-empty">No workspaces</div>
-      )}
+          </div>
+        ))}
+      {expanded && workspaces.length === 0 && <div className="repo-empty">No workspaces</div>}
       {showContextMenu && (
         <>
           <div className="context-menu-overlay" onClick={() => setShowContextMenu(false)} />
-          <div
-            className="context-menu"
-            style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
-          >
+          <div className="context-menu" style={{ left: contextMenuPos.x, top: contextMenuPos.y }}>
             <button
               type="button"
               onClick={() => {
-                setShowContextMenu(false)
-                onOpenSettings(repo.id)
+                setShowContextMenu(false);
+                onOpenSettings(repo.id);
               }}
             >
               Settings
@@ -196,8 +192,8 @@ function RepoGroup({
             <button
               type="button"
               onClick={() => {
-                setShowContextMenu(false)
-                onRemoveRepo(repo.id)
+                setShowContextMenu(false);
+                onRemoveRepo(repo.id);
               }}
             >
               Remove
@@ -206,7 +202,7 @@ function RepoGroup({
         </>
       )}
     </div>
-  )
+  );
 }
 
 export function WorkspacesSidebar({
@@ -225,36 +221,36 @@ export function WorkspacesSidebar({
   focusedRepoId,
   style,
 }: Props) {
-  const onAddRepoRef = useRef(onAddRepo)
-  const onCreateWorkspaceRef = useRef(onCreateWorkspace)
-  const focusedRepoIdRef = useRef(focusedRepoId)
-  onAddRepoRef.current = onAddRepo
-  onCreateWorkspaceRef.current = onCreateWorkspace
-  focusedRepoIdRef.current = focusedRepoId
+  const onAddRepoRef = useRef(onAddRepo);
+  const onCreateWorkspaceRef = useRef(onCreateWorkspace);
+  const focusedRepoIdRef = useRef(focusedRepoId);
+  onAddRepoRef.current = onAddRepo;
+  onCreateWorkspaceRef.current = onCreateWorkspace;
+  focusedRepoIdRef.current = focusedRepoId;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        return;
       if (e.metaKey && e.altKey && e.code === 'KeyA') {
-        e.preventDefault()
-        onAddRepoRef.current()
+        e.preventDefault();
+        onAddRepoRef.current();
       }
       if (e.metaKey && !e.altKey && !e.shiftKey && e.code === 'KeyN' && focusedRepoIdRef.current) {
-        e.preventDefault()
-        onCreateWorkspaceRef.current(focusedRepoIdRef.current)
+        e.preventDefault();
+        onCreateWorkspaceRef.current(focusedRepoIdRef.current);
       }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   return (
     <div className="workspaces-sidebar" style={style}>
       <div className="sidebar-header">
         <span className="sidebar-title">Workspaces</span>
         <AddRepoButton onAddRepo={onAddRepo} />
-
       </div>
       {repos.map((repo) => (
         <RepoGroup
@@ -272,11 +268,7 @@ export function WorkspacesSidebar({
           onOpenSettings={onOpenRepoSettings}
         />
       ))}
-      {repos.length === 0 && (
-        <div className="empty-state">
-          Add a repository to get started
-        </div>
-      )}
+      {repos.length === 0 && <div className="empty-state">Add a repository to get started</div>}
     </div>
-  )
+  );
 }

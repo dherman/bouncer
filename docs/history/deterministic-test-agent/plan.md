@@ -69,7 +69,7 @@ Define the data types and get the bare ACP agent running. No tool execution yet 
 Extend `AgentType` and add the replay-specific types:
 
 ```typescript
-export type AgentType = "echo" | "claude-code" | "replay";
+export type AgentType = 'echo' | 'claude-code' | 'replay';
 
 // --- Replay Types ---
 
@@ -83,7 +83,7 @@ export interface ReplayToolCall {
 export interface ReplayResult {
   id: number;
   tool: string;
-  replay_outcome: "allowed" | "blocked" | "skipped" | "error";
+  replay_outcome: 'allowed' | 'blocked' | 'skipped' | 'error';
   error_message?: string;
   original_outcome: string;
 }
@@ -92,6 +92,7 @@ export interface ReplayResult {
 ### 1.2 Create `src/agents/replay-agent.ts` skeleton
 
 Model after `echo-agent.ts`. The skeleton:
+
 - Sets up `AgentSideConnection` with stdio streams
 - Implements `initialize`, `newSession`, `prompt`, `cancel`
 - In `prompt`: parses the prompt text as `JSON.parse(text)` to get `ReplayToolCall[]`
@@ -136,31 +137,31 @@ function resolveReplayAgentCommand(
   worktreePath: string,
 ): SpawnConfig {
   const isDev = !app.isPackaged;
-  const require = createRequire(app.getAppPath() + "/");
+  const require = createRequire(app.getAppPath() + '/');
 
   let cmd: string;
   let args: string[];
 
   if (isDev) {
-    const tsxBin = require.resolve("tsx/cli");
-    const agentScript = join(app.getAppPath(), "src", "agents", "replay-agent.ts");
+    const tsxBin = require.resolve('tsx/cli');
+    const agentScript = join(app.getAppPath(), 'src', 'agents', 'replay-agent.ts');
     cmd = process.execPath;
     args = [tsxBin, agentScript];
   } else {
-    const agentScript = join(__dirname, "..", "agents", "replay-agent.js");
+    const agentScript = join(__dirname, '..', 'agents', 'replay-agent.js');
     cmd = process.execPath;
     args = [agentScript];
   }
 
   const env: Record<string, string> = {
-    ELECTRON_RUN_AS_NODE: "1",
+    ELECTRON_RUN_AS_NODE: '1',
     REPLAY_WORKTREE_PATH: worktreePath,
   };
 
   // Wrap in safehouse if sandbox config present
   if (sandboxConfig) {
     const safehouseArgs = buildSafehouseArgs(sandboxConfig, [cmd, ...args]);
-    return { cmd: "safehouse", args: safehouseArgs, cwd, env };
+    return { cmd: 'safehouse', args: safehouseArgs, cwd, env };
   }
 
   return { cmd, args, env, cwd };
@@ -180,10 +181,10 @@ function resolveAgentCommand(
   sandboxConfig: SandboxConfig | null,
   worktreePath?: string,
 ): SpawnConfig {
-  if (agentType === "echo") {
+  if (agentType === 'echo') {
     return resolveEchoAgentCommand();
   }
-  if (agentType === "replay") {
+  if (agentType === 'replay') {
     return resolveReplayAgentCommand(cwd, sandboxConfig, worktreePath ?? cwd);
   }
   return resolveClaudeCodeCommand(cwd, sandboxConfig);
@@ -193,6 +194,7 @@ function resolveAgentCommand(
 ### 2.3 Update `createSession()` for replay-specific behavior
 
 The replay agent needs:
+
 - A worktree (same as claude-code) — for sandbox-scoped file operations
 - A policy template (same as claude-code) — for sandbox config generation
 - **No** `ANTHROPIC_API_KEY` in env passthrough
@@ -201,12 +203,13 @@ Update the conditional in `createSession()`:
 
 ```typescript
 // Resolve policy template — replay agents also get sandboxed
-const resolvedPolicyId = (agentType === "claude-code" || agentType === "replay")
-  ? (policyId ?? this.policyRegistry.defaultId)
-  : null;
+const resolvedPolicyId =
+  agentType === 'claude-code' || agentType === 'replay'
+    ? (policyId ?? this.policyRegistry.defaultId)
+    : null;
 
 // Create worktree for Claude Code and replay sessions
-if (agentType === "claude-code" || agentType === "replay") {
+if (agentType === 'claude-code' || agentType === 'replay') {
   const isGitRepo = await this.worktreeManager.validateGitRepo(projectDir);
   if (!isGitRepo) {
     throw new Error(`Not a git repository: ${projectDir}`);
@@ -231,23 +234,27 @@ const { cmd, args, env, cwd } = resolveAgentCommand(
 The current `sessions:create` handler only accepts `"echo"` and `"claude-code"`. Add `"replay"`:
 
 ```typescript
-ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
-  if (typeof projectDir !== 'string') {
-    throw new Error('Invalid argument: projectDir must be a string')
-  }
-  const validTypes = ['echo', 'claude-code', 'replay'] as const
-  type ValidType = typeof validTypes[number]
-  const validAgentType: ValidType = validTypes.includes(agentType as ValidType)
-    ? (agentType as ValidType)
-    : 'claude-code'
-  const validPolicyId = typeof policyId === 'string' ? policyId : undefined
-  return sessionManager.createSession(projectDir, validAgentType, validPolicyId)
-})
+ipcMain.handle(
+  'sessions:create',
+  (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
+    if (typeof projectDir !== 'string') {
+      throw new Error('Invalid argument: projectDir must be a string');
+    }
+    const validTypes = ['echo', 'claude-code', 'replay'] as const;
+    type ValidType = (typeof validTypes)[number];
+    const validAgentType: ValidType = validTypes.includes(agentType as ValidType)
+      ? (agentType as ValidType)
+      : 'claude-code';
+    const validPolicyId = typeof policyId === 'string' ? policyId : undefined;
+    return sessionManager.createSession(projectDir, validAgentType, validPolicyId);
+  },
+);
 ```
 
 ### 2.5 Write `scripts/test-replay-agent.ts`
 
 Test script that:
+
 1. Spawns the replay agent directly (no Electron, no sandbox)
 2. Performs ACP handshake (initialize → newSession)
 3. Sends a prompt with a hand-crafted JSON tool-call array
@@ -281,19 +288,19 @@ In `replay-agent.ts`, implement an `executeToolCall()` function with handlers fo
 **Error classification logic** (shared across all executors):
 
 ```typescript
-function classifyError(err: unknown): "blocked" | "error" {
+function classifyError(err: unknown): 'blocked' | 'error' {
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
     if (
-      msg.includes("eperm") ||
-      msg.includes("eacces") ||
-      msg.includes("operation not permitted") ||
-      msg.includes("permission denied")
+      msg.includes('eperm') ||
+      msg.includes('eacces') ||
+      msg.includes('operation not permitted') ||
+      msg.includes('permission denied')
     ) {
-      return "blocked";
+      return 'blocked';
     }
   }
-  return "error";
+  return 'error';
 }
 ```
 
@@ -302,29 +309,29 @@ function classifyError(err: unknown): "blocked" | "error" {
 ```typescript
 async function executeBash(command: string, cwd: string): Promise<ReplayResult> {
   // Skip network-dependent commands
-  if (command.includes("{host}")) return { ...base, replay_outcome: "skipped" };
+  if (command.includes('{host}')) return { ...base, replay_outcome: 'skipped' };
 
   try {
     execSync(deanonymizeCommand(command), {
       cwd,
       timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
     });
-    return { ...base, replay_outcome: "allowed" };
+    return { ...base, replay_outcome: 'allowed' };
   } catch (err) {
     // Check if it's a sandbox block vs. a regular command failure
-    const stderr = (err as any)?.stderr?.toString() ?? "";
-    const msg = (err as Error).message ?? "";
+    const stderr = (err as any)?.stderr?.toString() ?? '';
+    const msg = (err as Error).message ?? '';
     const combined = stderr + msg;
     if (
-      combined.includes("Operation not permitted") ||
-      combined.includes("EPERM") ||
-      combined.includes("Permission denied")
+      combined.includes('Operation not permitted') ||
+      combined.includes('EPERM') ||
+      combined.includes('Permission denied')
     ) {
-      return { ...base, replay_outcome: "blocked", error_message: combined.slice(0, 200) };
+      return { ...base, replay_outcome: 'blocked', error_message: combined.slice(0, 200) };
     }
-    return { ...base, replay_outcome: "error", error_message: combined.slice(0, 200) };
+    return { ...base, replay_outcome: 'error', error_message: combined.slice(0, 200) };
   }
 }
 ```
@@ -341,15 +348,25 @@ Build a skip set:
 
 ```typescript
 const SKIP_TOOLS = new Set([
-  "WebSearch", "Task", "Agent", "TodoWrite",
-  "EnterPlanMode", "ExitPlanMode", "ToolSearch",
-  "Skill", "AskUserQuestion", "TaskOutput", "TaskStop",
-  "EnterWorktree", "ExitWorktree", "NotebookEdit",
+  'WebSearch',
+  'Task',
+  'Agent',
+  'TodoWrite',
+  'EnterPlanMode',
+  'ExitPlanMode',
+  'ToolSearch',
+  'Skill',
+  'AskUserQuestion',
+  'TaskOutput',
+  'TaskStop',
+  'EnterWorktree',
+  'ExitWorktree',
+  'NotebookEdit',
 ]);
 
 function shouldSkip(tool: string): boolean {
   if (SKIP_TOOLS.has(tool)) return true;
-  if (tool.startsWith("mcp__")) return true;  // MCP tools
+  if (tool.startsWith('mcp__')) return true; // MCP tools
   return false;
 }
 ```
@@ -360,11 +377,31 @@ Update `scripts/test-replay-agent.ts` to send a mixed sequence:
 
 ```json
 [
-  {"id": 1, "tool": "Read", "input": {"file_path": "{project}/test.txt"}, "original_outcome": "approved"},
-  {"id": 2, "tool": "Write", "input": {"file_path": "{project}/new.txt", "content": "hello"}, "original_outcome": "approved"},
-  {"id": 3, "tool": "Bash", "input": {"command": "ls {project}"}, "original_outcome": "approved"},
-  {"id": 4, "tool": "TodoWrite", "input": {"todos": []}, "original_outcome": "approved"},
-  {"id": 5, "tool": "Read", "input": {"file_path": "/etc/passwd"}, "original_outcome": "approved"}
+  {
+    "id": 1,
+    "tool": "Read",
+    "input": { "file_path": "{project}/test.txt" },
+    "original_outcome": "approved"
+  },
+  {
+    "id": 2,
+    "tool": "Write",
+    "input": { "file_path": "{project}/new.txt", "content": "hello" },
+    "original_outcome": "approved"
+  },
+  {
+    "id": 3,
+    "tool": "Bash",
+    "input": { "command": "ls {project}" },
+    "original_outcome": "approved"
+  },
+  { "id": 4, "tool": "TodoWrite", "input": { "todos": [] }, "original_outcome": "approved" },
+  {
+    "id": 5,
+    "tool": "Read",
+    "input": { "file_path": "/etc/passwd" },
+    "original_outcome": "approved"
+  }
 ]
 ```
 
@@ -423,14 +460,15 @@ function deanonymizeCommand(command: string, ctx: ReplayContext): string {
 ### 4.3 Add skip detection for un-resolvable paths
 
 Some paths in the dataset can't be meaningfully de-anonymized:
+
 - `{project-name}` — appears in `.claude/projects/-Users-{user}-Code-{project-name}/...` (Claude Code's internal state files, not project files)
 - Paths containing `.claude/` — agent reading its own session transcripts, not replayable
 
 ```typescript
 function hasUnresolvablePath(input: Record<string, unknown>): boolean {
   const json = JSON.stringify(input);
-  if (json.includes("{project-name}")) return true;
-  if (json.includes(".claude/")) return true;
+  if (json.includes('{project-name}')) return true;
+  if (json.includes('.claude/')) return true;
   return false;
 }
 ```
@@ -440,15 +478,23 @@ These tool calls get `replay_outcome: "skipped"`.
 ### 4.4 Verify
 
 Take record `id: 1` from the dataset:
+
 ```json
-{"id":1,"tool":"Read","input":{"file_path":"{project}/.claude/projects/-Users-{user}-Code-{project-name}/fd033680-dc2e-44b6-a5c4-8079d916b2bf.jsonl"}}
+{
+  "id": 1,
+  "tool": "Read",
+  "input": {
+    "file_path": "{project}/.claude/projects/-Users-{user}-Code-{project-name}/fd033680-dc2e-44b6-a5c4-8079d916b2bf.jsonl"
+  }
+}
 ```
 
 This should be detected as un-resolvable (contains `{project-name}` and `.claude/`) → `skipped`.
 
 Take a normal record like:
+
 ```json
-{"tool":"Read","input":{"file_path":"{project}/src/index.ts"}}
+{ "tool": "Read", "input": { "file_path": "{project}/src/index.ts" } }
 ```
 
 This should de-anonymize to `<worktreePath>/src/index.ts` → valid path.
@@ -464,7 +510,7 @@ Before replaying, populate the worktree with stub files so that `Read` and `Edit
 ### 5.1 Create `src/main/replay-scaffold.ts`
 
 ```typescript
-import type { ReplayToolCall } from "./types.js";
+import type { ReplayToolCall } from './types.js';
 
 export interface ScaffoldPlan {
   /** Relative path → file content */
@@ -486,16 +532,17 @@ export function buildScaffoldPlan(
 
 **Path extraction logic per tool**:
 
-| Tool | Input field(s) | Scaffold action |
-|------|---------------|-----------------|
-| `Read` | `input.file_path` | Create file with `// stub\n` |
-| `Write` | `input.file_path` | Create parent directory only (write creates the file) |
-| `Edit` | `input.file_path` | Create file with `input.old_string` as content (if present) |
-| `Grep` | `input.path` | Create file or directory depending on whether path looks like a file or dir |
-| `Glob` | `input.path` | Create directory |
-| `Bash` | `input.command` | Best-effort: extract paths that start with `{project}/` from the command string |
+| Tool    | Input field(s)    | Scaffold action                                                                 |
+| ------- | ----------------- | ------------------------------------------------------------------------------- |
+| `Read`  | `input.file_path` | Create file with `// stub\n`                                                    |
+| `Write` | `input.file_path` | Create parent directory only (write creates the file)                           |
+| `Edit`  | `input.file_path` | Create file with `input.old_string` as content (if present)                     |
+| `Grep`  | `input.path`      | Create file or directory depending on whether path looks like a file or dir     |
+| `Glob`  | `input.path`      | Create directory                                                                |
+| `Bash`  | `input.command`   | Best-effort: extract paths that start with `{project}/` from the command string |
 
 **Path filtering**:
+
 - Only scaffold paths that start with `{project}/` (or de-anonymize to within the worktree)
 - Skip paths containing `{project-name}`, `.claude/`, or `{home}`
 - Skip paths that are system paths (`/etc`, `/usr`, `/tmp`, `/var`)
@@ -503,13 +550,10 @@ export function buildScaffoldPlan(
 ### 5.2 Implement `applyScaffold()`
 
 ```typescript
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
-export async function applyScaffold(
-  worktreePath: string,
-  plan: ScaffoldPlan,
-): Promise<number> {
+export async function applyScaffold(worktreePath: string, plan: ScaffoldPlan): Promise<number> {
   // Create directories first
   for (const dir of plan.directories) {
     await mkdir(join(worktreePath, dir), { recursive: true });
@@ -518,7 +562,7 @@ export async function applyScaffold(
   for (const [relPath, content] of plan.files) {
     const absPath = join(worktreePath, relPath);
     await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, content, "utf-8");
+    await writeFile(absPath, content, 'utf-8');
   }
   return plan.files.size;
 }
@@ -529,12 +573,12 @@ export async function applyScaffold(
 For `Edit` tool calls, the dataset includes `input.old_string` — the text the edit expects to find. Seed the stub file with this content so the edit can match:
 
 ```typescript
-if (tool === "Edit" && typeof input.old_string === "string") {
+if (tool === 'Edit' && typeof input.old_string === 'string') {
   files.set(relPath, input.old_string);
 } else {
   // Don't overwrite if already seeded with Edit content
   if (!files.has(relPath)) {
-    files.set(relPath, "// stub\n");
+    files.set(relPath, '// stub\n');
   }
 }
 ```
@@ -544,6 +588,7 @@ If multiple edits target the same file with different `old_string` values, conca
 ### 5.4 Write `scripts/test-scaffold.ts`
 
 Test script that:
+
 1. Loads a real dataset session (e.g., `session-001`)
 2. Creates a temp directory (not a real worktree — just for scaffold testing)
 3. Calls `buildScaffoldPlan()` and `applyScaffold()`
@@ -561,9 +606,9 @@ Provide a clean API for loading and querying the dataset. This is used by both t
 ### 6.1 Create `src/main/dataset-loader.ts`
 
 ```typescript
-import { createReadStream } from "node:fs";
-import { createInterface } from "node:readline";
-import type { ReplayToolCall } from "./types.js";
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
+import type { ReplayToolCall } from './types.js';
 
 interface DatasetRecord {
   id: number;
@@ -582,16 +627,16 @@ interface DatasetRecord {
  * Load the dataset and group records by session.
  * Returns a Map from session ID to sorted tool-call array.
  */
-export async function loadDataset(
-  datasetPath: string,
-): Promise<Map<string, ReplayToolCall[]>>;
+export async function loadDataset(datasetPath: string): Promise<Map<string, ReplayToolCall[]>>;
 
 /**
  * Get summary statistics for the loaded dataset.
  */
-export function datasetSummary(
-  sessions: Map<string, ReplayToolCall[]>,
-): { sessionCount: number; recordCount: number; toolDistribution: Record<string, number> };
+export function datasetSummary(sessions: Map<string, ReplayToolCall[]>): {
+  sessionCount: number;
+  recordCount: number;
+  toolDistribution: Record<string, number>;
+};
 ```
 
 **Record → ReplayToolCall mapping**:
@@ -737,15 +782,15 @@ function buildReport(
   sessionResults: SessionReplayResult[],
   datasetPath: string,
 ): ReplayReport {
-  const allResults = sessionResults.flatMap(s => s.results);
-  const allowed = allResults.filter(r => r.replay_outcome === "allowed").length;
-  const blocked = allResults.filter(r => r.replay_outcome === "blocked").length;
-  const skipped = allResults.filter(r => r.replay_outcome === "skipped").length;
-  const error = allResults.filter(r => r.replay_outcome === "error").length;
+  const allResults = sessionResults.flatMap((s) => s.results);
+  const allowed = allResults.filter((r) => r.replay_outcome === 'allowed').length;
+  const blocked = allResults.filter((r) => r.replay_outcome === 'blocked').length;
+  const skipped = allResults.filter((r) => r.replay_outcome === 'skipped').length;
+  const error = allResults.filter((r) => r.replay_outcome === 'error').length;
 
   // False blocks: sandbox blocked something that was approved in the original session
   const falseBlocks = allResults.filter(
-    r => r.replay_outcome === "blocked" && r.original_outcome === "approved"
+    (r) => r.replay_outcome === 'blocked' && r.original_outcome === 'approved',
   ).length;
   const actionable = allowed + blocked; // excluding skipped and error
 
@@ -755,8 +800,8 @@ function buildReport(
       dataset: datasetPath,
       policyId,
       sessionsTotal: sessionResults.length,
-      sessionsCompleted: sessionResults.filter(s => s.results.length > 0).length,
-      sessionsFailed: sessionResults.filter(s => s.results.length === 0).length,
+      sessionsCompleted: sessionResults.filter((s) => s.results.length > 0).length,
+      sessionsFailed: sessionResults.filter((s) => s.results.length === 0).length,
     },
     summary: {
       totalToolCalls: allResults.length,
@@ -765,9 +810,7 @@ function buildReport(
       skipped,
       error,
       allowedRate: actionable > 0 ? allowed / actionable : 1,
-      falseBlockRate: (allowed + falseBlocks) > 0
-        ? falseBlocks / (allowed + falseBlocks)
-        : 0,
+      falseBlockRate: allowed + falseBlocks > 0 ? falseBlocks / (allowed + falseBlocks) : 0,
     },
     byTool: computeByToolBreakdown(allResults),
     sessions: sessionResults,
@@ -787,6 +830,7 @@ npx tsx scripts/replay-test.ts \
 ```
 
 Verify the report:
+
 - Every tool call has a `replay_outcome`
 - `skipped` for TodoWrite, WebSearch, MCP tools
 - `allowed` or `error` for Read, Edit, Bash (no sandbox blocks expected for in-worktree operations)
@@ -825,7 +869,7 @@ async function replayBatch(
         process.stderr.write(`  FAILED: ${(err as Error).message}\n`);
         results.push({
           sessionId,
-          project: toolCalls[0]?.project ?? "unknown",
+          project: toolCalls[0]?.project ?? 'unknown',
           toolCallCount: toolCalls.length,
           results: [],
           scaffoldedFiles: 0,
@@ -887,6 +931,7 @@ npx tsx scripts/replay-test.ts \
 ```
 
 This is the first real validation run. Review the report for:
+
 - Are the numbers plausible?
 - Which tools have the most blocks?
 - Are blocks real (sandbox enforcement) or noise (missing files, command failures)?
@@ -914,6 +959,7 @@ npx tsx scripts/replay-test.ts \
 ### 9.2 Analyze results
 
 For each policy, examine:
+
 - **Allowed rate**: What fraction of real-world operations does the policy permit?
 - **False-block rate**: Among operations that were approved in the original session, what fraction does the policy block?
 - **Per-tool breakdown**: Which tools are most affected?
@@ -923,18 +969,19 @@ For each policy, examine:
 
 For blocked operations, categorize:
 
-| Category | Description | Example |
-|----------|-------------|---------|
-| **Sandbox enforcement** | Real sandbox block (EPERM on restricted path) | Read `/etc/passwd`, write to `{home}/...` |
-| **Missing-file noise** | File doesn't exist in scaffold (ENOENT counted as error, not block) | Bash `cat` on unscaffolded file |
-| **Network gap** | Operation needs network but network isn't enforced yet | `git push`, `npm install`, `curl` |
-| **Temp-dir gap** | Operation writes to temp which safehouse allows broadly | Write to `/tmp/...` |
+| Category                | Description                                                         | Example                                   |
+| ----------------------- | ------------------------------------------------------------------- | ----------------------------------------- |
+| **Sandbox enforcement** | Real sandbox block (EPERM on restricted path)                       | Read `/etc/passwd`, write to `{home}/...` |
+| **Missing-file noise**  | File doesn't exist in scaffold (ENOENT counted as error, not block) | Bash `cat` on unscaffolded file           |
+| **Network gap**         | Operation needs network but network isn't enforced yet              | `git push`, `npm install`, `curl`         |
+| **Temp-dir gap**        | Operation writes to temp which safehouse allows broadly             | Write to `/tmp/...`                       |
 
 This categorization directly informs M5 and M6 priorities.
 
 ### 9.4 Document findings
 
 Create `docs/milestones/deterministic-test-agent/findings.md` with:
+
 - Summary table: policy × metric (allowed rate, false-block rate)
 - Per-tool heatmap (text table)
 - Block categorization breakdown
@@ -954,7 +1001,7 @@ Add the replay agent as a selectable option in the Glitter Ball UI.
 Add an agent type selector above the policy selector. Three options: Claude Code (default), Echo (dev), Replay.
 
 ```tsx
-const [agentType, setAgentType] = useState<'claude-code' | 'echo' | 'replay'>('claude-code')
+const [agentType, setAgentType] = useState<'claude-code' | 'echo' | 'replay'>('claude-code');
 ```
 
 Add a section to the dialog:
@@ -975,18 +1022,20 @@ Add a section to the dialog:
 When `agentType === "replay"`, show a text input for the dataset session ID to replay:
 
 ```tsx
-{agentType === 'replay' && (
-  <div style={sectionStyle}>
-    <label style={labelStyle}>Dataset Session ID</label>
-    <input
-      type="text"
-      placeholder="e.g., session-042"
-      value={replaySessionId}
-      onChange={(e) => setReplaySessionId(e.target.value)}
-      style={textInputStyle}
-    />
-  </div>
-)}
+{
+  agentType === 'replay' && (
+    <div style={sectionStyle}>
+      <label style={labelStyle}>Dataset Session ID</label>
+      <input
+        type="text"
+        placeholder="e.g., session-042"
+        value={replaySessionId}
+        onChange={(e) => setReplaySessionId(e.target.value)}
+        style={textInputStyle}
+      />
+    </div>
+  );
+}
 ```
 
 The policy selector should still be shown for replay (the user picks which policy to test).
@@ -1025,6 +1074,7 @@ async function handleCreate() {
 Add a new IPC call for loading replay data:
 
 **`src/preload/index.ts`**:
+
 ```typescript
 sessions: {
   // ... existing ...
@@ -1034,6 +1084,7 @@ sessions: {
 ```
 
 **`src/main/index.ts`**:
+
 ```typescript
 ipcMain.handle('sessions:loadReplayData', async (_e, datasetSessionId: unknown) => {
   if (typeof datasetSessionId !== 'string') {

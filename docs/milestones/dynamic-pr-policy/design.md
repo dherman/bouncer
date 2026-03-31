@@ -33,6 +33,7 @@ The agent autonomously:
 ### What "Done" Means
 
 The agent considers the PR ready when:
+
 - All CI checks are passing
 - No unresolved review comments remain
 
@@ -48,17 +49,18 @@ The policy starts broad and narrows through three one-way ratchet events. Once n
 
 The agent has a clean checkout of the repo's default branch. It can read issues, implement changes, and prepare to push. The policy doesn't yet know the branch name.
 
-| Capability | Allowed? |
-|---|---|
-| Read/write worktree files | Yes |
-| Run builds/tests locally | Yes |
-| `gh issue view` | Yes |
-| Push to any non-protected branch | Yes |
-| Push to `main`/`master`/protected branches | **No** |
-| `gh pr create` | Yes |
-| `gh pr merge` | **No, ever** |
+| Capability                                 | Allowed?     |
+| ------------------------------------------ | ------------ |
+| Read/write worktree files                  | Yes          |
+| Run builds/tests locally                   | Yes          |
+| `gh issue view`                            | Yes          |
+| Push to any non-protected branch           | Yes          |
+| Push to `main`/`master`/protected branches | **No**       |
+| `gh pr create`                             | Yes          |
+| `gh pr merge`                              | **No, ever** |
 
 **Policy state**:
+
 ```typescript
 {
   repo: "owner/repo",
@@ -78,6 +80,7 @@ The `allowedPushRefs` pattern uses a wildcard with exclusions for protected bran
 The proxy extracts the branch ref from the push and narrows `allowedPushRefs` to only that branch. From this point, the agent can only push to the branch it chose.
 
 **Policy state after**:
+
 ```typescript
 {
   repo: "owner/repo",
@@ -96,6 +99,7 @@ The proxy extracts the branch ref from the push and narrows `allowedPushRefs` to
 This already exists (M7 design, Phase 5). The proxy extracts the PR number from the response body, sets `ownedPrNumber`, and clears `canCreatePr`.
 
 **Policy state after**:
+
 ```typescript
 {
   repo: "owner/repo",
@@ -111,19 +115,19 @@ Now all PR operations are scoped to PR #15. The agent can view checks, read revi
 
 With the branch locked and PR number known, the agent enters its main loop: push fixes, poll CI, read reviews.
 
-| Capability | Allowed? |
-|---|---|
-| Push to locked branch | Yes |
-| `gh pr checks` (PR #15) | Yes |
-| `gh pr view` (PR #15) | Yes |
-| `gh run view` / `gh run view --log` | Yes |
-| Read PR review comments | Yes |
-| Post PR review reply comments | **No** (see Review Feedback below) |
-| Request a review (e.g., from Copilot) | Yes |
-| `gh pr create` | **No** (already created) |
-| `gh pr merge` | **No, ever** |
-| Operations on other PRs | **No** |
-| `gh issue view` | Yes (read-only, still useful for context) |
+| Capability                            | Allowed?                                  |
+| ------------------------------------- | ----------------------------------------- |
+| Push to locked branch                 | Yes                                       |
+| `gh pr checks` (PR #15)               | Yes                                       |
+| `gh pr view` (PR #15)                 | Yes                                       |
+| `gh run view` / `gh run view --log`   | Yes                                       |
+| Read PR review comments               | Yes                                       |
+| Post PR review reply comments         | **No** (see Review Feedback below)        |
+| Request a review (e.g., from Copilot) | Yes                                       |
+| `gh pr create`                        | **No** (already created)                  |
+| `gh pr merge`                         | **No, ever**                              |
+| Operations on other PRs               | **No**                                    |
+| `gh issue view`                       | Yes (read-only, still useful for context) |
 
 ### Review Feedback: Propose, Don't Post
 
@@ -139,6 +143,7 @@ This is enforced at the **sandbox level**: the policy denies `POST` to PR commen
 **Why sandbox-level enforcement?** The agent could be influenced by review comments (prompt injection via a malicious review). Preventing automatic replies ensures the user reviews the agent's proposed responses before they become visible to others. This also gives the user a natural collaboration point — they can steer the agent's response to feedback.
 
 **UX flow:**
+
 - Agent reads reviews → presents a summary: "Copilot flagged 3 issues: (1) missing null check in handler.ts:42, (2) unused import, (3) suggests adding a test case. Here's my plan: ..."
 - User responds: "Looks good, go ahead with 1 and 2, skip 3 for now"
 - Agent makes the code changes and pushes
@@ -156,24 +161,24 @@ The M7 REST API allowlist needs to expand for CI and review operations. All new 
 
 ### New Endpoints
 
-| Pattern | Method | Purpose |
-|---|---|---|
-| `/repos/{owner}/{repo}/issues/{n}` | `GET` | Read issue for task context |
-| `/repos/{owner}/{repo}/issues` | `GET` | List issues |
-| `/repos/{owner}/{repo}/pulls/{n}/reviews` | `GET` | Read review comments |
-| `/repos/{owner}/{repo}/pulls/{n}/reviews/{id}/comments` | `GET` | Read review thread comments |
-| `/repos/{owner}/{repo}/pulls/{n}/comments` | `GET` | Read PR comments (POST denied — see Review Feedback) |
-| `/repos/{owner}/{repo}/pulls/{n}/requested_reviewers` | `GET`, `POST` | Read/request reviewers |
-| `/repos/{owner}/{repo}/actions/runs` | `GET` | List workflow runs |
-| `/repos/{owner}/{repo}/actions/runs/{id}` | `GET` | Get run details |
-| `/repos/{owner}/{repo}/actions/runs/{id}/logs` | `GET` | Download run logs |
-| `/repos/{owner}/{repo}/actions/runs/{id}/jobs` | `GET` | List jobs in a run |
-| `/repos/{owner}/{repo}/check-runs/{id}` | `GET` | Get check run details |
-| `/repos/{owner}/{repo}/check-suites/{id}/check-runs` | `GET` | List check runs in a suite |
-| `/repos/{owner}/{repo}/commits/{ref}/check-runs` | `GET` | List check runs for a ref |
-| `/repos/{owner}/{repo}/commits/{ref}/check-suites` | `GET` | List check suites for a ref |
-| `/repos/{owner}/{repo}/commits/{ref}/status` | `GET` | Combined status for a ref |
-| `/repos/{owner}/{repo}/statuses/{sha}` | `GET` | List statuses for a SHA |
+| Pattern                                                 | Method        | Purpose                                              |
+| ------------------------------------------------------- | ------------- | ---------------------------------------------------- |
+| `/repos/{owner}/{repo}/issues/{n}`                      | `GET`         | Read issue for task context                          |
+| `/repos/{owner}/{repo}/issues`                          | `GET`         | List issues                                          |
+| `/repos/{owner}/{repo}/pulls/{n}/reviews`               | `GET`         | Read review comments                                 |
+| `/repos/{owner}/{repo}/pulls/{n}/reviews/{id}/comments` | `GET`         | Read review thread comments                          |
+| `/repos/{owner}/{repo}/pulls/{n}/comments`              | `GET`         | Read PR comments (POST denied — see Review Feedback) |
+| `/repos/{owner}/{repo}/pulls/{n}/requested_reviewers`   | `GET`, `POST` | Read/request reviewers                               |
+| `/repos/{owner}/{repo}/actions/runs`                    | `GET`         | List workflow runs                                   |
+| `/repos/{owner}/{repo}/actions/runs/{id}`               | `GET`         | Get run details                                      |
+| `/repos/{owner}/{repo}/actions/runs/{id}/logs`          | `GET`         | Download run logs                                    |
+| `/repos/{owner}/{repo}/actions/runs/{id}/jobs`          | `GET`         | List jobs in a run                                   |
+| `/repos/{owner}/{repo}/check-runs/{id}`                 | `GET`         | Get check run details                                |
+| `/repos/{owner}/{repo}/check-suites/{id}/check-runs`    | `GET`         | List check runs in a suite                           |
+| `/repos/{owner}/{repo}/commits/{ref}/check-runs`        | `GET`         | List check runs for a ref                            |
+| `/repos/{owner}/{repo}/commits/{ref}/check-suites`      | `GET`         | List check suites for a ref                          |
+| `/repos/{owner}/{repo}/commits/{ref}/status`            | `GET`         | Combined status for a ref                            |
+| `/repos/{owner}/{repo}/statuses/{sha}`                  | `GET`         | List statuses for a SHA                              |
 
 ### PR-Scoped Enforcement
 
@@ -186,14 +191,17 @@ CI/Actions endpoints are not PR-scoped (they reference run IDs and SHAs, not PR 
 The full workflow (implement → PR → CI → review → iterate) may exceed a single agent context window. The work naturally decomposes into sessions:
 
 **Session 1: Implement + Create PR**
+
 - Input: task description (e.g., "implement issue #42")
 - Output: PR URL, branch name
 
 **Session 2..N: Fix CI**
+
 - Input: PR URL or number
 - Output: CI green, or "stuck, need human help"
 
 **Session N+1..M: Address Reviews**
+
 - Input: PR URL or number
 - Output: reviews addressed, or "stuck, need human help"
 
@@ -220,10 +228,10 @@ This means the user doesn't need to manually specify the branch — Bouncer deri
 ```typescript
 export interface GitHubPolicy {
   repo: string;
-  allowedPushRefs: string[];        // Supports wildcards + exclusions
+  allowedPushRefs: string[]; // Supports wildcards + exclusions
   ownedPrNumber: number | null;
   canCreatePr: boolean;
-  protectedBranches: string[];       // NEW: branches that can never be pushed to
+  protectedBranches: string[]; // NEW: branches that can never be pushed to
 }
 ```
 

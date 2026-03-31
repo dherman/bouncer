@@ -2,11 +2,11 @@
 
 ## Project Vision
 
-Our goal for the "Bouncer" project is to experiment with *some amount* of automation for permission requests in coding agents: in other words, a **policy bot** for enabling safe but convenient workflows with coding agents.
+Our goal for the "Bouncer" project is to experiment with _some amount_ of automation for permission requests in coding agents: in other words, a **policy bot** for enabling safe but convenient workflows with coding agents.
 
-The *ideal* would be to identify classes of common coding use cases where the policy bot can automate away 100% of the need for human permission requests with 0% false negatives (i.e., cases where the policy bot allows the coding agent to do an operation that turns out to have been unsafe). But this may not be an achievable goal.
+The _ideal_ would be to identify classes of common coding use cases where the policy bot can automate away 100% of the need for human permission requests with 0% false negatives (i.e., cases where the policy bot allows the coding agent to do an operation that turns out to have been unsafe). But this may not be an achievable goal.
 
-A *good result* would be one where we can implement a policy automation that automates away *some* permission requests with 0% false nmegatives.
+A _good result_ would be one where we can implement a policy automation that automates away _some_ permission requests with 0% false negatives.
 
 In other words, our **top priority** is safety; our **secondary priority** is automating unnecessary permission requests.
 
@@ -16,7 +16,7 @@ The following principles should guide our experiments:
 
 **Sandboxing is useless without policy**: There are many sandboxing technologies that can be used to provide strong guarantees about what an agent does and doesn't have access to, both low-level (containers, hypervisors, network proxies, etc) as well as a new crop of agent sandboxing technologies that have been in the news. But to some degree "sandboxing" as a solution for agent automation simply begs the question. The hardest part of the problem is defining the model of safety: what constitutes unsafe/unacceptable agent behavior? In other words, we need to identify useful policies.
 
-**There is low-hanging fruit everywhere**: There may be some brilliant "theory of everything" that gets us to the ideal outcome, and maybe we won't be the ones to find it. But that doesn't mean we can't make things better. The perfect is the enemy of progress. If we can identify *some* safe patterns and automate them, we can build a tool that make semi-autonomous (human-in-the-loop) agent experiences much more efficient, even if we can't get them to fully autonomous. And the default experience of most coding agents is that agents are extremely conservative and repetitive about asking the user's permission. There is a lot we can do to make this better without losing safety.
+**There is low-hanging fruit everywhere**: There may be some brilliant "theory of everything" that gets us to the ideal outcome, and maybe we won't be the ones to find it. But that doesn't mean we can't make things better. The perfect is the enemy of progress. If we can identify _some_ safe patterns and automate them, we can build a tool that make semi-autonomous (human-in-the-loop) agent experiences much more efficient, even if we can't get them to fully autonomous. And the default experience of most coding agents is that agents are extremely conservative and repetitive about asking the user's permission. There is a lot we can do to make this better without losing safety.
 
 **Both deterministic and non-deterministic solutions are on the table**: Using an LLM as a judge for safety policies sounds a little scary, but if it can be constrained enough to be predictable, an LLM may be more adaptable to minor but benign syntactic variations in tool use requests than deterministic policy specifications, which may end up being too rigid and brittle to handle the natural variations in real-world tool use. We should be willing to explore both deterministic and non-deterministic heuristics, and hybrid solutions as well.
 

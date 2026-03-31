@@ -19,25 +19,27 @@ This plan implements the design in [design.md](design.md). The work breaks into 
 ### Changes
 
 **`src/main/types.ts`** — Update `GitHubPolicy`:
+
 ```typescript
 export interface GitHubPolicy {
   repo: string;
-  allowedPushRefs: string[];        // Now supports wildcards: ["refs/heads/*"]
+  allowedPushRefs: string[]; // Now supports wildcards: ["refs/heads/*"]
   ownedPrNumber: number | null;
   canCreatePr: boolean;
-  protectedBranches: string[];       // NEW — branches that can never be pushed to
+  protectedBranches: string[]; // NEW — branches that can never be pushed to
 }
 ```
 
 **`src/main/github-policy.ts`** — Update `buildSessionPolicy`:
+
 ```typescript
 export function buildSessionPolicy(repo: string, _branch: string): GitHubPolicy {
   return {
     repo,
-    allowedPushRefs: ["refs/heads/*"],   // Was: [branch]
+    allowedPushRefs: ['refs/heads/*'], // Was: [branch]
     ownedPrNumber: null,
     canCreatePr: true,
-    protectedBranches: ["main"],          // NEW
+    protectedBranches: ['main'], // NEW
   };
 }
 ```
@@ -46,11 +48,13 @@ The `_branch` parameter is kept for backward compatibility but no longer used to
 
 **`src/main/proxy-github.ts`** — Update `evaluateGitPush`:
 The existing `evaluateGitPush` function does exact-match against `allowedPushRefs`. Update it to:
+
 1. Support glob/wildcard matching (`refs/heads/*` matches any branch)
 2. Check `protectedBranches` — deny if the ref matches any protected branch, regardless of wildcards
 
 **`src/main/hooks.ts`** — Update `installHooks`:
 The pre-push hook currently checks against a hardcoded list of allowed refs (written to `allowed-refs.txt`). Update to:
+
 1. Write wildcard patterns to `allowed-refs.txt`
 2. Update the hook script to support glob matching and protected branch exclusion
 3. Or: simplify the hook to just check protected branches (deny `main`), since the proxy is authoritative
@@ -72,13 +76,13 @@ The pre-push hook currently checks against a hardcoded list of allowed refs (wri
 ```typescript
 // After forwarding a successful git-receive-pack:
 if (isFirstPush(config.githubPolicy)) {
-  const pushedBranch = refs[0].refName;  // e.g., "refs/heads/agent/my-feature"
+  const pushedBranch = refs[0].refName; // e.g., "refs/heads/agent/my-feature"
   config.githubPolicy.allowedPushRefs = [pushedBranch];
   config.onPolicyEvent({
     timestamp: Date.now(),
-    tool: "proxy",
+    tool: 'proxy',
     operation: `branch-ratchet: locked to ${pushedBranch}`,
-    decision: "allow",
+    decision: 'allow',
   });
 }
 ```
@@ -160,6 +164,7 @@ The `allow-if-owned-pr` action checks `n == ownedPrNumber` when set, or denies i
 ```
 
 The `deny-merge` action returns a specific reason string:
+
 > "Merging PRs is not allowed in this sandbox. The PR is ready for human review."
 
 **`src/main/gh-shim.ts`** — Add explicit handling for `gh pr merge`:
@@ -179,20 +184,21 @@ The shim already denies `pr merge` (line ~267 in current code), but update the e
 
 **`src/main/gh-shim.ts`** — Update `evaluatePolicy` to handle:
 
-| Subcommand | Action |
-|---|---|
-| `gh pr checks [number]` | Allow (pass through to real gh) |
+| Subcommand                   | Action                                                   |
+| ---------------------------- | -------------------------------------------------------- |
+| `gh pr checks [number]`      | Allow (pass through to real gh)                          |
 | `gh pr review --request ...` | Allow if owned PR (requesting a review, not posting one) |
-| `gh run view [id]` | Allow |
-| `gh run view [id] --log` | Allow |
-| `gh run list` | Allow |
-| `gh issue view [number]` | Allow (already handled) |
-| `gh issue list` | Allow (already handled) |
-| `gh pr merge` | Deny with explicit message (update existing deny) |
+| `gh run view [id]`           | Allow                                                    |
+| `gh run view [id] --log`     | Allow                                                    |
+| `gh run list`                | Allow                                                    |
+| `gh issue view [number]`     | Allow (already handled)                                  |
+| `gh issue list`              | Allow (already handled)                                  |
+| `gh pr merge`                | Deny with explicit message (update existing deny)        |
 
 Most of these are already partially handled — the shim allows `run list`, `run view`, `issue view`, `issue list`. Check each one and ensure the full set is covered.
 
 **Container API mode** (`src/main/gh-shim.ts` lines 460+): If the shim is running in API-direct mode (no real `gh` binary), add handlers for:
+
 - `pr checks` → `GET /repos/{owner}/{repo}/commits/{sha}/check-runs` or `GET /repos/{owner}/{repo}/pulls/{n}/reviews`
 - `run view` → `GET /repos/{owner}/{repo}/actions/runs/{id}`
 - `run view --log` → `GET /repos/{owner}/{repo}/actions/runs/{id}/logs`
@@ -220,11 +226,10 @@ onPolicyEvent: (event: PolicyEvent) => {
   this.emitUpdate(workspace);
 
   // NEW: persist policy on ratchet events
-  if (event.operation.startsWith("branch-ratchet:") ||
-      event.operation.startsWith("pr-capture:")) {
+  if (event.operation.startsWith('branch-ratchet:') || event.operation.startsWith('pr-capture:')) {
     writePolicyState(workspace.id, workspace.githubPolicy!);
     // Also update hooks if branch changed
-    if (event.operation.startsWith("branch-ratchet:")) {
+    if (event.operation.startsWith('branch-ratchet:')) {
       updateHooksAllowedRefs(workspace.id, workspace.githubPolicy!.allowedPushRefs);
     }
   }
@@ -251,30 +256,33 @@ Write the new allowed refs to the existing `allowed-refs.txt` file. The pre-push
 
 ```typescript
 export type WorkspacePhase =
-  | "implementing"    // Pre-push
-  | "pr-open"         // PR created, CI/review loop
-  | "ci-failing"      // CI checks failing
-  | "reviewing"       // Review comments pending
-  | "ready";          // CI green, reviews clean
+  | 'implementing' // Pre-push
+  | 'pr-open' // PR created, CI/review loop
+  | 'ci-failing' // CI checks failing
+  | 'reviewing' // Review comments pending
+  | 'ready'; // CI green, reviews clean
 
 // Add to Workspace type:
 export interface Workspace {
   // ... existing fields ...
-  phase: WorkspacePhase;    // NEW
-  prUrl: string | null;     // NEW
+  phase: WorkspacePhase; // NEW
+  prUrl: string | null; // NEW
 }
 ```
 
 **`src/main/workspace-manager.ts`** — Derive phase from policy events:
+
 - Session start → `"implementing"`
 - PR capture event → `"pr-open"`, set `prUrl` from captured PR response
 - Phase transitions for `ci-failing` / `reviewing` / `ready` are harder to derive from proxy events alone (the proxy sees API calls but doesn't interpret CI results). For the demo, keep it simple: `"implementing"` → `"pr-open"` is the only automatic transition. Further refinement is future work.
 
 **`src/renderer/src/components/WorkspacesSidebar.tsx`** — Display:
+
 - Phase badge next to workspace name (small colored label)
 - PR URL as a clickable link below the workspace entry (when set)
 
 **`src/renderer/src/components/ChatPanel.tsx`** — When a PR is created:
+
 - Show a banner or inline card with the PR URL at the point in the chat timeline where it was created
 
 ### Testing
@@ -307,14 +315,14 @@ Steps 3 and 4 are independent of steps 1-2 and could be done in parallel.
 
 ## Files Changed Summary
 
-| File | Steps | Nature of Change |
-|---|---|---|
-| `src/main/types.ts` | 1, 7 | Add `protectedBranches` to `GitHubPolicy`; add `WorkspacePhase`, `prUrl` to `Workspace` |
-| `src/main/github-policy.ts` | 1 | Update `buildSessionPolicy` to use wildcard refs |
-| `src/main/proxy-github.ts` | 2 | Add branch ratchet logic after successful push |
-| `src/main/github-policy-engine.ts` | 2, 3, 4 | Wildcard ref matching, new API endpoints, merge deny |
-| `src/main/gh-shim.ts` | 4, 5 | Explicit merge deny message, new subcommand handlers |
-| `src/main/hooks.ts` | 1, 6 | Wildcard support in hook, `updateHooksAllowedRefs` |
-| `src/main/workspace-manager.ts` | 6, 7 | Policy sync on ratchet, phase tracking, PR URL capture |
-| `src/renderer/src/components/WorkspacesSidebar.tsx` | 7 | Phase badge, PR URL link |
-| `src/renderer/src/components/ChatPanel.tsx` | 7 | PR creation banner |
+| File                                                | Steps   | Nature of Change                                                                        |
+| --------------------------------------------------- | ------- | --------------------------------------------------------------------------------------- |
+| `src/main/types.ts`                                 | 1, 7    | Add `protectedBranches` to `GitHubPolicy`; add `WorkspacePhase`, `prUrl` to `Workspace` |
+| `src/main/github-policy.ts`                         | 1       | Update `buildSessionPolicy` to use wildcard refs                                        |
+| `src/main/proxy-github.ts`                          | 2       | Add branch ratchet logic after successful push                                          |
+| `src/main/github-policy-engine.ts`                  | 2, 3, 4 | Wildcard ref matching, new API endpoints, merge deny                                    |
+| `src/main/gh-shim.ts`                               | 4, 5    | Explicit merge deny message, new subcommand handlers                                    |
+| `src/main/hooks.ts`                                 | 1, 6    | Wildcard support in hook, `updateHooksAllowedRefs`                                      |
+| `src/main/workspace-manager.ts`                     | 6, 7    | Policy sync on ratchet, phase tracking, PR URL capture                                  |
+| `src/renderer/src/components/WorkspacesSidebar.tsx` | 7       | Phase badge, PR URL link                                                                |
+| `src/renderer/src/components/ChatPanel.tsx`         | 7       | PR creation banner                                                                      |

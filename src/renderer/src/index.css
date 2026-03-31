@@ -5,8 +5,9 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans',
+    'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #1e1e1e;
@@ -353,8 +354,13 @@ body {
 }
 
 @keyframes pulse-fade {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .workspace-label {
@@ -512,8 +518,10 @@ body {
   padding: 0;
   font-size: 0.85em;
 }
-.user-bubble ul, .user-bubble ol,
-.step-content ul, .step-content ol {
+.user-bubble ul,
+.user-bubble ol,
+.step-content ul,
+.step-content ol {
   margin: 0.4em 0;
   padding-left: 1.5em;
   white-space: normal;
@@ -526,14 +534,29 @@ body {
 .step-content li > p {
   margin: 0;
 }
-.user-bubble h1, .user-bubble h2, .user-bubble h3, .user-bubble h4,
-.step-content h1, .step-content h2, .step-content h3, .step-content h4 {
+.user-bubble h1,
+.user-bubble h2,
+.user-bubble h3,
+.user-bubble h4,
+.step-content h1,
+.step-content h2,
+.step-content h3,
+.step-content h4 {
   margin: 0.6em 0 0.3em;
   line-height: 1.3;
 }
-.user-bubble h1, .step-content h1 { font-size: 1.2em; }
-.user-bubble h2, .step-content h2 { font-size: 1.1em; }
-.user-bubble h3, .step-content h3 { font-size: 1.05em; }
+.user-bubble h1,
+.step-content h1 {
+  font-size: 1.2em;
+}
+.user-bubble h2,
+.step-content h2 {
+  font-size: 1.1em;
+}
+.user-bubble h3,
+.step-content h3 {
+  font-size: 1.05em;
+}
 .user-bubble blockquote,
 .step-content blockquote {
   border-left: 3px solid rgba(255, 255, 255, 0.3);
@@ -567,8 +590,10 @@ body {
   overflow-x: auto;
   display: block;
 }
-.user-bubble th, .user-bubble td,
-.step-content th, .step-content td {
+.user-bubble th,
+.user-bubble td,
+.step-content th,
+.step-content td {
   border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 4px 8px;
   text-align: left;
@@ -1019,7 +1044,7 @@ body {
   content: '';
   position: absolute;
   left: 3.5px; /* center of 8px dot */
-  top: 11px;   /* center of dot (margin-top 7px + 4px radius) */
+  top: 11px; /* center of dot (margin-top 7px + 4px radius) */
   bottom: -15px; /* extend through gap (8px) + next dot's margin-top (7px) */
   width: 1px;
   background-color: #333;
@@ -1054,8 +1079,13 @@ body {
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .tool-step-summary {
