@@ -10,7 +10,7 @@ Discovered during Phase 2 of Milestone 1 against `@zed-industries/claude-agent-a
 
 The `sessionUpdate` notifications with `sessionUpdate: "tool_call"` and `"tool_call_update"` report tool execution status and results, but the actual execution has already happened by the time the client sees the update.
 
-**Impact:** Phase 3 (terminal management) as designed is unnecessary for basic operation. The client-side terminal and file methods are optional capabilities that Claude Code *can* use but doesn't *need* to use — it has its own implementations.
+**Impact:** Phase 3 (terminal management) as designed is unnecessary for basic operation. The client-side terminal and file methods are optional capabilities that Claude Code _can_ use but doesn't _need_ to use — it has its own implementations.
 
 **For Milestone 2 (sandboxing):** This is actually good news. Since Claude Code spawns its own subprocesses, all child processes inherit the Seatbelt sandbox. We don't need to intercept tool execution at the ACP level — the OS sandbox handles it.
 
@@ -57,6 +57,7 @@ Also includes optional `line` (1-based start line) and `limit` (max lines to rea
 **Plan assumed:** `clientCapabilities: {}`
 
 **Actual:** Capabilities have explicit flags:
+
 ```typescript
 clientCapabilities: {
   terminal: true,                                    // enables terminal methods
@@ -72,13 +73,13 @@ Without these flags, the agent won't call the corresponding Client methods. In p
 
 **Actual:** Claude Code sends several update variants:
 
-| `sessionUpdate` | When | Content |
-|-----------------|------|---------|
-| `available_commands_update` | After session creation | List of available slash commands |
-| `tool_call` | Tool invocation starts | Tool name, status=pending |
-| `tool_call_update` | Tool progress/completion | Input, output, status transitions |
-| `agent_message_chunk` | Text streaming | Text content |
-| `usage_update` | After prompt completes | Token usage and cost |
+| `sessionUpdate`             | When                     | Content                           |
+| --------------------------- | ------------------------ | --------------------------------- |
+| `available_commands_update` | After session creation   | List of available slash commands  |
+| `tool_call`                 | Tool invocation starts   | Tool name, status=pending         |
+| `tool_call_update`          | Tool progress/completion | Input, output, status transitions |
+| `agent_message_chunk`       | Text streaming           | Text content                      |
+| `usage_update`              | After prompt completes   | Token usage and cost              |
 
 The `tool_call` and `tool_call_update` notifications include `_meta.claudeCode.toolName` with the actual tool name (e.g., "Bash") and `_meta.claudeCode.toolResponse` with the tool's output.
 
@@ -87,6 +88,7 @@ The `tool_call` and `tool_call_update` notifications include `_meta.claudeCode.t
 **Resolved path:** `@zed-industries/claude-agent-acp/dist/index.js`
 
 The package's `bin` field maps `claude-agent-acp` to `dist/index.js`. It's a `#!/usr/bin/env node` script. The entry point:
+
 1. Loads managed settings
 2. Redirects `console.log` → `console.error` (stdout reserved for ACP)
 3. Calls `runAcp()` which sets up the `AgentSideConnection`

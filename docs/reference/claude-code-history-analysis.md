@@ -3,6 +3,7 @@
 ## Overview
 
 The `~/.claude/` directory is Claude Code's primary data store for:
+
 - User configuration and preferences
 - Session transcripts and history
 - File checkpoints and backups
@@ -57,12 +58,12 @@ Additionally, `~/.claude.json` (in home directory root, **not** inside `~/.claud
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `display` | string | The user's prompt text |
+| Field            | Type   | Description                        |
+| ---------------- | ------ | ---------------------------------- |
+| `display`        | string | The user's prompt text             |
 | `pastedContents` | object | Any pasted content (files, images) |
-| `timestamp` | number | Unix timestamp (milliseconds) |
-| `project` | string | Absolute path to project directory |
+| `timestamp`      | number | Unix timestamp (milliseconds)      |
+| `project`        | string | Absolute path to project directory |
 
 **Dev Journal Use**: Quick activity timeline - shows what was worked on and when, without full conversation context.
 
@@ -75,6 +76,7 @@ Additionally, `~/.claude.json` (in home directory root, **not** inside `~/.claud
 **Purpose**: Aggregated usage metrics computed from session data.
 
 **Structure**:
+
 ```json
 {
   "version": 1,
@@ -142,6 +144,7 @@ Session UUID: 31f3f224-f440-41ac-9244-b27ff054116d
 **Purpose**: Complete conversation transcripts organized by project.
 
 **Structure**:
+
 ```
 projects/
 ├── -Users-sam-Projects-dev-journal/     # Path encoded (/ → -)
@@ -157,6 +160,7 @@ projects/
 #### Message Types
 
 **User Message**:
+
 ```json
 {
   "type": "user",
@@ -180,6 +184,7 @@ projects/
 ```
 
 **Assistant Message**:
+
 ```json
 {
   "type": "assistant",
@@ -195,6 +200,7 @@ projects/
 ```
 
 **File History Snapshot**:
+
 ```json
 {
   "type": "file-history-snapshot",
@@ -215,6 +221,7 @@ projects/
 ```
 
 **Queue Operation** (prompt queuing):
+
 ```json
 {
   "type": "queue-operation",
@@ -225,33 +232,33 @@ projects/
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `operation` | string | `"enqueue"` or `"dequeue"` |
-| `content` | string | The queued prompt text |
+| Field       | Type   | Description                             |
+| ----------- | ------ | --------------------------------------- |
+| `operation` | string | `"enqueue"` or `"dequeue"`              |
+| `content`   | string | The queued prompt text                  |
 | `sessionId` | string | Session this queue operation belongs to |
 
 #### Key Fields Reference
 
-| Field | Description |
-|-------|-------------|
-| `type` | Message type: `user`, `assistant`, `file-history-snapshot`, `queue-operation` |
-| `uuid` | Unique identifier for this message |
-| `parentUuid` | Links response to its prompt (message chain) |
-| `sessionId` | Session identifier (links to other directories) |
-| `isSidechain` | Whether this is part of a side conversation branch (always `true` for sub-agents) |
-| `isMeta` | Whether this is a meta/system message (e.g., command output) |
-| `userType` | User type identifier (e.g., `"external"`) |
-| `cwd` | Working directory at time of message |
-| `gitBranch` | Active git branch |
-| `timestamp` | ISO 8601 timestamp |
-| `thinkingMetadata` | Extended thinking settings: `level`, `disabled`, `triggers` (array) |
-| `toolUseMessages` | Array of tool calls and results |
-| `todos` | Task list state at this message |
-| `slug` | Whimsical session/agent name (e.g., `"sunny-hatching-neumann"`) |
-| `requestId` | API request ID (assistant messages only, e.g., `"req_011CWfFS..."`) |
-| `toolUseResult` | Short summary of tool result (user messages with tool results) |
-| `agentId` | Sub-agent short ID (e.g., `"ac2a8dd"`, matches `agent-{id}.jsonl` filename) |
+| Field              | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `type`             | Message type: `user`, `assistant`, `file-history-snapshot`, `queue-operation`     |
+| `uuid`             | Unique identifier for this message                                                |
+| `parentUuid`       | Links response to its prompt (message chain)                                      |
+| `sessionId`        | Session identifier (links to other directories)                                   |
+| `isSidechain`      | Whether this is part of a side conversation branch (always `true` for sub-agents) |
+| `isMeta`           | Whether this is a meta/system message (e.g., command output)                      |
+| `userType`         | User type identifier (e.g., `"external"`)                                         |
+| `cwd`              | Working directory at time of message                                              |
+| `gitBranch`        | Active git branch                                                                 |
+| `timestamp`        | ISO 8601 timestamp                                                                |
+| `thinkingMetadata` | Extended thinking settings: `level`, `disabled`, `triggers` (array)               |
+| `toolUseMessages`  | Array of tool calls and results                                                   |
+| `todos`            | Task list state at this message                                                   |
+| `slug`             | Whimsical session/agent name (e.g., `"sunny-hatching-neumann"`)                   |
+| `requestId`        | API request ID (assistant messages only, e.g., `"req_011CWfFS..."`)               |
+| `toolUseResult`    | Short summary of tool result (user messages with tool results)                    |
+| `agentId`          | Sub-agent short ID (e.g., `"ac2a8dd"`, matches `agent-{id}.jsonl` filename)       |
 
 **Dev Journal Use**: **Primary source** - contains full context of what was accomplished, reasoning, tool usage, and file modifications.
 
@@ -260,11 +267,13 @@ projects/
 The `message.content` field is polymorphic depending on message type:
 
 **User messages (regular prompt)**:
+
 ```json
 "message": { "role": "user", "content": "Help me implement..." }
 ```
 
 **User messages (tool results)**:
+
 ```json
 "message": {
   "role": "user",
@@ -275,6 +284,7 @@ The `message.content` field is polymorphic depending on message type:
 ```
 
 **Assistant messages** (array with multiple content types):
+
 ```json
 "message": {
   "role": "assistant",
@@ -286,12 +296,12 @@ The `message.content` field is polymorphic depending on message type:
 }
 ```
 
-| Content Type | Fields | Description |
-|--------------|--------|-------------|
-| `text` | `text` | Plain text response |
-| `thinking` | `thinking`, `signature` | Extended thinking content (when enabled) |
-| `tool_use` | `id`, `name`, `input` | Tool invocation |
-| `tool_result` | `tool_use_id`, `content`, `is_error` | Tool execution result |
+| Content Type  | Fields                               | Description                              |
+| ------------- | ------------------------------------ | ---------------------------------------- |
+| `text`        | `text`                               | Plain text response                      |
+| `thinking`    | `thinking`, `signature`              | Extended thinking content (when enabled) |
+| `tool_use`    | `id`, `name`, `input`                | Tool invocation                          |
+| `tool_result` | `tool_use_id`, `content`, `is_error` | Tool execution result                    |
 
 #### Tool Use and Permission Decisions
 
@@ -310,12 +320,12 @@ There is no explicit field distinguishing a one-time "Yes" approval from a tool 
 **"Allow All" / Permission Mode Changes**:
 When the user grants blanket permission (e.g., "Yes, allow all edits"), this is reflected as a change in the **`permissionMode`** field on subsequent user-type records. Common values:
 
-| Value | Meaning |
-|---|---|
-| `"default"` | Each tool use may prompt for permission |
-| `"acceptEdits"` | File edits are auto-approved |
-| `"plan"` | Plan mode (exploration only, edits blocked) |
-| `"bypassPermissions"` | All tools auto-approved |
+| Value                 | Meaning                                     |
+| --------------------- | ------------------------------------------- |
+| `"default"`           | Each tool use may prompt for permission     |
+| `"acceptEdits"`       | File edits are auto-approved                |
+| `"plan"`              | Plan mode (exploration only, edits blocked) |
+| `"bypassPermissions"` | All tools auto-approved                     |
 
 Permission mode changes are session-wide and appear on user-type records going forward — they are not recorded as a per-tool-use decision.
 
@@ -334,6 +344,7 @@ Not all `is_error: true` results are user rejections. System-level errors (e.g.,
 **Purpose**: Versioned backups of files edited during sessions for undo/rollback.
 
 **Structure**:
+
 ```
 file-history/
 └── 31f3f224-f440-41ac-9244-b27ff054116d/    # Session UUID
@@ -345,14 +356,15 @@ file-history/
 
 **File Naming**: `{contentHash}@v{versionNumber}`
 
-| Component | Description |
-|-----------|-------------|
-| `contentHash` | 16-character hex hash of file content (e.g., `59e0b9c43163e850`) |
-| `versionNumber` | Sequential version within session (1, 2, 3...) |
+| Component       | Description                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `contentHash`   | 16-character hex hash of file content (e.g., `59e0b9c43163e850`) |
+| `versionNumber` | Sequential version within session (1, 2, 3...)                   |
 
 **Content**: Raw file content at that version
 
 **Correlation**:
+
 - Directory name = `sessionId` from session transcript
 - `backupFileName` in `file-history-snapshot` messages points to these files
 
@@ -360,23 +372,24 @@ file-history/
 
 The `backupFileName` field in `trackedFileBackups` entries can be:
 
-| Value | When it occurs | Meaning |
-|-------|---------------|---------|
-| `"hash@v1"` | Editing existing files | Backup file exists in `file-history/{sessionId}/` |
-| `null` | **Newly created files** (common at v1) | No previous content to back up |
-| `null` | Edge cases (rare, any version) | Backup creation failed or was skipped |
+| Value       | When it occurs                         | Meaning                                           |
+| ----------- | -------------------------------------- | ------------------------------------------------- |
+| `"hash@v1"` | Editing existing files                 | Backup file exists in `file-history/{sessionId}/` |
+| `null`      | **Newly created files** (common at v1) | No previous content to back up                    |
+| `null`      | Edge cases (rare, any version)         | Backup creation failed or was skipped             |
 
 **Example**: When Claude creates a new file, the first snapshot has `backupFileName: null`:
+
 ```json
 {
   "trackedFileBackups": {
     "new-file.md": {
-      "backupFileName": null,   // No backup - file didn't exist before
+      "backupFileName": null, // No backup - file didn't exist before
       "version": 1,
       "backupTime": "2025-12-11T15:50:50.185Z"
     },
     "existing-file.md": {
-      "backupFileName": "fe8c3c23062c0e71@v1",  // Backup of original content
+      "backupFileName": "fe8c3c23062c0e71@v1", // Backup of original content
       "version": 1,
       "backupTime": "2025-12-11T15:52:13.999Z"
     }
@@ -393,6 +406,7 @@ The `backupFileName` field in `trackedFileBackups` entries can be:
 **Purpose**: Persisted todo lists created during sessions.
 
 **Structure**:
+
 ```
 todos/
 ├── 31f3f224-...-agent-31f3f224-....json    # {sessionId}-agent-{agentId}.json
@@ -410,6 +424,7 @@ todos/
 **Purpose**: Markdown implementation plans created during plan mode.
 
 **Structure**:
+
 ```
 plans/
 ├── cosmic-plotting-bunny.md      # Auto-generated whimsical names
@@ -418,17 +433,22 @@ plans/
 ```
 
 **Content Example**:
+
 ```markdown
 # Chat Exchange Details Modal
 
 ## Goal
+
 Add a clickable link to each message that opens a modal...
 
 ## Approach
+
 Extend sessionStorage to store per-message metadata...
 
 ## Data Structure
+
 ### New sessionStorage key: `chat-rag-message-metadata`
+
 ...
 ```
 
@@ -443,6 +463,7 @@ Extend sessionStorage to store per-message metadata...
 **Purpose**: Debug output for troubleshooting sessions.
 
 **Structure**:
+
 ```
 debug/
 ├── 31f3f224-f440-41ac-9244-b27ff054116d.txt
@@ -452,6 +473,7 @@ debug/
 **Naming**: `{sessionId}.txt`
 
 **Format**: Plain text with timestamped debug entries:
+
 ```
 2025-12-30T00:25:27.892Z [DEBUG] [SLOW OPERATION DETECTED] execSyncWithDefaults (21.7ms): security find-generic-password
 2025-12-30T00:25:27.920Z [DEBUG] Watching for changes in setting files /Users/sam/.claude...
@@ -465,6 +487,7 @@ debug/
 **Purpose**: Per-session environment variable storage.
 
 **Structure**:
+
 ```
 session-env/
 ├── 31f3f224-f440-41ac-9244-b27ff054116d/
@@ -480,6 +503,7 @@ session-env/
 **Purpose**: Captures shell environment for session restoration.
 
 **Structure**:
+
 ```
 shell-snapshots/
 ├── snapshot-zsh-1752622750085-qza877.sh
@@ -497,6 +521,7 @@ shell-snapshots/
 **Purpose**: User-defined slash commands (invoked with `/command-name`).
 
 **Structure**:
+
 ```
 commands/
 ├── brainstorm.md
@@ -524,6 +549,7 @@ description: I've got an idea I want to talk through with you.
 **Purpose**: Skills with multiple files, scripts, and more complex logic.
 
 **Structure**:
+
 ```
 skills/
 ├── dev-journal -> /path/to/skill/directory    # Can be symlinks
@@ -535,6 +561,7 @@ skills/
 ```
 
 **SKILL.md Format**:
+
 ```markdown
 ---
 name: dev-journal
@@ -554,6 +581,7 @@ allowed-tools: Bash Read Write
 **Purpose**: Plugin marketplace integration and installed plugins.
 
 **Structure**:
+
 ```
 plugins/
 ├── cache/                           # Installed plugin files
@@ -567,6 +595,7 @@ plugins/
 ```
 
 **installed_plugins.json Example**:
+
 ```json
 {
   "version": 2,
@@ -595,6 +624,7 @@ plugins/
 **Purpose**: Global user settings applied to all projects.
 
 **Key Sections**:
+
 ```json
 {
   "permissions": {
@@ -616,7 +646,6 @@ plugins/
 }
 ```
 
-
 ---
 
 ## `~/.claude.json` (Root Level)
@@ -629,14 +658,14 @@ plugins/
 
 ### Data Categories
 
-| Category | Fields | Description |
-|----------|--------|-------------|
-| **User Preferences** | `theme`, `preferredNotifChannel`, `showExpandedTodos` | UI and notification settings |
-| **OAuth Session** | `oauthAccount.accountUuid`, `emailAddress`, `organizationUuid` | Authentication state |
-| **MCP Server Configs** | `mcpServers` | User-scope MCP server definitions with credentials |
-| **Per-Project State** | `projects.{path}.*` | Trust dialogs, last session, costs, project-level MCP servers |
-| **Feature Flags** | `cachedStatsigGates`, `cachedGrowthBookFeatures` | A/B testing and feature rollout caches |
-| **Usage Tracking** | `numStartups`, `tipsHistory`, `memoryUsageCount` | Onboarding and tip display state |
+| Category               | Fields                                                         | Description                                                   |
+| ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
+| **User Preferences**   | `theme`, `preferredNotifChannel`, `showExpandedTodos`          | UI and notification settings                                  |
+| **OAuth Session**      | `oauthAccount.accountUuid`, `emailAddress`, `organizationUuid` | Authentication state                                          |
+| **MCP Server Configs** | `mcpServers`                                                   | User-scope MCP server definitions with credentials            |
+| **Per-Project State**  | `projects.{path}.*`                                            | Trust dialogs, last session, costs, project-level MCP servers |
+| **Feature Flags**      | `cachedStatsigGates`, `cachedGrowthBookFeatures`               | A/B testing and feature rollout caches                        |
+| **Usage Tracking**     | `numStartups`, `tipsHistory`, `memoryUsageCount`               | Onboarding and tip display state                              |
 
 ### Structure
 
@@ -682,18 +711,18 @@ plugins/
 
 ### Per-Project State Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `allowedTools` | array | Project-specific tool permissions |
-| `hasTrustDialogAccepted` | boolean | Whether user accepted project trust dialog |
-| `mcpServers` | object | Project-scope MCP server configurations |
-| `lastSessionId` | string | UUID of most recent session in this project |
-| `lastCost` | number | API cost of last session (USD) |
-| `lastAPIDuration` | number | API response time of last request (ms) |
-| `lastDuration` | number | Total duration of last session (ms) |
-| `exampleFiles` | array | Auto-detected representative files for context |
-| `hasCompletedProjectOnboarding` | boolean | Project onboarding completion state |
-| `dontCrawlDirectory` | boolean | Disable automatic directory indexing |
+| Field                           | Type    | Description                                    |
+| ------------------------------- | ------- | ---------------------------------------------- |
+| `allowedTools`                  | array   | Project-specific tool permissions              |
+| `hasTrustDialogAccepted`        | boolean | Whether user accepted project trust dialog     |
+| `mcpServers`                    | object  | Project-scope MCP server configurations        |
+| `lastSessionId`                 | string  | UUID of most recent session in this project    |
+| `lastCost`                      | number  | API cost of last session (USD)                 |
+| `lastAPIDuration`               | number  | API response time of last request (ms)         |
+| `lastDuration`                  | number  | Total duration of last session (ms)            |
+| `exampleFiles`                  | array   | Auto-detected representative files for context |
+| `hasCompletedProjectOnboarding` | boolean | Project onboarding completion state            |
+| `dontCrawlDirectory`            | boolean | Disable automatic directory indexing           |
 
 ---
 
@@ -709,16 +738,16 @@ These two files serve **complementary, non-duplicative** roles:
 
 ### Comparison
 
-| Aspect | `~/.claude.json` | `~/.claude/settings.json` |
-|--------|-----------------|------------------------|
-| **Location** | `~/` (home root) | `~/.claude/` |
-| **Purpose** | Runtime state, caches, auth | Security rules, hooks, model |
-| **Manual editing** | ❌ Not recommended | ✅ Intended for editing |
-| **What it tracks** | *What has happened* | *What should happen* |
-| **MCP servers** | User-scope definitions | N/A |
-| **Permissions** | N/A | `allow`, `deny`, `ask` rules |
-| **Per-project** | Trust, sessions, costs | Use `.claude/settings.json` in projects |
-| **Git tracking** | Never commit | Project-level can be committed |
+| Aspect             | `~/.claude.json`            | `~/.claude/settings.json`               |
+| ------------------ | --------------------------- | --------------------------------------- |
+| **Location**       | `~/` (home root)            | `~/.claude/`                            |
+| **Purpose**        | Runtime state, caches, auth | Security rules, hooks, model            |
+| **Manual editing** | ❌ Not recommended          | ✅ Intended for editing                 |
+| **What it tracks** | _What has happened_         | _What should happen_                    |
+| **MCP servers**    | User-scope definitions      | N/A                                     |
+| **Permissions**    | N/A                         | `allow`, `deny`, `ask` rules            |
+| **Per-project**    | Trust, sessions, costs      | Use `.claude/settings.json` in projects |
+| **Git tracking**   | Never commit                | Project-level can be committed          |
 
 ### Why Two Files?
 
@@ -805,13 +834,13 @@ Sub-agent messages inherit the parent `sessionId` but add:
 
 ### Data Sources by Use Case
 
-| Need | Primary Source | Secondary Source |
-|------|----------------|------------------|
-| "What did I work on today?" | `history.jsonl` | `projects/*.jsonl` |
-| "What files did I change?" | `file-history/` | Session transcripts |
-| "What problems did I solve?" | `projects/*.jsonl` | - |
-| "How much did I use Claude?" | `stats-cache.json` | - |
-| "What was my plan?" | `plans/*.md` | Session transcripts |
+| Need                         | Primary Source     | Secondary Source    |
+| ---------------------------- | ------------------ | ------------------- |
+| "What did I work on today?"  | `history.jsonl`    | `projects/*.jsonl`  |
+| "What files did I change?"   | `file-history/`    | Session transcripts |
+| "What problems did I solve?" | `projects/*.jsonl` | -                   |
+| "How much did I use Claude?" | `stats-cache.json` | -                   |
+| "What was my plan?"          | `plans/*.md`       | Session transcripts |
 
 ### Recommended Extraction Flow
 

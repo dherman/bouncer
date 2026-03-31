@@ -30,6 +30,7 @@ The safehouse integration with `--enable=all-agents` provides a comprehensive sa
 - **Notes**: Initial typecheck failed because the worktree lacked `node_modules` (worktrees don't carry installed dependencies). Agent diagnosed this and ran `npm install`. The Electron postinstall script failed due to sandbox blocking access to `~/Library/Caches/electron/`. Agent worked around by skipping the Electron binary. After install, typecheck passed cleanly.
 
 **Electron cache friction:**
+
 ```
 Error: EPERM: operation not permitted, open
   '<home>/Library/Caches/electron/.../electron-v41.0.3-darwin-arm64.zip'
@@ -68,11 +69,11 @@ Safehouse's curated profiles handle system runtime, Node.js toolchain, Claude Co
 
 ## Known Limitations
 
-| Issue | Severity | Workaround | Future Fix |
-|-------|----------|-----------|------------|
-| Electron cache blocked (`~/Library/Caches/electron/`) | Low | Agent skips Electron binary; only affects Electron app development | Could add `--add-dirs-ro` for `~/Library/Caches/electron/` if needed |
-| Monitor warmup noise | Cosmetic | Violations are informational only | Filter by agent process names in UI, or shorten warmup window |
-| Worktrees lack `node_modules` | Expected | Agent runs `npm install` in worktree | Could pre-install deps during worktree creation (Milestone 3 policy templates) |
+| Issue                                                 | Severity | Workaround                                                         | Future Fix                                                                     |
+| ----------------------------------------------------- | -------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Electron cache blocked (`~/Library/Caches/electron/`) | Low      | Agent skips Electron binary; only affects Electron app development | Could add `--add-dirs-ro` for `~/Library/Caches/electron/` if needed           |
+| Monitor warmup noise                                  | Cosmetic | Violations are informational only                                  | Filter by agent process names in UI, or shorten warmup window                  |
+| Worktrees lack `node_modules`                         | Expected | Agent runs `npm install` in worktree                               | Could pre-install deps during worktree creation (Milestone 3 policy templates) |
 
 ## Application-Layer Gaps
 
