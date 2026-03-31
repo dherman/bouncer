@@ -41,7 +41,9 @@
     "test:proxy-network": "tsx scripts/test-proxy-network.ts",
     "test:github-policy-engine": "tsx scripts/test-github-policy-engine.ts",
     "test:proxy-github": "tsx scripts/test-proxy-github.ts",
-    "test:proxy-e2e": "tsx scripts/test-proxy-e2e.ts"
+    "test:proxy-e2e": "tsx scripts/test-proxy-e2e.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
@@ -51,6 +53,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^41.0.3",
     "electron-vite": "^5.0.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

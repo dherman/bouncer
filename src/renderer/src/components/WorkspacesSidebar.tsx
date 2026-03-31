@@ -15,7 +15,11 @@ function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <img src={hovered ? newFolderHoverIcon : newFolderIcon} alt="Add repository" className="add-repo-icon" />
+      <img
+        src={hovered ? newFolderHoverIcon : newFolderIcon}
+        alt="Add repository"
+        className="add-repo-icon"
+      />
     </button>
   )
 }
@@ -113,63 +117,55 @@ function RepoGroup({
           +
         </button>
       </div>
-      {expanded && workspaces.map((ws) => (
-        <div
-          key={ws.id}
-          className={`workspace-item ${ws.id === activeWorkspaceId ? 'active' : ''}`}
-          onClick={() => onSelectWorkspace(ws.id)}
-        >
-          <img
-            className="workspace-branch-icon"
-            src={branchIcon}
-            alt="Branch"
-          />
-          <span className="workspace-label">
-            {workspaceLabel(ws)}
-            {ws.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-            {ws.policyName && (
-              <span
-                className={`policy-badge policy-${ws.policyId ?? 'default'}`}
-                title={ws.policyId ? (policyDescriptions.get(ws.policyId) ?? ws.policyId) : ''}
+      {expanded &&
+        workspaces.map((ws) => (
+          <div
+            key={ws.id}
+            className={`workspace-item ${ws.id === activeWorkspaceId ? 'active' : ''}`}
+            onClick={() => onSelectWorkspace(ws.id)}
+          >
+            <img className="workspace-branch-icon" src={branchIcon} alt="Branch" />
+            <span className="workspace-label">
+              {workspaceLabel(ws)}
+              {ws.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
+              {ws.policyName && (
+                <span
+                  className={`policy-badge policy-${ws.policyId ?? 'default'}`}
+                  title={ws.policyId ? (policyDescriptions.get(ws.policyId) ?? ws.policyId) : ''}
+                >
+                  {ws.policyName}
+                </span>
+              )}
+              {ws.githubRepo && (
+                <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
+                  {ws.ownedPrNumber != null ? `#${ws.ownedPrNumber}` : ''}
+                </span>
+              )}
+              {(violationCounts.get(ws.id) ?? 0) > 0 && (
+                <span className="violation-count">{violationCounts.get(ws.id)}</span>
+              )}
+            </span>
+            <span className="workspace-status">{ws.status}</span>
+            {ws.status !== 'closed' && (
+              <button
+                type="button"
+                className="close-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCloseWorkspace(ws.id)
+                }}
+                aria-label="Close workspace"
               >
-                {ws.policyName}
-              </span>
+                ×
+              </button>
             )}
-            {ws.githubRepo && (
-              <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
-                {ws.ownedPrNumber != null ? `#${ws.ownedPrNumber}` : ''}
-              </span>
-            )}
-            {(violationCounts.get(ws.id) ?? 0) > 0 && (
-              <span className="violation-count">{violationCounts.get(ws.id)}</span>
-            )}
-          </span>
-          <span className="workspace-status">{ws.status}</span>
-          {ws.status !== 'closed' && (
-            <button
-              type="button"
-              className="close-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCloseWorkspace(ws.id)
-              }}
-              aria-label="Close workspace"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
-      {expanded && workspaces.length === 0 && (
-        <div className="repo-empty">No workspaces</div>
-      )}
+          </div>
+        ))}
+      {expanded && workspaces.length === 0 && <div className="repo-empty">No workspaces</div>}
       {showContextMenu && (
         <>
           <div className="context-menu-overlay" onClick={() => setShowContextMenu(false)} />
-          <div
-            className="context-menu"
-            style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
-          >
+          <div className="context-menu" style={{ left: contextMenuPos.x, top: contextMenuPos.y }}>
             <button
               type="button"
               onClick={() => {
@@ -221,7 +217,8 @@ export function WorkspacesSidebar({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        return
       if (e.metaKey && e.altKey && e.code === 'KeyA') {
         e.preventDefault()
         onAddRepoRef.current()
@@ -240,7 +237,6 @@ export function WorkspacesSidebar({
       <div className="sidebar-header">
         <span className="sidebar-title">Workspaces</span>
         <AddRepoButton onAddRepo={onAddRepo} />
-
       </div>
       {repos.map((repo) => (
         <RepoGroup
@@ -258,11 +254,7 @@ export function WorkspacesSidebar({
           onOpenSettings={onOpenRepoSettings}
         />
       ))}
-      {repos.length === 0 && (
-        <div className="empty-state">
-          Add a repository to get started
-        </div>
-      )}
+      {repos.length === 0 && <div className="empty-state">Add a repository to get started</div>}
     </div>
   )
 }
