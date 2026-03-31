@@ -14,6 +14,21 @@
  * the parsed input has host=github.com and protocol=https.
  */
 
+import { readFileSync } from "node:fs";
+
+/** Token file path inside the container, refreshed by the host. */
+const GH_TOKEN_FILE = "/etc/bouncer/gh-token";
+
+function resolveGhToken(): string | undefined {
+  try {
+    const fromFile = readFileSync(GH_TOKEN_FILE, "utf-8").trim();
+    if (fromFile) return fromFile;
+  } catch {
+    // File doesn't exist — fall back to env
+  }
+  return process.env.GH_TOKEN || undefined;
+}
+
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
     let data = "";
@@ -52,10 +67,10 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const token = process.env.GH_TOKEN;
+  const token = resolveGhToken();
   if (!token) {
     // Exit 0 with no output so git can fall back to other helpers
-    process.stderr.write("gh-credential-helper: GH_TOKEN is not set\n");
+    process.stderr.write("gh-credential-helper: no token available (file or GH_TOKEN)\n");
     process.exit(0);
   }
 

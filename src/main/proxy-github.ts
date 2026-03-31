@@ -7,8 +7,10 @@
 
 import http from "node:http";
 import https from "node:https";
+import zlib from "node:zlib";
 import {
   evaluateGitHubRequest,
+  evaluateGraphQLBody,
   parseGitReceivePack,
   evaluateGitPush,
   isPushWildcard,
@@ -70,6 +72,7 @@ function handleGitHubApiRequest(
   const policy = config.githubPolicy!;
 
   const decision = evaluateGitHubRequest(method, path, policy);
+  console.log(`[proxy-github] ${method} ${path} → ${decision.action} (canCreatePr=${policy.canCreatePr}, ownedPrNumber=${policy.ownedPrNumber})`);
 
   // Log the policy event
   config.onPolicyEvent({
@@ -79,6 +82,12 @@ function handleGitHubApiRequest(
     decision: decision.action === "deny" ? "deny" : "allow",
     reason: decision.action === "deny" ? decision.reason : undefined,
   });
+
+  if (decision.action === "inspect-graphql") {
+    // Buffer the request body, parse the GraphQL mutation, and evaluate
+    handleGraphQLInspection(req, res, hostname, upstreamPort, config, upstream);
+    return;
+  }
 
   if (decision.action === "deny") {
     res.writeHead(403, { "Content-Type": "text/plain" });
@@ -97,6 +106,58 @@ function handleGitHubApiRequest(
 
   // Standard allow — forward directly via the proxy's built-in upstream
   upstream(req, res);
+}
+
+// ---------------------------------------------------------------------------
+// GraphQL body inspection
+// ---------------------------------------------------------------------------
+
+const MAX_GRAPHQL_BODY_BYTES = 64 * 1024; // 64 KB — GraphQL bodies are small
+
+function handleGraphQLInspection(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  hostname: string,
+  upstreamPort: number,
+  config: ProxyConfig,
+  upstream: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+): void {
+  const chunks: Buffer[] = [];
+  let size = 0;
+
+  req.on("data", (chunk: Buffer) => {
+    size += chunk.length;
+    if (size > MAX_GRAPHQL_BODY_BYTES) {
+      res.writeHead(413, { "Content-Type": "text/plain" });
+      res.end("[bouncer:proxy] DENY POST /graphql — request body too large\n");
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+
+  req.on("end", () => {
+    const body = Buffer.concat(chunks).toString("utf-8");
+    const policy = config.githubPolicy!;
+    const decision = evaluateGraphQLBody(body, policy);
+
+    config.onPolicyEvent({
+      timestamp: Date.now(),
+      tool: "proxy",
+      operation: `POST /graphql`,
+      decision: decision.action === "deny" ? "deny" : "allow",
+      reason: decision.action === "deny" ? decision.reason : undefined,
+    });
+
+    if (decision.action === "deny") {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end(`[bouncer:proxy] DENY POST /graphql — ${decision.reason}\n`);
+      return;
+    }
+
+    // Forward the buffered body to upstream
+    forwardWithBody(req, res, hostname, upstreamPort, config, Buffer.from(body));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -146,24 +207,23 @@ function handleGitSmartHttp(
     return;
   }
 
-  // Buffer the pkt-line ref header section. The ref updates are small
-  // (typically under 1 KB), followed by a flush packet "0000", then the
-  // potentially large packfile. We buffer up to MAX_HEADER_BYTES to find
-  // the complete ref section, evaluate policy, then stream everything
-  // (buffered prefix + remaining body) to upstream if allowed.
-  const MAX_HEADER_BYTES = 64 * 1024;
-  const headerChunks: Buffer[] = [];
-  let headerSize = 0;
+  // Buffer the entire push body. We need the pkt-line ref header section
+  // (typically under 1 KB, before the "0000" flush packet) for policy
+  // evaluation, plus the full body (including the packfile) to forward
+  // to upstream since we've consumed the request stream.
+  const MAX_PUSH_BODY_BYTES = 256 * 1024 * 1024; // 256 MB safety limit
+  const bodyChunks: Buffer[] = [];
+  let bodySize = 0;
   let decided = false;
 
   req.on("data", (chunk: Buffer) => {
     if (decided) return;
-    headerChunks.push(chunk);
-    headerSize += chunk.length;
+    bodyChunks.push(chunk);
+    bodySize += chunk.length;
 
-    if (headerSize > MAX_HEADER_BYTES) {
+    if (bodySize > MAX_PUSH_BODY_BYTES) {
       decided = true;
-      denyPush(req, res, config, "git push", "pkt-line header exceeded size limit");
+      denyPush(req, res, config, "git push", "push body exceeded size limit");
     }
   });
 
@@ -171,7 +231,7 @@ function handleGitSmartHttp(
     if (decided) return;
     decided = true;
 
-    const body = Buffer.concat(headerChunks);
+    const body = Buffer.concat(bodyChunks);
     const parseResult = parseGitReceivePack(body);
     const result = evaluateGitPush(parseResult, policy);
 
@@ -311,7 +371,7 @@ function forwardWithCapture(
       clientRes.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
       clientRes.end(bodyBuffer);
 
-      // Attempt PR capture only for successful, uncompressed, reasonably-sized responses
+      // Attempt PR capture only for successful, reasonably-sized responses
       if (
         !captureLimitExceeded &&
         proxyRes.statusCode &&
@@ -322,15 +382,44 @@ function forwardWithCapture(
         if (!encoding || encoding === "identity") {
           try {
             capturePrFromResponse(bodyBuffer.toString("utf-8"), config);
-          } catch {
-            // Decode failed — skip capture
+          } catch (err) {
+            console.warn("[proxy] PR capture decode failed:", err);
           }
+        } else if (encoding === "gzip" || encoding === "deflate" || encoding === "br") {
+          // Decompress before parsing — GitHub may gzip even without Accept-Encoding
+          try {
+            let decompressed: Buffer;
+            if (encoding === "gzip") {
+              decompressed = zlib.gunzipSync(bodyBuffer);
+            } else if (encoding === "deflate") {
+              decompressed = zlib.inflateSync(bodyBuffer);
+            } else {
+              decompressed = zlib.brotliDecompressSync(bodyBuffer);
+            }
+            capturePrFromResponse(decompressed.toString("utf-8"), config);
+          } catch (err) {
+            console.warn(`[proxy] PR capture: failed to decompress ${encoding}:`, err);
+          }
+        } else {
+          console.warn(`[proxy] PR capture skipped: unsupported content-encoding '${encoding}'`);
         }
+      } else {
+        // PR creation failed upstream — restore canCreatePr so the agent can retry
+        // (e.g., after pushing the branch). Without this, the eager reservation on
+        // the allow-and-capture-pr path permanently blocks retries.
+        if (config.githubPolicy) {
+          config.githubPolicy.canCreatePr = true;
+        }
+        console.warn(`[proxy] PR capture skipped: status=${proxyRes.statusCode}, limitExceeded=${captureLimitExceeded}`);
       }
     });
   });
 
   proxyReq.on("error", () => {
+    // Restore canCreatePr on connection errors too
+    if (config.githubPolicy) {
+      config.githubPolicy.canCreatePr = true;
+    }
     clientRes.writeHead(502);
     clientRes.end("Bad Gateway\n");
   });
@@ -349,14 +438,17 @@ function capturePrFromResponse(body: string, config: ProxyConfig): void {
       config.githubPolicy.canCreatePr = false;
       config.githubPolicy.ownedPrNumber = data.number;
       const prUrl = typeof data.html_url === "string" ? data.html_url : null;
+      console.log(`[proxy] PR captured: #${data.number}${prUrl ? ` ${prUrl}` : ""}`);
       config.onPolicyEvent({
         timestamp: Date.now(),
         tool: "proxy",
         operation: `captured PR #${data.number}${prUrl ? ` ${prUrl}` : ""}`,
         decision: "allow",
       });
+    } else {
+      console.warn(`[proxy] PR capture: response parsed but no number field (keys: ${Object.keys(data).join(", ")})`);
     }
-  } catch {
-    // Response wasn't JSON — skip capture
+  } catch (err) {
+    console.warn("[proxy] PR capture: JSON parse failed:", err);
   }
 }

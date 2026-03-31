@@ -215,6 +215,10 @@ interface WorkspaceState {
   promptCount: number;
   /** Message queued while workspace was still initializing. */
   pendingMessage: string | null;
+  /** Periodic GH token refresh timer (cleared on close). */
+  ghTokenRefreshTimer: ReturnType<typeof setInterval> | null;
+  /** Host-side path to the GH token file (for cleanup). */
+  ghTokenFilePath: string | null;
 }
 
 export class WorkspaceManager {
@@ -296,6 +300,8 @@ export class WorkspaceManager {
       flushChunks: () => {},
       promptCount: 0,
       pendingMessage: null,
+      ghTokenRefreshTimer: null,
+      ghTokenFilePath: null,
     };
     this.workspaces.set(id, workspace);
     this.emit("workspace-update", {
@@ -554,6 +560,17 @@ export class WorkspaceManager {
             }
           }
           const ghToken = shimEnv.GH_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
+
+          // Write GH token to a file that the container can read. The host
+          // refreshes this file periodically so long-running sessions don't
+          // lose GitHub access when the OAuth token expires.
+          let ghTokenFilePath: string | undefined;
+          if (ghToken) {
+            ghTokenFilePath = join(POLICY_DIR, `${id}-gh-token`);
+            await writeFile(ghTokenFilePath, ghToken, { mode: 0o644 });
+            workspace.ghTokenFilePath = ghTokenFilePath;
+          }
+
           const containerEnv: Record<string, string> = {
             ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
             ...(ghToken ? { GH_TOKEN: ghToken } : {}),
@@ -650,6 +667,9 @@ export class WorkspaceManager {
             containerEnv.https_proxy = proxyEnvUrl;
             containerEnv.NO_PROXY = "localhost,127.0.0.1,::1";
             containerEnv.no_proxy = "localhost,127.0.0.1,::1";
+            // Entrypoint uses these for iptables proxy enforcement
+            containerEnv.BOUNCER_PROXY_HOST = "host.docker.internal";
+            containerEnv.BOUNCER_PROXY_PORT = String(workspace.proxyHandle.port);
 
             // Regenerate gitconfig with proxy setting if it was already created
             if (containerGitconfigFile) {
@@ -699,6 +719,7 @@ export class WorkspaceManager {
             })(),
             claudeConfigDir: join((await import("node:os")).homedir(), ".claude"),
             claudeCredentialsPath,
+            ghTokenFilePath,
           };
 
           containerConfig = policyToContainerConfig(
@@ -760,6 +781,28 @@ export class WorkspaceManager {
         });
       }
       workspace.agentProcess = agentProcess;
+
+      // Start periodic GH token refresh for container sessions.
+      // The OAuth token can expire during long sessions; refreshing the
+      // token file keeps GitHub API access alive.
+      if (workspace.ghTokenFilePath && containerConfig) {
+        const GH_TOKEN_REFRESH_MS = 30 * 60 * 1000; // 30 minutes
+        const tokenFilePath = workspace.ghTokenFilePath;
+        workspace.ghTokenRefreshTimer = setInterval(async () => {
+          try {
+            const { execFile: ef } = await import("node:child_process");
+            const { promisify: p } = await import("node:util");
+            const { stdout } = await p(ef)("gh", ["auth", "token"]);
+            const newToken = stdout.trim();
+            if (newToken) {
+              await writeFile(tokenFilePath, newToken, { mode: 0o644 });
+              console.log(`[workspace] Refreshed GH token for workspace ${id}`);
+            }
+          } catch (err) {
+            console.warn(`[workspace] Failed to refresh GH token for workspace ${id}:`, err);
+          }
+        }, GH_TOKEN_REFRESH_MS);
+      }
 
       // Capture stderr for error reporting and parse policy events.
       // Use StringDecoder to handle multibyte characters (e.g. em-dash)
@@ -1184,13 +1227,15 @@ export class WorkspaceManager {
           "1. Implement the requested changes, committing as needed.",
           "2. Push your branch and create a draft PR (use `gh pr create --draft`).",
           "3. Check CI status with `gh pr checks`. If checks fail, read the logs, fix the issues, push again, and re-check. Repeat until CI is green.",
-          "4. Request a Copilot review by running: gh api repos/{owner}/{repo}/pulls/{number}/requested_reviewers -f reviewers[]=\"copilot-swe-agent\"",
-          "5. Poll for the review to complete, then read the review comments.",
-          "6. For each review comment, propose your response to the user (describe what you would change and why) but do NOT post replies to the review. Leave it to the user to decide.",
-          "7. If there are actionable suggestions, implement the fixes, push, and re-check CI.",
-          "8. When CI is green and all review comments are addressed, report the final status to the user.",
+          "4. Once CI is green, mark the PR as ready for review: `gh pr ready`",
+          "5. Check if Copilot has been assigned as a reviewer: `gh pr view` and look at the `requested_reviewers` field for a reviewer with login containing 'copilot'.",
+          "6. If Copilot is assigned, poll for the review to appear: `gh api repos/{owner}/{repo}/pulls/{number}/reviews`. Wait until a review from Copilot shows up (it may take a minute or two). Once it appears, read the review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments`.",
+          "7. For each review comment, implement the suggested fixes if they are actionable improvements. Push and re-check CI.",
+          "8. If Copilot is NOT assigned as a reviewer, skip steps 6-7.",
+          "9. When CI is green and all review comments are addressed (or skipped), report the final status to the user.",
           "Do NOT stop to ask the user for confirmation between these steps. The sandbox prevents any dangerous operations (merging, pushing to protected branches, posting review comments). Work through the entire workflow in one shot.",
           "Do NOT attempt to merge the PR — that is a human-only operation and the sandbox will block it.",
+          "Do NOT attempt to request reviewers — Copilot review is configured to be automatically assigned by the repository.",
         );
       }
       promptBlocks.push({
@@ -1299,6 +1344,10 @@ export class WorkspaceManager {
     workspace.flushChunks();
     workspace.sandboxMonitor?.stop();
     workspace.containerMonitor?.stop();
+    if (workspace.ghTokenRefreshTimer) {
+      clearInterval(workspace.ghTokenRefreshTimer);
+      workspace.ghTokenRefreshTimer = null;
+    }
     if (workspace.containerHandle) {
       workspace.containerHandle.kill();
     } else {
@@ -1317,6 +1366,7 @@ export class WorkspaceManager {
       await rm(join(POLICY_DIR, `${workspaceId}-claude-credentials.json`), { force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${workspaceId}-credential-helper.js`), { force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${workspaceId}-user-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-gh-token`), { force: true }).catch(() => {});
     }
 
     // Stop proxy and remove workspace network (M7)
@@ -1382,6 +1432,7 @@ export class WorkspaceManager {
 
   /** Remove orphan worktree directories, sandbox policies, containers, and container artifacts left behind by a previous crash. */
   async cleanupOrphans(): Promise<void> {
+    console.log("[cleanup] Starting orphan cleanup...");
     const activeIds = new Set(this.workspaces.keys());
     await this.worktreeManager.cleanupOrphans(activeIds);
     await cleanupOrphanPolicies(activeIds);
@@ -1396,7 +1447,7 @@ export class WorkspaceManager {
     try {
       const { readdir } = await import("node:fs/promises");
       const files = await readdir(POLICY_DIR).catch(() => [] as string[]);
-      const suffixes = ["-container-gh-wrapper", "-container-hooks", "-gitconfig", "-claude-credentials.json", "-credential-helper.js", "-user-gitconfig"];
+      const suffixes = ["-container-gh-wrapper", "-container-hooks", "-gitconfig", "-claude-credentials.json", "-credential-helper.js", "-user-gitconfig", "-gh-token"];
       for (const f of files) {
         for (const suffix of suffixes) {
           if (f.endsWith(suffix)) {
@@ -1410,6 +1461,7 @@ export class WorkspaceManager {
     } catch {
       // Best effort
     }
+    console.log("[cleanup] Orphan cleanup complete.");
   }
 
   getSandboxViolations(workspaceId: string): SandboxViolationInfo[] {
@@ -1428,17 +1480,28 @@ export class WorkspaceManager {
       }
     }
 
-    // Read live policy state from disk (the gh shim may have updated it)
+    // Read live policy state from disk (the gh shim may have updated it).
+    // Only sync forward: take disk values that represent progress (PR created,
+    // canCreatePr cleared). Never regress in-memory state, since the proxy may
+    // have updated it before the disk write completes.
     let githubRepo = workspace.githubPolicy?.repo ?? null;
     let ownedPrNumber = workspace.githubPolicy?.ownedPrNumber ?? null;
     if (workspace.githubPolicy) {
       try {
         const livePolicy = await readPolicyState(policyStatePath(workspace.id));
         githubRepo = livePolicy.repo;
-        ownedPrNumber = livePolicy.ownedPrNumber;
-        // Sync in-memory state
-        workspace.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
-        workspace.githubPolicy.canCreatePr = livePolicy.canCreatePr;
+        // Only adopt disk ownedPrNumber if in-memory is still null
+        if (workspace.githubPolicy.ownedPrNumber === null && livePolicy.ownedPrNumber !== null) {
+          ownedPrNumber = livePolicy.ownedPrNumber;
+          workspace.githubPolicy.ownedPrNumber = livePolicy.ownedPrNumber;
+        } else {
+          ownedPrNumber = workspace.githubPolicy.ownedPrNumber;
+        }
+        // Only adopt disk canCreatePr if it transitions from true → false
+        // (meaning the gh shim captured a PR). Never go from false → true.
+        if (workspace.githubPolicy.canCreatePr && !livePolicy.canCreatePr) {
+          workspace.githubPolicy.canCreatePr = false;
+        }
       } catch {
         // Policy file may have been cleaned up — use in-memory state
       }

@@ -12,6 +12,7 @@ import type { GitHubPolicy } from "./types.js";
 export type PolicyDecision =
   | { action: "allow" }
   | { action: "allow-and-capture-pr" }
+  | { action: "inspect-graphql" }
   | { action: "deny"; reason: string };
 
 export interface ApiEndpointMatch {
@@ -44,6 +45,10 @@ export function parseApiEndpoint(
   let path = endpoint.split("?")[0].split("#")[0];
   if (path.length > 1 && path.endsWith("/")) {
     path = path.slice(0, -1);
+  }
+  // Ensure leading slash — gh CLI omits it for convenience (e.g., "repos/owner/repo/pulls")
+  if (path && !path.startsWith("/")) {
+    path = "/" + path;
   }
 
   // GraphQL
@@ -194,6 +199,52 @@ export function evaluateApiIssues(match: ApiEndpointMatch): PolicyDecision {
 }
 
 // ---------------------------------------------------------------------------
+// GraphQL mutation allowlist
+// ---------------------------------------------------------------------------
+
+/** Mutations allowed through the proxy, with their required policy checks. */
+const ALLOWED_GRAPHQL_MUTATIONS = new Set([
+  "markPullRequestReadyForReview",
+]);
+
+/**
+ * Evaluate a GraphQL request body against policy.
+ * Only specific allowlisted mutations are permitted.
+ */
+export function evaluateGraphQLBody(
+  body: string,
+  policy: GitHubPolicy,
+): PolicyDecision {
+  try {
+    const parsed = JSON.parse(body);
+    const query = (parsed.query ?? "") as string;
+    // Extract the mutation name from `mutation ... { mutationName(...) { ... } }`
+    const mutationMatch = query.match(/mutation\b[^{]*\{\s*(\w+)/);
+    if (!mutationMatch) {
+      return { action: "deny", reason: "GraphQL queries are not allowed, only specific mutations" };
+    }
+    const mutationName = mutationMatch[1];
+    if (!ALLOWED_GRAPHQL_MUTATIONS.has(mutationName)) {
+      return { action: "deny", reason: `GraphQL mutation '${mutationName}' is not allowed` };
+    }
+    // markPullRequestReadyForReview — session must have created a PR.
+    // Check canCreatePr (set to false after PR creation) rather than ownedPrNumber,
+    // because the proxy's response capture may not have set ownedPrNumber yet
+    // (e.g. if the response was compressed and capture failed silently).
+    // The gh-shim validates PR ownership at the CLI level before reaching here.
+    if (mutationName === "markPullRequestReadyForReview") {
+      if (policy.canCreatePr) {
+        return { action: "deny", reason: "no PR created in this session" };
+      }
+      return { action: "allow" };
+    }
+    return { action: "allow" };
+  } catch {
+    return { action: "deny", reason: "could not parse GraphQL request body" };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // evaluateGitHubRequest() — proxy-level HTTP request evaluation
 // ---------------------------------------------------------------------------
 
@@ -209,9 +260,9 @@ export function evaluateGitHubRequest(
 ): PolicyDecision {
   const match = parseApiEndpoint(path, { method });
 
-  // GraphQL: deny (opaque — can't inspect query content)
+  // GraphQL: can't evaluate from URL alone — defer to caller to inspect body
   if (match.isGraphQL) {
-    return { action: "deny", reason: "GraphQL endpoint is not allowed" };
+    return { action: "inspect-graphql" };
   }
 
   // DELETE is always denied
@@ -264,6 +315,24 @@ export function evaluateGitHubRequest(
   if (match.resource === "statuses") {
     if (match.method === "GET") return { action: "allow" };
     return { action: "deny", reason: `API statuses ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/branches — branch listing and info (read-only)
+  if (match.resource === "branches") {
+    if (match.method === "GET") return { action: "allow" };
+    return { action: "deny", reason: `API branches ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/git — git refs, trees, blobs (read-only)
+  if (match.resource === "git") {
+    if (match.method === "GET") return { action: "allow" };
+    return { action: "deny", reason: `API git ${match.method} is not allowed` };
+  }
+
+  // /repos/{owner}/{repo}/contents — file contents (read-only)
+  if (match.resource === "contents") {
+    if (match.method === "GET") return { action: "allow" };
+    return { action: "deny", reason: `API contents ${match.method} is not allowed` };
   }
 
   // Default deny

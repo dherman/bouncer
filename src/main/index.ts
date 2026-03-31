@@ -100,8 +100,9 @@ app.whenReady().then(async () => {
     mainWindow?.webContents.send(channel, data)
   })
 
-  // Clean up orphan worktrees and sandbox policies from previous crashes
-  workspaceManager.cleanupOrphans().catch((err) => {
+  // Clean up orphan worktrees, containers, and policies from previous crashes.
+  // Awaited so no workspace can be created before cleanup finishes.
+  await workspaceManager.cleanupOrphans().catch((err) => {
     console.warn('Failed to clean up orphans:', err)
   })
 
@@ -210,18 +211,16 @@ app.whenReady().then(async () => {
   })
 
   // Clean up all workspaces before quitting
+  let isQuitting = false
   app.on('before-quit', (event) => {
+    if (isQuitting) return // Allow the quit through on the second pass
+    isQuitting = true
     event.preventDefault()
-    workspaceManager.listWorkspaces().then((workspaces) => {
-      const activeWorkspaces = workspaces.filter((s) => s.status !== 'closed')
-      if (activeWorkspaces.length > 0) {
-        workspaceManager.closeAllWorkspaces().finally(() => {
-          app.quit()
-        })
-      } else {
+    workspaceManager.closeAllWorkspaces()
+      .catch((err) => console.warn('Workspace cleanup on quit failed:', err))
+      .finally(() => {
         app.exit()
-      }
-    })
+      })
   })
 
   app.on('activate', () => {

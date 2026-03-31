@@ -109,6 +109,7 @@ try {
   const policy: GitHubPolicy = {
     repo: "owner/repo",
     allowedPushRefs: ["feature-branch"],
+    protectedBranches: ["main"],
     ownedPrNumber: null,
     canCreatePr: true,
   };

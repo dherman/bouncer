@@ -224,6 +224,9 @@ export async function cleanupOrphanGitHubArtifacts(activeIds: Set<string>): Prom
     const protectedMatch = entry.match(/^(.+)-protected-branches\.txt$/);
     if (protectedMatch) sessionId = protectedMatch[1];
 
+    const tokenMatch = entry.match(/^(.+)-gh-token$/);
+    if (tokenMatch) sessionId = tokenMatch[1];
+
     if (sessionId && !activeIds.has(sessionId)) {
       try {
         await rm(join(POLICY_DIR, entry), { recursive: true, force: true });

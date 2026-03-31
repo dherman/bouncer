@@ -579,15 +579,9 @@ body {
   font-weight: 600;
 }
 
-/* Streaming cursor: pseudo-element on the last text node */
-.step-content.streaming > :last-child::after,
-.step-content.streaming > p:last-of-type::after {
-  content: '|';
-  animation: blink 0.8s step-end infinite;
-}
-
-@keyframes blink {
-  50% { opacity: 0; }
+/* Agent text: no text cursor (I-beam) on hover */
+.agent-text .step-content {
+  cursor: default;
 }
 
 /* Thinking indicator (video animation) */

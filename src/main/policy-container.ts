@@ -29,6 +29,8 @@ export interface ContainerSessionContext {
   claudeCredentialsPath?: string;
   /** Bouncer CA cert path — mounted into the container for proxy TLS interception. */
   caCertPath?: string;
+  /** Host-side GH token file, refreshed periodically for long-running sessions. */
+  ghTokenFilePath?: string;
 }
 
 /**
@@ -91,8 +93,10 @@ async function main() {
   }
   if (kv["host"] !== "github.com") process.exit(0);
   if (kv["protocol"] && kv["protocol"] !== "https") process.exit(0);
-  const token = process.env.GH_TOKEN;
-  if (!token) { process.stderr.write("gh-credential-helper: GH_TOKEN is not set\\n"); process.exit(0); }
+  let token;
+  try { token = require("fs").readFileSync("/etc/bouncer/gh-token", "utf-8").trim(); } catch {}
+  if (!token) token = process.env.GH_TOKEN;
+  if (!token) { process.stderr.write("gh-credential-helper: no token available\\n"); process.exit(0); }
   process.stdout.write("protocol=https\\nhost=github.com\\nusername=x-access-token\\npassword=" + token + "\\n\\n");
 }
 main().catch(() => process.exit(1));
@@ -236,6 +240,16 @@ export function policyToContainerConfig(
       mounts.push({
         hostPath: ctx.credentialHelperPath,
         containerPath: "/usr/local/lib/bouncer/gh-credential-helper.js",
+        readOnly: true,
+      });
+    }
+
+    if (ctx.ghTokenFilePath) {
+      // readOnly: true prevents agent from writing, but host-side writes
+      // to the underlying file are still visible through the bind mount.
+      mounts.push({
+        hostPath: ctx.ghTokenFilePath,
+        containerPath: "/etc/bouncer/gh-token",
         readOnly: true,
       });
     }
