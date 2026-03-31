@@ -9,12 +9,14 @@ sandbox-exec [options] command [arguments...]
 ```
 
 Options:
+
 - `-f profile-file` — read sandbox profile from a file
 - `-n profile-name` — use a built-in profile by name
 - `-p profile-string` — specify profile inline
 - `-D key=value` — set a profile parameter (repeatable)
 
 Examples:
+
 ```bash
 # Run a command with a profile file
 sandbox-exec -f myprofile.sb /bin/ls /tmp
@@ -130,6 +132,7 @@ Also searchable in Console.app under "Sandbox".
 ### External detection strategy for Bouncer
 
 There is no callback API for sandbox violations. Options:
+
 1. Parse the macOS unified log stream (as above)
 2. Detect `EPERM` errors in ACP tool-call results
 3. Both — log stream for comprehensive monitoring, EPERM for immediate feedback
@@ -149,10 +152,12 @@ Apple has never publicly documented SBPL syntax. Everything known comes from rev
 ### Network filtering is coarse
 
 Seatbelt can:
+
 - Block all network or allow all network
 - Filter to localhost vs. everything: `(allow network* (remote ip "localhost:*"))`
 
 Seatbelt **cannot**:
+
 - Filter by remote domain name
 - Filter by specific remote IP address (only `localhost` or `*`)
 - Filter by specific port for remote hosts
@@ -174,17 +179,20 @@ Since the tool is deprecated, Apple could change behavior without notice. There 
 ## How Others Use It
 
 ### Claude Code (`@anthropic-ai/sandbox-runtime`)
+
 - Dynamically generated profiles scoped to CWD
 - All network blocked except localhost proxy ports
 - HTTP and SOCKS5 proxies outside sandbox enforce domain allowlists
 - Source: https://github.com/anthropic-experimental/sandbox-runtime
 
 ### Cursor
+
 - Dynamically generates SBPL from workspace settings, admin settings, and `.cursorignore`
 - Denies write access to sensitive config (`.vscode/`, `.cursor/`, `.git/config`, git hooks)
 - Source: https://cursor.com/blog/agent-sandboxing
 
 ### OpenAI Codex
+
 - Base policy file inspired by Chromium's sandbox
 - Dynamically constructs profiles from `SandboxPolicy` struct
 - Carves out `.git` directories as read-only

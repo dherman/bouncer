@@ -5,12 +5,12 @@
 // with HTTP_PROXY/HTTPS_PROXY env vars pointing to the host proxy, which enforces
 // domain allowlists. Note: this is env-var-based routing, not network-level enforcement.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const NETWORK_PREFIX = "bouncer-net";
+const NETWORK_PREFIX = 'bouncer-net';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,30 +33,28 @@ export interface SessionNetwork {
  * making host.docker.internal unreachable. The proxy is the enforcement
  * layer — it blocks disallowed domains.
  */
-export async function createSessionNetwork(
-  sessionId: string,
-): Promise<SessionNetwork> {
+export async function createSessionNetwork(sessionId: string): Promise<SessionNetwork> {
   const networkName = `${NETWORK_PREFIX}-${sessionId}`;
 
   // Check if the network already exists (e.g., left over from a crash)
   try {
-    await execFileAsync("docker", ["network", "inspect", networkName], {
+    await execFileAsync('docker', ['network', 'inspect', networkName], {
       timeout: 10_000,
     });
     // Network exists — reuse it
   } catch {
     // Network doesn't exist — create it
     await execFileAsync(
-      "docker",
+      'docker',
       [
-        "network",
-        "create",
+        'network',
+        'create',
         networkName,
-        "--driver",
-        "bridge",
-        "--label",
-        "bouncer.managed=true",
-        "--label",
+        '--driver',
+        'bridge',
+        '--label',
+        'bouncer.managed=true',
+        '--label',
         `bouncer.sessionId=${sessionId}`,
       ],
       { timeout: 10_000 },
@@ -66,9 +64,7 @@ export async function createSessionNetwork(
   return {
     networkName,
     async cleanup() {
-      await execFileAsync("docker", ["network", "rm", networkName]).catch(
-        () => {},
-      ); // idempotent
+      await execFileAsync('docker', ['network', 'rm', networkName]).catch(() => {}); // idempotent
     },
   };
 }
@@ -81,21 +77,12 @@ export async function createSessionNetwork(
  * Remove any bouncer networks that don't belong to active sessions.
  * Called at startup to clean up after crashes.
  */
-export async function cleanupOrphanNetworks(
-  activeSessionIds: Set<string>,
-): Promise<void> {
+export async function cleanupOrphanNetworks(activeSessionIds: Set<string>): Promise<void> {
   let stdout: string;
   try {
     const result = await execFileAsync(
-      "docker",
-      [
-        "network",
-        "ls",
-        "--filter",
-        "label=bouncer.managed=true",
-        "--format",
-        "{{.Name}}",
-      ],
+      'docker',
+      ['network', 'ls', '--filter', 'label=bouncer.managed=true', '--format', '{{.Name}}'],
       { timeout: 10_000 },
     );
     stdout = result.stdout;
@@ -103,7 +90,7 @@ export async function cleanupOrphanNetworks(
     return; // Docker not available or error — nothing to clean up
   }
 
-  const names = stdout.trim().split("\n").filter(Boolean);
+  const names = stdout.trim().split('\n').filter(Boolean);
   for (const name of names) {
     // Extract session ID from network name: bouncer-net-{sessionId}
     const sessionId = name.startsWith(`${NETWORK_PREFIX}-`)
@@ -112,13 +99,11 @@ export async function cleanupOrphanNetworks(
     if (sessionId && !activeSessionIds.has(sessionId)) {
       console.log(`[proxy-network] Removing orphan network: ${name}`);
       try {
-        await execFileAsync("docker", ["network", "rm", name], {
+        await execFileAsync('docker', ['network', 'rm', name], {
           timeout: 10_000,
         });
       } catch {
-        console.warn(
-          `[proxy-network] Failed to remove orphan network: ${name}`,
-        );
+        console.warn(`[proxy-network] Failed to remove orphan network: ${name}`);
       }
     }
   }

@@ -1,6 +1,6 @@
-import * as acp from "@agentclientprotocol/sdk";
-import { randomUUID } from "node:crypto";
-import { Writable, Readable } from "node:stream";
+import * as acp from '@agentclientprotocol/sdk';
+import { randomUUID } from 'node:crypto';
+import { Writable, Readable } from 'node:stream';
 
 const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
 const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
@@ -24,9 +24,9 @@ new acp.AgentSideConnection(
     async prompt(params) {
       // Extract text from the prompt content blocks
       const userText = params.prompt
-        .filter((block): block is { type: "text"; text: string } => block.type === "text")
+        .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
         .map((block) => block.text)
-        .join("");
+        .join('');
 
       const reply = `Echo: ${userText}`;
 
@@ -37,14 +37,14 @@ new acp.AgentSideConnection(
         await connection.sessionUpdate({
           sessionId: params.sessionId,
           update: {
-            sessionUpdate: "agent_message_chunk",
-            content: { type: "text", text: chunk },
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: chunk },
           },
         });
         await new Promise((r) => setTimeout(r, 50));
       }
 
-      return { stopReason: "end_turn" };
+      return { stopReason: 'end_turn' };
     },
 
     async cancel(params) {
@@ -59,7 +59,7 @@ new acp.AgentSideConnection(
       return {};
     },
   }),
-  stream
+  stream,
 );
 
-process.stderr.write("Echo agent started\n");
+process.stderr.write('Echo agent started\n');

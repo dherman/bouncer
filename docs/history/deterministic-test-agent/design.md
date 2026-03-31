@@ -17,7 +17,7 @@ Build a reproducible testing system for sandbox policies by replaying real tool-
 - LLM-based agents or any network-dependent agent behavior (the replay is purely deterministic)
 - Application-layer policy enforcement (Milestone 5) — we measure what the OS sandbox allows/blocks, not git-semantic or API-semantic constraints
 - Modifying policy templates based on findings (that's a follow-up task informed by this milestone's data)
-- Replay fidelity for tool *results* — we care about whether the operation was allowed, not whether it produced the right output
+- Replay fidelity for tool _results_ — we care about whether the operation was allowed, not whether it produced the right output
 - UI for browsing batch validation results (CLI/JSON output is sufficient)
 
 ---
@@ -32,7 +32,7 @@ Milestone 2 ([findings](../../history/seatbelt-sandbox/findings.md)) validated t
 
 2. **Temp directory access is broad.** Safehouse's `--enable=all-agents` grants write access to temp directories, and worktrees live in temp. Filesystem write restrictions within temp are not enforceable at the OS level.
 
-These findings mean the current policy templates (`standard-pr`, `research-only`, `permissive`) differ primarily in *declared intent* rather than *enforced behavior*. Milestone 4 quantifies this gap: given real-world tool-use patterns, what fraction of operations does each policy *actually* constrain?
+These findings mean the current policy templates (`standard-pr`, `research-only`, `permissive`) differ primarily in _declared intent_ rather than _enforced behavior_. Milestone 4 quantifies this gap: given real-world tool-use patterns, what fraction of operations does each policy _actually_ constrain?
 
 ### Why a Replay Agent
 
@@ -50,7 +50,7 @@ The dataset ([`data/tool-use-dataset.jsonl`](../../data/tool-use-dataset.jsonl))
 {
   "id": 1,
   "tool": "Read",
-  "input": {"file_path": "{project}/src/index.ts"},
+  "input": { "file_path": "{project}/src/index.ts" },
   "outcome": "approved",
   "project": "project-01",
   "session": "session-001",
@@ -61,6 +61,7 @@ The dataset ([`data/tool-use-dataset.jsonl`](../../data/tool-use-dataset.jsonl))
 ```
 
 Key properties relevant to replay:
+
 - **Anonymized paths**: `{project}`, `{home}`, `{user}` placeholders replace real paths. The replay agent must de-anonymize these to worktree-relative paths.
 - **Tool inputs only**: Tool results are excluded from the dataset. The replay agent doesn't need them — it executes the operation and observes whether the sandbox allows it.
 - **Session grouping**: Records are grouped by `session` and ordered by `timestamp_relative`, giving us sequential replay order.
@@ -116,7 +117,7 @@ Key properties relevant to replay:
 
 ### Key Design Decision: Execute Inside the Sandbox
 
-The replay agent doesn't *simulate* what the sandbox would do — it actually runs the operations inside a real sandbox. This means:
+The replay agent doesn't _simulate_ what the sandbox would do — it actually runs the operations inside a real sandbox. This means:
 
 - **No sandbox model to maintain**: We don't need to reason about SBPL rules. The kernel enforces them.
 - **Ground truth**: If a `Read` call returns EPERM, we know the policy blocks it. No false assumptions.
@@ -193,7 +194,7 @@ interface ReplayToolCall {
   id: number;
   tool: string;
   input: Record<string, unknown>;
-  original_outcome: string;  // from dataset: approved/rejected/error
+  original_outcome: string; // from dataset: approved/rejected/error
 }
 ```
 
@@ -203,27 +204,27 @@ interface ReplayToolCall {
 interface ReplayResult {
   id: number;
   tool: string;
-  replay_outcome: "allowed" | "blocked" | "skipped" | "error";
-  error_message?: string;    // EPERM message, sandbox violation detail
-  original_outcome: string;  // for comparison
+  replay_outcome: 'allowed' | 'blocked' | 'skipped' | 'error';
+  error_message?: string; // EPERM message, sandbox violation detail
+  original_outcome: string; // for comparison
 }
 ```
 
 **Tool execution strategy** — the replay agent maps each tool name to an actual operation:
 
-| Tool | Replay Action | Can Be Blocked By Sandbox? |
-|------|--------------|---------------------------|
-| `Read` | `fs.readFile(path)` | Yes — path outside sandbox boundary |
-| `Write` | `fs.writeFile(path, placeholder)` | Yes — write to read-only or restricted path |
-| `Edit` | `fs.readFile(path)` then `fs.writeFile(path, modified)` | Yes — same as Write |
-| `Bash` | `child_process.execSync(command)` | Yes — commands touching restricted paths/network |
-| `Grep` | `fs.readFile(path)` (simplified to read access check) | Yes — path restrictions |
-| `Glob` | `fs.readdir(path)` (simplified to read access check) | Yes — path restrictions |
-| `WebFetch` | `fetch(url)` or skip if network blocked | Yes — network-deny policy |
-| `WebSearch` | Skip (no local equivalent) | N/A |
-| `TodoWrite` | No-op (in-memory only) | No |
-| `Task`/`Agent` | Skip (subagent spawning) | N/A |
-| MCP tools | Skip (no MCP servers in replay) | N/A |
+| Tool           | Replay Action                                           | Can Be Blocked By Sandbox?                       |
+| -------------- | ------------------------------------------------------- | ------------------------------------------------ |
+| `Read`         | `fs.readFile(path)`                                     | Yes — path outside sandbox boundary              |
+| `Write`        | `fs.writeFile(path, placeholder)`                       | Yes — write to read-only or restricted path      |
+| `Edit`         | `fs.readFile(path)` then `fs.writeFile(path, modified)` | Yes — same as Write                              |
+| `Bash`         | `child_process.execSync(command)`                       | Yes — commands touching restricted paths/network |
+| `Grep`         | `fs.readFile(path)` (simplified to read access check)   | Yes — path restrictions                          |
+| `Glob`         | `fs.readdir(path)` (simplified to read access check)    | Yes — path restrictions                          |
+| `WebFetch`     | `fetch(url)` or skip if network blocked                 | Yes — network-deny policy                        |
+| `WebSearch`    | Skip (no local equivalent)                              | N/A                                              |
+| `TodoWrite`    | No-op (in-memory only)                                  | No                                               |
+| `Task`/`Agent` | Skip (subagent spawning)                                | N/A                                              |
+| MCP tools      | Skip (no MCP servers in replay)                         | N/A                                              |
 
 **Path de-anonymization**:
 
@@ -239,6 +240,7 @@ function deanonymizePath(path: string, context: ReplayContext): string {
 **Bash command handling**:
 
 Bash commands require special care:
+
 - De-anonymize paths in the command string
 - Execute via `child_process.execSync` with a short timeout (5 seconds)
 - Capture exit code and stderr
@@ -247,6 +249,7 @@ Bash commands require special care:
 - Commands referencing `{host}` (anonymized URLs) → `skipped` (can't replay network calls)
 
 **Skipping rules**:
+
 - Tool is `WebSearch`, `Task`, `Agent`, `TodoWrite`, `EnterPlanMode`, `ExitPlanMode`, `ToolSearch`, `Skill`, `AskUserQuestion`, or any MCP tool → `skipped`
 - Bash command contains `{host}` → `skipped`
 - Input references paths that can't be de-anonymized → `skipped`
@@ -256,7 +259,7 @@ Bash commands require special care:
 **Add `"replay"` to `AgentType`** (`src/main/types.ts`):
 
 ```typescript
-export type AgentType = "echo" | "claude-code" | "replay";
+export type AgentType = 'echo' | 'claude-code' | 'replay';
 ```
 
 **Add `resolveReplayAgentCommand()`** to `session-manager.ts`, following the same pattern as `resolveEchoAgentCommand()`. The replay agent script path: `src/agents/replay-agent.ts` (dev) / `dist/agents/replay-agent.js` (prod).
@@ -275,8 +278,8 @@ Before replaying a session, the worktree needs a minimal file structure so that 
 
 ```typescript
 interface ScaffoldPlan {
-  files: Map<string, string>;     // relative path → content
-  directories: Set<string>;       // relative paths to mkdir -p
+  files: Map<string, string>; // relative path → content
+  directories: Set<string>; // relative paths to mkdir -p
 }
 
 function buildScaffoldPlan(toolCalls: ReplayToolCall[]): ScaffoldPlan;
@@ -327,6 +330,7 @@ for each session in dataset:
 ```
 
 **The harness reuses existing infrastructure**:
+
 - `WorktreeManager` for worktree lifecycle
 - `PolicyTemplateRegistry` for policy lookup
 - `policyToSandboxConfig()` for sandbox config generation
@@ -353,16 +357,19 @@ interface ReplayReport {
     blocked: number;
     skipped: number;
     error: number;
-    allowedRate: number;     // allowed / (allowed + blocked)
-    falseBlockRate: number;  // blocked calls that were "approved" in original
+    allowedRate: number; // allowed / (allowed + blocked)
+    falseBlockRate: number; // blocked calls that were "approved" in original
   };
-  byTool: Record<string, {
-    total: number;
-    allowed: number;
-    blocked: number;
-    skipped: number;
-    error: number;
-  }>;
+  byTool: Record<
+    string,
+    {
+      total: number;
+      allowed: number;
+      blocked: number;
+      skipped: number;
+      error: number;
+    }
+  >;
   sessions: SessionReplayResult[];
 }
 
@@ -387,6 +394,7 @@ interface SessionReplayResult {
 The replay agent should be selectable in the Glitter Ball UI as a third agent type. This is primarily for interactive debugging — the batch harness is the main workflow.
 
 **Changes**:
+
 - `NewSessionDialog`: Add "Replay" option to agent type selector
 - When `replay` is selected, prompt for a session ID (text input) to replay
 - Session manager loads that session's tool calls from the dataset and sends them as the first prompt
@@ -405,6 +413,7 @@ The current dataset has anonymized paths but no session-level metadata. For real
 The tool calls themselves tell us what files the session touched. The scaffold step (Component 3) already extracts these paths. No dataset changes needed — the scaffolder builds the file structure on-the-fly from the session's own tool calls.
 
 This is sufficient because:
+
 - We're testing sandbox boundaries, not application behavior
 - A `Read` to `{project}/src/index.ts` just needs that file to exist
 - A `Bash` running `npm test` doesn't need real tests — it will succeed or fail based on sandbox permissions, not test correctness
@@ -416,7 +425,7 @@ If Approach A proves insufficient (e.g., Bash commands that assume specific dire
 ```json
 {
   "session-001": {
-    "project_type": "node",       // inferred from tool calls (package.json present?)
+    "project_type": "node", // inferred from tool calls (package.json present?)
     "estimated_file_count": 42,
     "tools_used": ["Read", "Bash", "Edit"],
     "has_network_calls": true
@@ -512,25 +521,25 @@ We defer this until Approach A hits a wall.
 
 ## Dependencies
 
-| Dependency | Status | Notes |
-|-----------|--------|-------|
-| `@agentclientprotocol/sdk` | Exists | Same ACP primitives used by echo agent |
-| `agent-safehouse` | Exists | CLI must be installed on developer machine |
-| `WorktreeManager` | Exists | Reused from session manager |
-| `PolicyTemplateRegistry` | Exists | Reused from M3 |
-| `policyToSandboxConfig()` | Exists | Reused from M3 |
-| `data/tool-use-dataset.jsonl` | Exists | 11,491 records, 296 sessions |
-| Node.js `fs`, `child_process` | Stdlib | For tool execution in replay agent |
+| Dependency                    | Status | Notes                                      |
+| ----------------------------- | ------ | ------------------------------------------ |
+| `@agentclientprotocol/sdk`    | Exists | Same ACP primitives used by echo agent     |
+| `agent-safehouse`             | Exists | CLI must be installed on developer machine |
+| `WorktreeManager`             | Exists | Reused from session manager                |
+| `PolicyTemplateRegistry`      | Exists | Reused from M3                             |
+| `policyToSandboxConfig()`     | Exists | Reused from M3                             |
+| `data/tool-use-dataset.jsonl` | Exists | 11,491 records, 296 sessions               |
+| Node.js `fs`, `child_process` | Stdlib | For tool execution in replay agent         |
 
 No new external dependencies required.
 
 ## File Inventory
 
-| File | Type | Description |
-|------|------|-------------|
-| `src/agents/replay-agent.ts` | New | ACP replay agent |
-| `src/main/replay-scaffold.ts` | New | Worktree file scaffolding for replay sessions |
-| `scripts/replay-test.ts` | New | CLI test harness for batch validation |
-| `src/main/types.ts` | Modified | Add `"replay"` to `AgentType`, add replay-related types |
-| `src/main/session-manager.ts` | Modified | Add `resolveReplayAgentCommand()`, handle replay agent type |
-| `src/renderer/src/components/NewSessionDialog.tsx` | Modified | Add replay agent option + session ID input |
+| File                                               | Type     | Description                                                 |
+| -------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| `src/agents/replay-agent.ts`                       | New      | ACP replay agent                                            |
+| `src/main/replay-scaffold.ts`                      | New      | Worktree file scaffolding for replay sessions               |
+| `scripts/replay-test.ts`                           | New      | CLI test harness for batch validation                       |
+| `src/main/types.ts`                                | Modified | Add `"replay"` to `AgentType`, add replay-related types     |
+| `src/main/session-manager.ts`                      | Modified | Add `resolveReplayAgentCommand()`, handle replay agent type |
+| `src/renderer/src/components/NewSessionDialog.tsx` | Modified | Add replay agent option + session ID input                  |

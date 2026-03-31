@@ -74,20 +74,21 @@ Milestone 1 established the pipeline: `SessionManager → spawn(agent) → ACP o
 
 ### What Changes from Milestone 1
 
-| Component | M1 | M2 |
-|-----------|----|----|
-| Agent spawning | `spawn("node", [agentBin], { cwd: worktree })` | `spawn("safehouse", [...sandboxArgs, "--", "node", agentBin], { cwd: worktree })` via agent-safehouse |
-| Filesystem enforcement | None (agent has full access) | Seatbelt profile: deny-default, allow worktree read/write, allow system read-only |
-| Network enforcement | None | Deny all network (as a starting constraint; Milestone 6 adds proxy-based allowlisting) |
-| Violation detection | None | `SandboxMonitor` tails macOS unified log for `Sandbox` events |
-| UI | Chat only | Chat + sandbox event log panel |
-| Session state | No sandbox info | Adds `sandboxProfile` path and `sandboxPid` for log correlation |
+| Component              | M1                                             | M2                                                                                                    |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Agent spawning         | `spawn("node", [agentBin], { cwd: worktree })` | `spawn("safehouse", [...sandboxArgs, "--", "node", agentBin], { cwd: worktree })` via agent-safehouse |
+| Filesystem enforcement | None (agent has full access)                   | Seatbelt profile: deny-default, allow worktree read/write, allow system read-only                     |
+| Network enforcement    | None                                           | Deny all network (as a starting constraint; Milestone 6 adds proxy-based allowlisting)                |
+| Violation detection    | None                                           | `SandboxMonitor` tails macOS unified log for `Sandbox` events                                         |
+| UI                     | Chat only                                      | Chat + sandbox event log panel                                                                        |
+| Session state          | No sandbox info                                | Adds `sandboxProfile` path and `sandboxPid` for log correlation                                       |
 
 ### Key Architectural Insight: Claude Code Handles Tools Internally
 
 As discovered in Milestone 1 ([sdk-deviations.md](../history/live-agent-integration/sdk-deviations.md)), Claude Code executes its Bash, Read, Write, and Edit tools within the agent process itself. It does **not** delegate tool execution to the ACP client.
 
 This means:
+
 - **All tool execution inherits the sandbox.** When Claude Code runs `git commit` or `python3 script.py`, those child processes are spawned from within the sandboxed process tree and automatically inherit all Seatbelt constraints.
 - **We don't need ACP-level interception for OS-level policies.** The sandbox enforces the boundary regardless of what the agent does internally.
 - **ACP-level interception becomes relevant in Milestone 5+** for application-layer semantics (e.g., "don't push to main") that can't be expressed as filesystem or network rules.
@@ -107,6 +108,7 @@ Our session manager spawns `safehouse [...flags] -- node <agent-bin>` instead of
 ### Session-specific sandbox configuration
 
 Each session provides safehouse with:
+
 - `--workdir=<worktree>` — enables git root auto-detection and worktree handling
 - `--add-dirs=<worktree>` — grants read-write access to the session's worktree
 - `--add-dirs=<gitCommonDir>` — grants write access to the parent repo's `.git` (needed for git operations from linked worktrees)
@@ -142,6 +144,7 @@ The log stream approach is primary because it catches violations from all child 
 Rather than generating SBPL profiles directly, we delegate to **[agent-safehouse](https://agent-safehouse.dev)** — an open-source CLI tool that maintains curated, community-tested macOS Seatbelt profiles for agent sandboxing. This avoids duplicating the substantial work of enumerating system runtime paths, Mach IPC services, device nodes, toolchain caches, and agent-specific state directories.
 
 **What safehouse provides:**
+
 - System runtime permissions (binaries, libraries, Mach IPC, PTY, devices)
 - Toolchain-specific paths (Node.js, Rust, Python, etc.)
 - Agent-specific state directories (Claude Code, Cursor, etc.)
@@ -150,6 +153,7 @@ Rather than generating SBPL profiles directly, we delegate to **[agent-safehouse
 - Ongoing community maintenance as macOS and agent tooling evolve
 
 **What we provide on top:**
+
 - Session-specific writable paths (worktree, git common dir) via `--add-dirs`
 - Environment variable passthrough for ACP via `--env-pass`
 - Policy file lifecycle management (persist via `--output`, clean up on session close)
@@ -180,10 +184,7 @@ export function defaultSandboxConfig(params: {
   gitCommonDir?: string;
 }): SandboxConfig;
 
-export function buildSafehouseArgs(
-  config: SandboxConfig,
-  command: string[],
-): string[];
+export function buildSafehouseArgs(config: SandboxConfig, command: string[]): string[];
 
 export async function isSafehouseAvailable(): Promise<boolean>;
 ```
@@ -193,16 +194,16 @@ export async function isSafehouseAvailable(): Promise<boolean>;
 Monitors the macOS unified log for sandbox violation events and emits them to the session manager.
 
 ```typescript
-import { spawn, type ChildProcess } from "node:child_process";
-import { EventEmitter } from "node:events";
+import { spawn, type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 
 export interface SandboxViolation {
   timestamp: Date;
   pid: number;
   processName: string;
-  operation: string;   // e.g., "file-write-data", "network-outbound"
-  path?: string;       // filesystem path, if applicable
-  raw: string;         // raw log line for debugging
+  operation: string; // e.g., "file-write-data", "network-outbound"
+  path?: string; // filesystem path, if applicable
+  raw: string; // raw log line for debugging
 }
 
 export class SandboxMonitor extends EventEmitter {
@@ -276,21 +277,16 @@ async createSession(projectDir: string, agentType: AgentType = "claude-code") {
 The `resolveClaudeCodeCommand()` function is updated to wrap the command in `safehouse`:
 
 ```typescript
-function resolveClaudeCodeCommand(
-  cwd: string,
-  sandboxConfig: SandboxConfig | null,
-): SpawnConfig {
-  const require = createRequire(app.getAppPath() + "/");
-  const binPath = require.resolve(
-    "@zed-industries/claude-agent-acp/dist/index.js"
-  );
+function resolveClaudeCodeCommand(cwd: string, sandboxConfig: SandboxConfig | null): SpawnConfig {
+  const require = createRequire(app.getAppPath() + '/');
+  const binPath = require.resolve('@zed-industries/claude-agent-acp/dist/index.js');
 
   if (sandboxConfig) {
-    const args = buildSafehouseArgs(sandboxConfig, ["node", binPath]);
-    return { cmd: "safehouse", args, cwd };
+    const args = buildSafehouseArgs(sandboxConfig, ['node', binPath]);
+    return { cmd: 'safehouse', args, cwd };
   }
 
-  return { cmd: "node", args: [binPath], cwd };
+  return { cmd: 'node', args: [binPath], cwd };
 }
 ```
 
@@ -328,6 +324,7 @@ async closeSession(sessionId: string) {
 
 New types for sandbox events:
 
+<!-- prettier-ignore -->
 ```typescript
 export interface SandboxViolationInfo {
   timestamp: number;
@@ -340,7 +337,7 @@ export type SessionUpdate =
   // ... existing variants ...
   | {
       sessionId: string;
-      type: "sandbox-violation";
+      type: 'sandbox-violation';
       violation: SandboxViolationInfo;
     };
 ```

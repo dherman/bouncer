@@ -34,7 +34,7 @@ Milestone 2 ([findings](../../history/seatbelt-sandbox/findings.md)) validated t
 
 2. **Safehouse's flag system is the right abstraction layer.** The combination of `--workdir`, `--add-dirs`, `--add-dirs-ro`, `--env-pass`, `--enable`, and `--append-profile` gives us enough knobs to express meaningfully different policies without maintaining raw SBPL profiles.
 
-3. **Application-layer gaps exist but are out of scope.** Operations like `git push`, `git checkout main`, and `npm publish` are allowed by any OS-level sandbox that permits network access and git operations. These are Milestone 5 concerns — policy templates define *OS-level* boundaries only.
+3. **Application-layer gaps exist but are out of scope.** Operations like `git push`, `git checkout main`, and `npm publish` are allowed by any OS-level sandbox that permits network access and git operations. These are Milestone 5 concerns — policy templates define _OS-level_ boundaries only.
 
 4. **Network is the biggest differentiator between policies.** Safehouse allows full network by default. The most meaningful distinction between "standard PR work" and "permissive" is whether network access is restricted. Until Milestone 6 adds proxy-based domain filtering, network is binary: allowed or blocked via `--append-profile`.
 
@@ -46,7 +46,7 @@ These follow from the roadmap's [principles](../../roadmap.md#principles):
 
 - **Templates are boundaries, not action classifiers.** Each template defines a capability envelope. The agent operates freely within it. We don't inspect individual actions.
 - **Start small, iterate with data.** Three templates covering the most common workflows. Milestone 4 will validate coverage against real session data.
-- **Backend-agnostic policy definitions.** Templates describe *what* the agent can access, not *how* it's enforced. The same template should be expressible as safehouse flags today and as Dockerfile + bind mount configs tomorrow.
+- **Backend-agnostic policy definitions.** Templates describe _what_ the agent can access, not _how_ it's enforced. The same template should be expressible as safehouse flags today and as Dockerfile + bind mount configs tomorrow.
 - **Policy is configuration, not code.** Adding a template should require adding a data object to a registry, not wiring up new spawning logic.
 
 ---
@@ -111,15 +111,15 @@ Milestone 2 established: `SessionManager → defaultSandboxConfig() → buildSaf
 
 ### What Changes from Milestone 2
 
-| Component | M2 | M3 |
-|-----------|----|----|
-| Sandbox config | `defaultSandboxConfig()` — one hardcoded config | `policyToSandboxConfig(template, session)` — template-driven |
-| Session creation | `createSession(projectDir, agentType)` | `createSession(projectDir, agentType, policyId)` |
-| Session state | `sandboxConfig: SandboxConfig \| null` | Adds `policyId: string` |
-| Session summary | `sandboxed: boolean` | Adds `policyId: string \| null`, `policyName: string \| null` |
-| New session UI | Directory picker only | Directory picker + policy selector |
-| Session list | Shield badge for sandboxed | Policy name badge per session |
-| IPC | No policy awareness | `policies:list` handler, `policyId` in create call |
+| Component        | M2                                              | M3                                                            |
+| ---------------- | ----------------------------------------------- | ------------------------------------------------------------- |
+| Sandbox config   | `defaultSandboxConfig()` — one hardcoded config | `policyToSandboxConfig(template, session)` — template-driven  |
+| Session creation | `createSession(projectDir, agentType)`          | `createSession(projectDir, agentType, policyId)`              |
+| Session state    | `sandboxConfig: SandboxConfig \| null`          | Adds `policyId: string`                                       |
+| Session summary  | `sandboxed: boolean`                            | Adds `policyId: string \| null`, `policyName: string \| null` |
+| New session UI   | Directory picker only                           | Directory picker + policy selector                            |
+| Session list     | Shield badge for sandboxed                      | Policy name badge per session                                 |
+| IPC              | No policy awareness                             | `policies:list` handler, `policyId` in create call            |
 
 ---
 
@@ -171,7 +171,7 @@ export interface FilesystemPolicy {
    * - "read-write": Agent can read and write files in the worktree.
    * - "read-only": Agent can read but not modify files.
    */
-  worktreeAccess: "read-write" | "read-only";
+  worktreeAccess: 'read-write' | 'read-only';
 
   /**
    * Additional writable directories beyond the worktree.
@@ -192,7 +192,7 @@ export interface NetworkPolicy {
    * - "none": All network access blocked via --append-profile overlay.
    * - "filtered": Domain allowlist via proxy (Milestone 6 — not yet implemented).
    */
-  access: "full" | "none" | "filtered";
+  access: 'full' | 'none' | 'filtered';
 
   /**
    * Allowed domains when access is "filtered".
@@ -255,18 +255,21 @@ The default policy for typical coding work: implement a feature, fix a bug, writ
 ```
 
 **What it allows:**
+
 - Read and write files in the worktree
 - Run build tools, linters, test suites (via safehouse toolchain profiles)
 - Git operations (add, commit, branch) within the worktree
 - Read system binaries, libraries, toolchain caches
 
 **What it blocks:**
+
 - All network access (no `git push`, `npm install` from registry, web requests)
 - Writing outside the worktree (no modifying `~/.gitconfig`, other repos, etc.)
 
 **Practical implication:** The agent must work with dependencies already installed in the worktree (or installed during worktree setup). This is the right constraint for most PR implementation work where you don't want the agent reaching out to external services.
 
 **Open question for M3 iteration:** Should we pre-install `node_modules` during worktree creation? M2 findings showed the agent had to run `npm install` itself. With `standard-pr` blocking network, this won't work. Options:
+
 1. Copy `node_modules` from the source repo during `worktree create` (fast if source has them)
 2. Run `npm install` before applying sandbox (adds latency)
 3. Accept that `standard-pr` requires pre-installed deps and document this
@@ -304,15 +307,18 @@ For tasks where the agent should analyze code but not modify it: code review, ar
 ```
 
 **What it allows:**
+
 - Read all files in the worktree and standard system paths
 - Full network access (web browsing, API calls, package registry queries)
 - Read safehouse-granted paths (toolchain caches, git config, etc.)
 
 **What it blocks:**
+
 - Writing any files (worktree is mounted read-only)
 - No git commits, no file creation, no build artifact generation
 
 **Implementation note:** Since safehouse's `--add-dirs` grants read-write, we need a different approach for read-only worktree mounting. Two options:
+
 1. Use `--add-dirs-ro` instead of `--add-dirs` for the worktree path (preferred — no SBPL overlay needed)
 2. Use `--add-dirs` and append an SBPL deny overlay for writes
 
@@ -344,10 +350,12 @@ For trusted tasks that need both filesystem mutation and network access: setting
 ```
 
 **What it allows:**
+
 - Everything `standard-pr` allows, plus full network access
 - `git push`, `npm install`, web API calls, etc.
 
 **What it blocks:**
+
 - Writing outside the worktree (safehouse default)
 - Accessing paths not in safehouse's curated profiles
 
@@ -355,16 +363,16 @@ For trusted tasks that need both filesystem mutation and network access: setting
 
 ### Template Comparison Matrix
 
-| Capability | `standard-pr` | `research-only` | `permissive` |
-|-----------|:---:|:---:|:---:|
-| Read worktree files | Yes | Yes | Yes |
-| Write worktree files | Yes | No | Yes |
-| Run build/test tools | Yes | No | Yes |
-| Git commit (local) | Yes | No | Yes |
-| Git push | No | No | Yes |
-| npm install (from registry) | No | No | Yes |
-| Web access | No | Yes | Yes |
-| Write outside worktree | No | No | No |
+| Capability                  | `standard-pr` | `research-only` | `permissive` |
+| --------------------------- | :-----------: | :-------------: | :----------: |
+| Read worktree files         |      Yes      |       Yes       |     Yes      |
+| Write worktree files        |      Yes      |       No        |     Yes      |
+| Run build/test tools        |      Yes      |       No        |     Yes      |
+| Git commit (local)          |      Yes      |       No        |     Yes      |
+| Git push                    |      No       |       No        |     Yes      |
+| npm install (from registry) |      No       |       No        |     Yes      |
+| Web access                  |      No       |       Yes       |     Yes      |
+| Write outside worktree      |      No       |       No        |      No      |
 
 ---
 
@@ -375,7 +383,7 @@ For trusted tasks that need both filesystem mutation and network access: setting
 A simple registry that holds the built-in templates and provides lookup/listing for the session manager and IPC layer.
 
 ```typescript
-import type { PolicyTemplate, PolicyTemplateSummary } from "./types.js";
+import type { PolicyTemplate, PolicyTemplateSummary } from './types.js';
 
 const BUILT_IN_TEMPLATES: PolicyTemplate[] = [
   standardPrTemplate,
@@ -387,7 +395,7 @@ export class PolicyTemplateRegistry {
   private templates: Map<string, PolicyTemplate>;
 
   constructor() {
-    this.templates = new Map(BUILT_IN_TEMPLATES.map(t => [t.id, t]));
+    this.templates = new Map(BUILT_IN_TEMPLATES.map((t) => [t.id, t]));
   }
 
   /** Get a template by ID. Throws if not found. */
@@ -399,7 +407,7 @@ export class PolicyTemplateRegistry {
 
   /** List all available templates (summaries for UI). */
   list(): PolicyTemplateSummary[] {
-    return Array.from(this.templates.values()).map(t => ({
+    return Array.from(this.templates.values()).map((t) => ({
       id: t.id,
       name: t.name,
       description: t.description,
@@ -408,7 +416,7 @@ export class PolicyTemplateRegistry {
 
   /** Default template ID for new sessions. */
   get defaultId(): string {
-    return "standard-pr";
+    return 'standard-pr';
   }
 }
 ```
@@ -420,8 +428,8 @@ export class PolicyTemplateRegistry {
 Maps a `PolicyTemplate` + session context into a concrete `SandboxConfig`. This replaces the role of `defaultSandboxConfig()` as the source of sandbox configuration.
 
 ```typescript
-import type { PolicyTemplate } from "./types.js";
-import type { SandboxConfig } from "./sandbox.js";
+import type { PolicyTemplate } from './types.js';
+import type { SandboxConfig } from './sandbox.js';
 
 interface SessionContext {
   sessionId: string;
@@ -445,7 +453,7 @@ export function policyToSandboxConfig(
   const readOnlyDirs: string[] = [...(ctx.readOnlyDirs ?? [])];
 
   // Worktree access
-  if (template.filesystem.worktreeAccess === "read-write") {
+  if (template.filesystem.worktreeAccess === 'read-write') {
     writableDirs.push(ctx.worktreePath);
   } else {
     readOnlyDirs.push(ctx.worktreePath);
@@ -454,7 +462,7 @@ export function policyToSandboxConfig(
   // Git common dir (always writable when worktree is writable,
   // read-only when worktree is read-only)
   if (ctx.gitCommonDir) {
-    if (template.filesystem.worktreeAccess === "read-write") {
+    if (template.filesystem.worktreeAccess === 'read-write') {
       writableDirs.push(ctx.gitCommonDir);
     } else {
       readOnlyDirs.push(ctx.gitCommonDir);
@@ -467,18 +475,18 @@ export function policyToSandboxConfig(
 
   // Environment variables
   const BASE_ENV = [
-    "ANTHROPIC_API_KEY",
-    "NODE_OPTIONS",
-    "NODE_PATH",
-    "EDITOR",
-    "VISUAL",
-    "GIT_AUTHOR_NAME",
-    "GIT_AUTHOR_EMAIL",
-    "GIT_COMMITTER_NAME",
-    "GIT_COMMITTER_EMAIL",
+    'ANTHROPIC_API_KEY',
+    'NODE_OPTIONS',
+    'NODE_PATH',
+    'EDITOR',
+    'VISUAL',
+    'GIT_AUTHOR_NAME',
+    'GIT_AUTHOR_EMAIL',
+    'GIT_COMMITTER_NAME',
+    'GIT_COMMITTER_EMAIL',
   ];
   const envPassthrough = [
-    ...BASE_ENV.filter(v => !template.env.exclude.includes(v)),
+    ...BASE_ENV.filter((v) => !template.env.exclude.includes(v)),
     ...template.env.additional,
   ];
 
@@ -566,7 +574,7 @@ async createSession(
 ```typescript
 interface SessionState {
   // ... existing fields ...
-  policyId: string;          // NEW — which template was selected
+  policyId: string; // NEW — which template was selected
 }
 ```
 
@@ -575,8 +583,8 @@ interface SessionState {
 ```typescript
 export interface SessionSummary {
   // ... existing fields ...
-  policyId: string | null;    // NEW
-  policyName: string | null;  // NEW — human-readable for UI
+  policyId: string | null; // NEW
+  policyName: string | null; // NEW — human-readable for UI
 }
 ```
 
@@ -593,7 +601,7 @@ export interface SandboxConfig {
   readOnlyDirs: string[];
   envPassthrough: string[];
   policyOutputPath: string;
-  appendProfileContent?: string;  // NEW — SBPL content for --append-profile
+  appendProfileContent?: string; // NEW — SBPL content for --append-profile
 }
 ```
 
@@ -628,12 +636,12 @@ export interface SessionSummary {
 
 ```typescript
 // In main/index.ts
-ipcMain.handle("policies:list", () => {
+ipcMain.handle('policies:list', () => {
   return sessionManager.policyRegistry.list();
 });
 
 // Updated: createSession now accepts policyId
-ipcMain.handle("sessions:create", (_event, projectDir, agentType, policyId) => {
+ipcMain.handle('sessions:create', (_event, projectDir, agentType, policyId) => {
   return sessionManager.createSession(projectDir, agentType, policyId);
 });
 ```
@@ -686,6 +694,7 @@ Replace the current "click New Session → pick directory → session starts" fl
 ```
 
 **Component:** `NewSessionDialog.tsx` — a modal or inline panel with:
+
 - Directory picker (existing `dialog:selectDirectory` call)
 - Policy radio group (fetched via `policies:list` on mount)
 - Create button (calls `sessions:create` with selected directory and policy)
@@ -733,6 +742,7 @@ This is a tooltip or small popover, not a full panel. Enough to confirm what the
 Templates that include `appendProfile` content (like `standard-pr`'s network deny rule) need the SBPL content written to a temp file that safehouse can reference.
 
 **Lifecycle:**
+
 1. **Session creation:** `policyToSandboxConfig()` populates `appendProfileContent` on the `SandboxConfig`.
 2. **Before spawn:** If `appendProfileContent` is present, write it to `{POLICY_DIR}/{sessionId}-append.sb`.
 3. **Safehouse invocation:** `buildSafehouseArgs()` includes `--append-profile={path}`.
@@ -756,12 +766,14 @@ The most impactful policy difference is network access. Here's how the `standard
 This is appended to safehouse's base profile via `--append-profile`. Since SBPL profiles are additive (deny rules can be added on top of allow rules), this effectively blocks all network access regardless of what safehouse's base profile allows.
 
 **Verification approach:** After implementing, test that:
+
 - `curl https://example.com` fails with EPERM under `standard-pr`
 - `git push` fails under `standard-pr`
 - Both succeed under `permissive`
 - The sandbox monitor captures network-outbound violations
 
-**Edge case: localhost.** The network deny overlay blocks *all* network, including localhost. This could break:
+**Edge case: localhost.** The network deny overlay blocks _all_ network, including localhost. This could break:
+
 - ACP communication (but ACP uses stdio, not network — safe)
 - Any MCP servers running on localhost (if configured in the future)
 
@@ -800,6 +812,7 @@ The transition should be non-breaking:
 The `standard-pr` template blocks network access, but many coding tasks require installed dependencies. If the worktree doesn't have `node_modules` (or equivalent), the agent can't install them.
 
 **Options:**
+
 1. **Symlink or copy `node_modules` during worktree creation.** Fast if source repo has them. Could be a worktree manager enhancement.
 2. **Run `npm install` before applying sandbox.** Adds latency to session creation.
 3. **Accept the constraint.** Document that `standard-pr` assumes pre-installed deps. Users who need to install packages should use `permissive`.
@@ -808,7 +821,7 @@ The `standard-pr` template blocks network access, but many coding tasks require 
 
 ### SBPL append profile ordering
 
-Safehouse's `--append-profile` loads the custom SBPL rules *after* the base profile. We need to verify that deny rules in the append profile override allow rules in the base profile. SBPL evaluation is last-match-wins for same-specificity rules, so an explicit `(deny network-outbound)` should override an earlier `(allow network-outbound)`.
+Safehouse's `--append-profile` loads the custom SBPL rules _after_ the base profile. We need to verify that deny rules in the append profile override allow rules in the base profile. SBPL evaluation is last-match-wins for same-specificity rules, so an explicit `(deny network-outbound)` should override an earlier `(allow network-outbound)`.
 
 **Mitigation:** Test this empirically in the first implementation phase. If ordering is an issue, we may need to use `--append-profile` with a more specific deny rule.
 
@@ -821,6 +834,7 @@ The `research-only` template wants read-only worktree access. Safehouse's `--add
 ### Template extensibility for containers
 
 The `PolicyTemplate` type is designed to be backend-agnostic, but the `appendProfile` and `safehouseIntegrations` fields are safehouse-specific. When we migrate to containers:
+
 - `filesystem` maps to bind mounts and volume configurations
 - `network` maps to Docker network policies
 - `env` maps to container environment variables

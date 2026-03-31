@@ -6,11 +6,11 @@
  * alongside the policy state JSON — no JSON parsing in bash needed.
  */
 
-import { mkdir, writeFile, chmod, rm } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
-import { POLICY_DIR } from "./sandbox.js";
+import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { join } from 'node:path';
+import { POLICY_DIR } from './sandbox.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -82,7 +82,7 @@ exit 0
  * for the allowed-refs file (mounted at /etc/bouncer/allowed-refs.txt).
  */
 export function generatePrePushHookForContainer(): string {
-  return generatePrePushHook("/etc/bouncer/allowed-refs.txt");
+  return generatePrePushHook('/etc/bouncer/allowed-refs.txt');
 }
 
 /**
@@ -100,27 +100,24 @@ export async function installHooks(
 
   // Write the allowed-refs companion file
   const refsFile = allowedRefsPath(sessionId);
-  await writeFile(refsFile, allowedPushRefs.join("\n") + "\n", "utf-8");
+  await writeFile(refsFile, allowedPushRefs.join('\n') + '\n', 'utf-8');
 
   // Write the pre-push hook
-  const hookPath = join(dir, "pre-push");
-  await writeFile(hookPath, generatePrePushHook(refsFile), "utf-8");
+  const hookPath = join(dir, 'pre-push');
+  await writeFile(hookPath, generatePrePushHook(refsFile), 'utf-8');
   await chmod(hookPath, 0o755);
 
   // Point the worktree's git config to our hooks directory
-  await execFileAsync("git", ["-C", worktreePath, "config", "core.hooksPath", dir]);
+  await execFileAsync('git', ['-C', worktreePath, 'config', 'core.hooksPath', dir]);
 }
 
 /**
  * Remove the hooks directory, allowed-refs file, and unset core.hooksPath.
  */
-export async function cleanupHooks(
-  sessionId: string,
-  worktreePath: string,
-): Promise<void> {
+export async function cleanupHooks(sessionId: string, worktreePath: string): Promise<void> {
   // Unset core.hooksPath (catch errors — worktree may already be gone)
   try {
-    await execFileAsync("git", ["-C", worktreePath, "config", "--unset", "core.hooksPath"]);
+    await execFileAsync('git', ['-C', worktreePath, 'config', '--unset', 'core.hooksPath']);
   } catch {
     // Worktree may be gone or config already unset
   }
