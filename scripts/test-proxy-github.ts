@@ -209,7 +209,7 @@ await test('PUT /repos/owner/repo/pulls/1/merge → 403 (denied)', async () => {
     const res = await requestViaProxy(ctx.proxy.port, 'PUT', '/repos/owner/repo/pulls/1/merge');
     assert.equal(res.status, 403);
     assert.ok(res.body.includes('[bouncer:proxy]'), 'deny message should have bouncer prefix');
-    assert.ok(res.body.includes('merging'), 'should mention merge denial');
+    assert.ok(res.body.toLowerCase().includes('merging'), 'should mention merge denial');
     assert.ok(ctx.events.some((e) => e.decision === 'deny'));
   } finally {
     await ctx.proxy.stop();
