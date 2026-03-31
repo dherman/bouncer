@@ -98,9 +98,10 @@ console.log('\nbuildSessionPolicy:');
 await test('builds policy with correct defaults', () => {
   const policy = buildSessionPolicy('owner/repo', 'feature-branch');
   assert.equal(policy.repo, 'owner/repo');
-  assert.deepEqual(policy.allowedPushRefs, ['feature-branch']);
+  assert.deepEqual(policy.allowedPushRefs, ['refs/heads/*']);
   assert.equal(policy.ownedPrNumber, null);
   assert.equal(policy.canCreatePr, true);
+  assert.deepEqual(policy.protectedBranches, ['main']);
 });
 
 // --- State file round-trip ---
