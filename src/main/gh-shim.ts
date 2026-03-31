@@ -475,10 +475,16 @@ async function executeViaApi(
     await apiPrCreate(parsed, policy, policyPath, token, decision);
   } else if (command === "pr" && subcommand === "view") {
     await apiPrView(parsed, policy, token);
+  } else if (command === "pr" && subcommand === "ready") {
+    await apiPrReady(parsed, policy, token);
   } else if (command === "pr" && subcommand === "edit") {
     await apiPrEdit(parsed, policy, token);
   } else if (command === "pr" && subcommand === "list") {
     await apiPrList(policy, token);
+  } else if (command === "pr" && subcommand === "checks") {
+    await apiPrChecks(parsed, policy, token);
+  } else if (command === "run" && (subcommand === "view" || subcommand === "list")) {
+    await apiRunViewOrList(parsed, policy, token);
   } else if (command === "issue" && subcommand === "list") {
     await apiIssueList(policy, token);
   } else if (command === "issue" && subcommand === "view") {
@@ -596,6 +602,129 @@ async function apiPrEdit(
     method: "PATCH",
     body,
   });
+  process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+}
+
+async function apiPrReady(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write("[bouncer:gh] error: PR number required\n");
+    process.exit(1);
+  }
+
+  // Fetch PR to get GraphQL node_id
+  const pr = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token) as {
+    node_id: string;
+    html_url: string;
+  };
+  const nodeId = pr.node_id;
+  if (!nodeId) {
+    process.stderr.write("[bouncer:gh] error: could not get PR node_id\n");
+    process.exit(1);
+  }
+
+  // Use GraphQL mutation to mark PR as ready for review
+  const mutation = `mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { number isDraft url } } }`;
+  const graphqlBody = { query: mutation, variables: { id: nodeId } };
+  const url = "https://api.github.com/graphql";
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(graphqlBody),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    process.stderr.write(`[bouncer:gh] GraphQL HTTP error: ${resp.status} ${text}\n`);
+    process.exit(1);
+  }
+
+  const result = await resp.json() as {
+    errors?: Array<{ message: string }>;
+    data?: { markPullRequestReadyForReview?: { pullRequest?: { number?: number; isDraft?: boolean; url?: string } } };
+  };
+  if (result.errors?.length) {
+    process.stderr.write(`[bouncer:gh] GraphQL error: ${result.errors.map((e) => e.message).join(", ")}\n`);
+    process.exit(1);
+  }
+
+  const resultPr = result.data?.markPullRequestReadyForReview?.pullRequest;
+  process.stderr.write(`[bouncer:gh] PR #${prNumber} marked as ready for review\n`);
+  process.stdout.write(
+    JSON.stringify({
+      number: resultPr?.number ?? prNumber,
+      draft: resultPr?.isDraft ?? false,
+      html_url: resultPr?.url ?? pr.html_url,
+    }, null, 2) + "\n",
+  );
+}
+
+async function apiPrChecks(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const prNumber = parsed.positionalArgs[0] ?? policy.ownedPrNumber;
+  if (!prNumber) {
+    process.stderr.write("[bouncer:gh] error: PR number required\n");
+    process.exit(1);
+  }
+  const pr = await githubFetch(`/repos/${policy.repo}/pulls/${prNumber}`, token) as {
+    head: { sha: string };
+  };
+  const data = await githubFetch(
+    `/repos/${policy.repo}/commits/${pr.head.sha}/check-runs`,
+    token,
+  ) as {
+    total_count: number;
+    check_runs: Array<{
+      name: string;
+      status: string;
+      conclusion: string | null;
+      html_url: string;
+      started_at: string;
+      completed_at: string | null;
+    }>;
+  };
+  const summary = {
+    total_count: data.total_count,
+    check_runs: (data.check_runs ?? []).map((cr) => ({
+      name: cr.name,
+      status: cr.status,
+      conclusion: cr.conclusion,
+      html_url: cr.html_url,
+      started_at: cr.started_at,
+      completed_at: cr.completed_at,
+    })),
+  };
+  process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
+}
+
+async function apiRunViewOrList(
+  parsed: ParsedGhCommand,
+  policy: GitHubPolicy,
+  token: string,
+): Promise<void> {
+  const { subcommand } = parsed;
+  if (subcommand === "list") {
+    const data = await githubFetch(`/repos/${policy.repo}/actions/runs`, token);
+    process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+    return;
+  }
+  // subcommand === "view"
+  const runId = parsed.positionalArgs[0];
+  if (!runId) {
+    process.stderr.write("[bouncer:gh] error: run ID required\n");
+    process.exit(1);
+  }
+  const data = await githubFetch(`/repos/${policy.repo}/actions/runs/${runId}`, token);
   process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 }
 

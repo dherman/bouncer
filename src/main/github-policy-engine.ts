@@ -173,9 +173,9 @@ export function evaluateGitHubRequest(
 ): PolicyDecision {
   const match = parseApiEndpoint(path, { method });
 
-  // GraphQL: deny (opaque — can't inspect query content)
+  // GraphQL: defer to proxy-level body inspection (not decidable from URL alone)
   if (match.isGraphQL) {
-    return { action: "deny", reason: "GraphQL endpoint is not allowed" };
+    return { action: "deny", reason: "GraphQL endpoint requires body inspection" };
   }
 
   // DELETE is always denied

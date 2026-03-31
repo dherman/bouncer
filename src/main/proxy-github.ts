@@ -56,6 +56,11 @@ function normalizeHost(h: string): string {
 // GitHub API request handling
 // ---------------------------------------------------------------------------
 
+/** GraphQL mutations that the proxy allows when the session owns a PR. */
+const ALLOWED_GRAPHQL_MUTATIONS = new Set([
+  "markPullRequestReadyForReview",
+]);
+
 function handleGitHubApiRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -69,6 +74,12 @@ function handleGitHubApiRequest(
   const policy = config.githubPolicy!;
 
   const decision = evaluateGitHubRequest(method, path, policy);
+
+  // GraphQL requires body inspection — buffer and check mutation name
+  if (decision.action === "deny" && path.split("?")[0].replace(/\/$/, "") === "/graphql") {
+    handleGraphQLRequest(req, res, hostname, upstreamPort, config, upstream);
+    return;
+  }
 
   // Log the policy event
   config.onPolicyEvent({
@@ -96,6 +107,84 @@ function handleGitHubApiRequest(
 
   // Standard allow — forward directly via the proxy's built-in upstream
   upstream(req, res);
+}
+
+/**
+ * Buffer GraphQL request body, extract mutation name, and allow only
+ * specific allowlisted mutations. This enables the gh shim to call
+ * GitHub GraphQL for operations like marking a PR ready for review.
+ */
+function handleGraphQLRequest(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  hostname: string,
+  upstreamPort: number,
+  config: ProxyConfig,
+  upstream: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+): void {
+  const MAX_BODY = 64 * 1024;
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  req.on("data", (chunk: Buffer) => {
+    totalBytes += chunk.length;
+    if (totalBytes <= MAX_BODY) {
+      chunks.push(chunk);
+    }
+  });
+
+  req.on("end", () => {
+    if (totalBytes > MAX_BODY) {
+      config.onPolicyEvent({
+        timestamp: Date.now(),
+        tool: "proxy",
+        operation: "POST /graphql",
+        decision: "deny",
+        reason: "GraphQL request body too large",
+      });
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("[bouncer:proxy] DENY POST /graphql — request body too large\n");
+      return;
+    }
+
+    const body = Buffer.concat(chunks);
+    let mutationName: string | null = null;
+    try {
+      const parsed = JSON.parse(body.toString("utf-8"));
+      if (typeof parsed.query === "string") {
+        // Extract mutation name: "mutation(...) { mutationName(...) { ... } }"
+        const match = parsed.query.match(/mutation\b[^{]*\{\s*(\w+)/);
+        if (match) {
+          mutationName = match[1];
+        }
+      }
+    } catch {
+      // Not valid JSON
+    }
+
+    if (mutationName && ALLOWED_GRAPHQL_MUTATIONS.has(mutationName)) {
+      config.onPolicyEvent({
+        timestamp: Date.now(),
+        tool: "proxy",
+        operation: `POST /graphql (${mutationName})`,
+        decision: "allow",
+      });
+      forwardWithBody(req, res, hostname, upstreamPort, config, body);
+    } else {
+      const reason = mutationName
+        ? `GraphQL mutation '${mutationName}' is not allowed`
+        : "GraphQL endpoint is not allowed";
+      config.onPolicyEvent({
+        timestamp: Date.now(),
+        tool: "proxy",
+        operation: `POST /graphql${mutationName ? ` (${mutationName})` : ""}`,
+        decision: "deny",
+        reason,
+      });
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end(`[bouncer:proxy] DENY POST /graphql — ${reason}\n`);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
