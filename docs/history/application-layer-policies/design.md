@@ -27,23 +27,23 @@ A new `GitHubPolicy` type extends the existing `PolicyTemplate` with application
 /** GitHub-specific policy for a session. */
 export interface GitHubPolicy {
   /** GitHub repository in "owner/repo" format. */
-  repo: string;
+  repo: string
 
   /** Refs the agent is allowed to push to (exact match). */
-  allowedPushRefs: string[];
+  allowedPushRefs: string[]
 
   /**
    * PR number the agent owns, if known at session start.
    * When null, the agent can create one PR; the shim captures the
    * created PR number and scopes subsequent edit operations to it.
    */
-  ownedPrNumber: number | null;
+  ownedPrNumber: number | null
 
   /**
    * Whether the agent can create a new PR.
    * Typically true when ownedPrNumber is null.
    */
-  canCreatePr: boolean;
+  canCreatePr: boolean
 }
 ```
 
@@ -54,7 +54,7 @@ export interface PolicyTemplate {
   // ... existing fields ...
 
   /** Application-layer policy for GitHub operations (M5). */
-  github?: GitHubPolicy;
+  github?: GitHubPolicy
 }
 ```
 
@@ -80,10 +80,10 @@ The `gh` shim needs to persist state that changes during the session (specifical
 
 ```typescript
 interface GitHubPolicyState {
-  repo: string;
-  allowedPushRefs: string[];
-  ownedPrNumber: number | null;
-  canCreatePr: boolean;
+  repo: string
+  allowedPushRefs: string[]
+  ownedPrNumber: number | null
+  canCreatePr: boolean
 }
 ```
 
@@ -107,6 +107,7 @@ The shim is a standalone executable placed on the agent's `PATH` as `gh`. When i
 ### Implementation Language
 
 The shim is implemented as a **compiled executable** (TypeScript compiled to a single-file Node.js script via `esbuild`, invoked as `node /path/to/gh-shim.js`). Alternatively, it could be a simple shell script for lower overhead, but TypeScript gives us:
+
 - Shared types with the rest of the codebase
 - Easier argument parsing (the `gh` CLI grammar is non-trivial)
 - JSON policy file reading/writing
@@ -120,64 +121,64 @@ The shim evaluates each invocation against this policy matrix. The default is **
 
 #### `gh pr` subcommands
 
-| Subcommand | Policy | Conditions |
-|---|---|---|
-| `pr create` | **Allow** | Only if `canCreatePr` is true. Capture PR number from output. |
-| `pr edit` | **Allow** | Only for `ownedPrNumber`. Deny if targeting a different PR. |
-| `pr view` | **Allow** | Any PR (read-only). |
-| `pr list` | **Allow** | Read-only. |
-| `pr status` | **Allow** | Read-only. |
-| `pr checks` | **Allow** | Any PR (read-only). |
-| `pr diff` | **Allow** | Any PR (read-only). |
-| `pr comment` | **Allow** | Only for `ownedPrNumber`. |
-| `pr checkout` | **Deny** | The agent should work in its worktree, not switch to another PR's branch. |
-| `pr close` | **Deny** | Destructive. |
-| `pr merge` | **Deny** | Destructive. |
-| `pr ready` | **Allow** | Only for `ownedPrNumber`. |
-| `pr reopen` | **Deny** | Operates on closed PRs the agent doesn't own. |
-| `pr review` | **Deny** | The agent shouldn't be reviewing PRs. |
-| `pr lock` / `pr unlock` | **Deny** | Administrative. |
-| `pr update-branch` | **Allow** | Only for `ownedPrNumber`. |
+| Subcommand              | Policy    | Conditions                                                                |
+| ----------------------- | --------- | ------------------------------------------------------------------------- |
+| `pr create`             | **Allow** | Only if `canCreatePr` is true. Capture PR number from output.             |
+| `pr edit`               | **Allow** | Only for `ownedPrNumber`. Deny if targeting a different PR.               |
+| `pr view`               | **Allow** | Any PR (read-only).                                                       |
+| `pr list`               | **Allow** | Read-only.                                                                |
+| `pr status`             | **Allow** | Read-only.                                                                |
+| `pr checks`             | **Allow** | Any PR (read-only).                                                       |
+| `pr diff`               | **Allow** | Any PR (read-only).                                                       |
+| `pr comment`            | **Allow** | Only for `ownedPrNumber`.                                                 |
+| `pr checkout`           | **Deny**  | The agent should work in its worktree, not switch to another PR's branch. |
+| `pr close`              | **Deny**  | Destructive.                                                              |
+| `pr merge`              | **Deny**  | Destructive.                                                              |
+| `pr ready`              | **Allow** | Only for `ownedPrNumber`.                                                 |
+| `pr reopen`             | **Deny**  | Operates on closed PRs the agent doesn't own.                             |
+| `pr review`             | **Deny**  | The agent shouldn't be reviewing PRs.                                     |
+| `pr lock` / `pr unlock` | **Deny**  | Administrative.                                                           |
+| `pr update-branch`      | **Allow** | Only for `ownedPrNumber`.                                                 |
 
 #### `gh issue` subcommands
 
-| Subcommand | Policy |
-|---|---|
-| `issue view` | **Allow** (read-only) |
-| `issue list` | **Allow** (read-only) |
-| `issue status` | **Allow** (read-only) |
-| `issue create` | **Deny** |
-| `issue edit` | **Deny** |
-| `issue close` | **Deny** |
-| `issue comment` | **Deny** |
-| `issue delete` | **Deny** |
-| All other `issue` subcommands | **Deny** |
+| Subcommand                    | Policy                |
+| ----------------------------- | --------------------- |
+| `issue view`                  | **Allow** (read-only) |
+| `issue list`                  | **Allow** (read-only) |
+| `issue status`                | **Allow** (read-only) |
+| `issue create`                | **Deny**              |
+| `issue edit`                  | **Deny**              |
+| `issue close`                 | **Deny**              |
+| `issue comment`               | **Deny**              |
+| `issue delete`                | **Deny**              |
+| All other `issue` subcommands | **Deny**              |
 
 #### Other `gh` top-level commands
 
-| Command | Policy | Notes |
-|---|---|---|
-| `repo view` | **Allow** | Read-only metadata. |
-| `repo clone` | **Deny** | Agent should work in its worktree. |
-| `release list` / `release view` | **Allow** | Read-only. |
-| `release create` / `release edit` / `release delete` | **Deny** | Destructive. |
-| `search` | **Allow** | Read-only. |
-| `api` | **Evaluate** | See [gh api handling](#gh-api-handling) below. |
-| `auth` | **Deny** | Agent should not modify auth state. |
-| `config` | **Deny** | Agent should not modify gh config. |
-| `gist` | **Deny** | Publishing content outside the repo. |
-| `codespace` | **Deny** | Infrastructure. |
-| `ssh-key` / `gpg-key` | **Deny** | Credential management. |
-| `secret` / `variable` | **Deny** | Repository settings. |
-| `label` | **Deny** | Repository settings. |
-| `extension` | **Deny** | Installing extensions could be a vector. |
-| `run view` / `run list` | **Allow** | Read-only CI status. |
-| `run cancel` / `run rerun` / `run delete` / `run watch` | **Deny** | CI operations. |
-| `workflow view` / `workflow list` | **Allow** | Read-only. |
-| `workflow run` / `workflow enable` / `workflow disable` | **Deny** | CI operations. |
-| `browse` | **Allow** | Opens a URL in the terminal; harmless. |
-| `status` | **Allow** | Read-only cross-repo status. |
-| All other commands | **Deny** | Default deny. |
+| Command                                                 | Policy       | Notes                                          |
+| ------------------------------------------------------- | ------------ | ---------------------------------------------- |
+| `repo view`                                             | **Allow**    | Read-only metadata.                            |
+| `repo clone`                                            | **Deny**     | Agent should work in its worktree.             |
+| `release list` / `release view`                         | **Allow**    | Read-only.                                     |
+| `release create` / `release edit` / `release delete`    | **Deny**     | Destructive.                                   |
+| `search`                                                | **Allow**    | Read-only.                                     |
+| `api`                                                   | **Evaluate** | See [gh api handling](#gh-api-handling) below. |
+| `auth`                                                  | **Deny**     | Agent should not modify auth state.            |
+| `config`                                                | **Deny**     | Agent should not modify gh config.             |
+| `gist`                                                  | **Deny**     | Publishing content outside the repo.           |
+| `codespace`                                             | **Deny**     | Infrastructure.                                |
+| `ssh-key` / `gpg-key`                                   | **Deny**     | Credential management.                         |
+| `secret` / `variable`                                   | **Deny**     | Repository settings.                           |
+| `label`                                                 | **Deny**     | Repository settings.                           |
+| `extension`                                             | **Deny**     | Installing extensions could be a vector.       |
+| `run view` / `run list`                                 | **Allow**    | Read-only CI status.                           |
+| `run cancel` / `run rerun` / `run delete` / `run watch` | **Deny**     | CI operations.                                 |
+| `workflow view` / `workflow list`                       | **Allow**    | Read-only.                                     |
+| `workflow run` / `workflow enable` / `workflow disable` | **Deny**     | CI operations.                                 |
+| `browse`                                                | **Allow**    | Opens a URL in the terminal; harmless.         |
+| `status`                                                | **Allow**    | Read-only cross-repo status.                   |
+| All other commands                                      | **Deny**     | Default deny.                                  |
 
 ### `gh api` Handling
 
@@ -197,20 +198,20 @@ gh api <endpoint> [--method <METHOD>] [-X <METHOD>] [flags]
 
 The shim maps `(method, endpoint_pattern)` to allow/deny using the same logic as the subcommand table:
 
-| Method | Endpoint Pattern | Policy | Equivalent |
-|---|---|---|---|
-| GET | `/repos/{owner}/{repo}` | Allow | Repo metadata |
-| GET | `/repos/{owner}/{repo}/pulls` | Allow | `pr list` |
-| GET | `/repos/{owner}/{repo}/pulls/{number}` | Allow | `pr view` |
-| POST | `/repos/{owner}/{repo}/pulls` | Allow if `canCreatePr` | `pr create` |
-| PATCH | `/repos/{owner}/{repo}/pulls/{ownedPr}` | Allow | `pr edit` |
-| PATCH | `/repos/{owner}/{repo}/pulls/{otherPr}` | Deny | Editing another PR |
-| PUT | `/repos/{owner}/{repo}/pulls/{number}/merge` | Deny | `pr merge` |
-| GET | `/repos/{owner}/{repo}/issues` | Allow | `issue list` |
-| GET | `/repos/{owner}/{repo}/issues/{number}` | Allow | `issue view` |
-| POST | `/repos/{owner}/{repo}/issues` | Deny | `issue create` |
-| DELETE | `*` | Deny | Any deletion |
-| * | `*` | Deny | Default deny |
+| Method | Endpoint Pattern                             | Policy                 | Equivalent         |
+| ------ | -------------------------------------------- | ---------------------- | ------------------ |
+| GET    | `/repos/{owner}/{repo}`                      | Allow                  | Repo metadata      |
+| GET    | `/repos/{owner}/{repo}/pulls`                | Allow                  | `pr list`          |
+| GET    | `/repos/{owner}/{repo}/pulls/{number}`       | Allow                  | `pr view`          |
+| POST   | `/repos/{owner}/{repo}/pulls`                | Allow if `canCreatePr` | `pr create`        |
+| PATCH  | `/repos/{owner}/{repo}/pulls/{ownedPr}`      | Allow                  | `pr edit`          |
+| PATCH  | `/repos/{owner}/{repo}/pulls/{otherPr}`      | Deny                   | Editing another PR |
+| PUT    | `/repos/{owner}/{repo}/pulls/{number}/merge` | Deny                   | `pr merge`         |
+| GET    | `/repos/{owner}/{repo}/issues`               | Allow                  | `issue list`       |
+| GET    | `/repos/{owner}/{repo}/issues/{number}`      | Allow                  | `issue view`       |
+| POST   | `/repos/{owner}/{repo}/issues`               | Deny                   | `issue create`     |
+| DELETE | `*`                                          | Deny                   | Any deletion       |
+| \*     | `*`                                          | Deny                   | Default deny       |
 
 The `{owner}/{repo}` in patterns is matched against the session's `repo` field. Requests targeting other repos are denied.
 
@@ -231,16 +232,16 @@ The `gh` CLI has a consistent grammar: `gh <command> [<subcommand>] [<args>] [<f
 ```typescript
 interface ParsedGhCommand {
   /** Top-level command (e.g., "pr", "issue", "api") */
-  command: string;
+  command: string
   /** Subcommand (e.g., "create", "view", "merge") */
-  subcommand: string | null;
+  subcommand: string | null
   /** Positional arguments after the subcommand */
-  positionalArgs: string[];
+  positionalArgs: string[]
   /** Parsed flags relevant to policy decisions */
   flags: {
-    repo?: string;        // -R, --repo
-    method?: string;      // --method, -X (for gh api)
-  };
+    repo?: string // -R, --repo
+    method?: string // --method, -X (for gh api)
+  }
 }
 ```
 
@@ -367,10 +368,10 @@ During session teardown, remove the hooks directory alongside the existing polic
 
 New variables added to the agent's environment:
 
-| Variable | Value | Purpose |
-|---|---|---|
-| `BOUNCER_GITHUB_POLICY` | `/tmp/glitterball-sandbox/{sessionId}-github-policy.json` | Policy state file path for the `gh` shim |
-| `BOUNCER_REAL_GH` | Output of `which gh` at session start | Path to the real `gh` binary for proxying |
+| Variable                | Value                                                     | Purpose                                   |
+| ----------------------- | --------------------------------------------------------- | ----------------------------------------- |
+| `BOUNCER_GITHUB_POLICY` | `/tmp/glitterball-sandbox/{sessionId}-github-policy.json` | Policy state file path for the `gh` shim  |
+| `BOUNCER_REAL_GH`       | Output of `which gh` at session start                     | Path to the real `gh` binary for proxying |
 
 These are added to the `env` passed to `spawn()`, alongside the existing `ANTHROPIC_API_KEY` etc.
 
@@ -381,7 +382,7 @@ interface SessionState {
   // ... existing fields ...
 
   /** Application-layer policy state (M5). */
-  githubPolicy: GitHubPolicy | null;
+  githubPolicy: GitHubPolicy | null
 }
 ```
 
@@ -392,16 +393,17 @@ export interface SessionSummary {
   // ... existing fields ...
 
   /** GitHub repo this session targets (if applicable). */
-  githubRepo: string | null;
+  githubRepo: string | null
 
   /** PR number owned by this session (null until PR is created). */
-  ownedPrNumber: number | null;
+  ownedPrNumber: number | null
 }
 ```
 
 ### Cleanup
 
 Session teardown adds:
+
 - Remove hooks directory: `rm -rf /tmp/glitterball-sandbox/{sessionId}-hooks/`
 - Remove policy state file: `rm -f /tmp/glitterball-sandbox/{sessionId}-github-policy.json`
 - Unset `core.hooksPath` in worktree config (before worktree removal, to avoid stale config if removal fails)
@@ -425,18 +427,18 @@ The `gh` shim and git hooks produce structured log output that the Session Manag
 ```typescript
 export type SessionUpdate =
   // ... existing types ...
-  | {
-      sessionId: string;
-      type: "policy-event";
-      event: PolicyEvent;
-    };
+  {
+    sessionId: string
+    type: 'policy-event'
+    event: PolicyEvent
+  }
 
 export interface PolicyEvent {
-  timestamp: number;
-  tool: "gh" | "git";
-  operation: string;       // e.g., "pr create", "push refs/heads/main"
-  decision: "allow" | "deny";
-  reason?: string;         // Human-readable reason for deny
+  timestamp: number
+  tool: 'gh' | 'git'
+  operation: string // e.g., "pr create", "push refs/heads/main"
+  decision: 'allow' | 'deny'
+  reason?: string // Human-readable reason for deny
 }
 ```
 
@@ -461,32 +463,32 @@ The existing `standard-pr` template gains GitHub policy defaults:
 
 ```typescript
 export const standardPrTemplate: PolicyTemplate = {
-  id: "standard-pr",
-  name: "Standard PR",
-  description: "Read-write worktree, standard toolchains, GitHub PR-scoped access",
+  id: 'standard-pr',
+  name: 'Standard PR',
+  description: 'Read-write worktree, standard toolchains, GitHub PR-scoped access',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
-  network: { access: "none" },
+  network: { access: 'none' },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
+  safehouseIntegrations: ['all-agents'],
   github: {
     // repo, allowedPushRefs, ownedPrNumber are set per-session
     // These are template defaults indicating that GitHub policy is active
-    repo: "",                   // Populated at session creation
-    allowedPushRefs: [],        // Populated at session creation
-    ownedPrNumber: null,        // Set after PR creation
+    repo: '', // Populated at session creation
+    allowedPushRefs: [], // Populated at session creation
+    ownedPrNumber: null, // Set after PR creation
     canCreatePr: true,
   },
-};
+}
 ```
 
-The `repo` and `allowedPushRefs` fields are populated by the Session Manager from the worktree's git remote and branch name. The template declares *intent* (GitHub policy is active); the Session Manager fills in the *specifics*.
+The `repo` and `allowedPushRefs` fields are populated by the Session Manager from the worktree's git remote and branch name. The template declares _intent_ (GitHub policy is active); the Session Manager fills in the _specifics_.
 
 ### Templates Without GitHub Policy
 

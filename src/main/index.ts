@@ -19,8 +19,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
-    }
+      nodeIntegration: false,
+    },
   })
   mainWindow = window
 
@@ -120,7 +120,13 @@ app.whenReady().then(async () => {
     if (typeof changes !== 'object' || changes === null || Array.isArray(changes)) {
       throw new Error('Invalid argument: changes must be an object')
     }
-    const allowed = ['name', 'localPath', 'githubRepo', 'defaultPolicyId', 'defaultAgentType'] as const
+    const allowed = [
+      'name',
+      'localPath',
+      'githubRepo',
+      'defaultPolicyId',
+      'defaultAgentType',
+    ] as const
     const validated: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in changes) {
@@ -191,7 +197,10 @@ app.whenReady().then(async () => {
     if (typeof datasetSessionId !== 'string') {
       throw new Error('Invalid argument: datasetSessionId must be a string')
     }
-    const toolCalls = await loadSession(join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'), datasetSessionId)
+    const toolCalls = await loadSession(
+      join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'),
+      datasetSessionId,
+    )
     if (toolCalls.length === 0) {
       throw new Error(`Session not found in dataset: ${datasetSessionId}`)
     }
@@ -203,7 +212,7 @@ app.whenReady().then(async () => {
     if (!window) return null
     const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory'],
-      title: 'Select project directory'
+      title: 'Select project directory',
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
