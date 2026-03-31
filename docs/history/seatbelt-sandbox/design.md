@@ -324,6 +324,7 @@ async closeSession(sessionId: string) {
 
 New types for sandbox events:
 
+<!-- prettier-ignore -->
 ```typescript
 export interface SandboxViolationInfo {
   timestamp: number;
@@ -334,11 +335,11 @@ export interface SandboxViolationInfo {
 
 export type SessionUpdate =
   // ... existing variants ...
-  {
-    sessionId: string;
-    type: 'sandbox-violation';
-    violation: SandboxViolationInfo;
-  };
+  | {
+      sessionId: string;
+      type: 'sandbox-violation';
+      violation: SandboxViolationInfo;
+    };
 ```
 
 ### 5. IPC Bridge (updated: `src/preload/index.ts`)

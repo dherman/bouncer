@@ -424,14 +424,15 @@ The `gh` shim and git hooks produce structured log output that the Session Manag
 
 **2. New SessionUpdate event type:**
 
+<!-- prettier-ignore -->
 ```typescript
 export type SessionUpdate =
   // ... existing types ...
-  {
-    sessionId: string;
-    type: 'policy-event';
-    event: PolicyEvent;
-  };
+  | {
+      sessionId: string;
+      type: 'policy-event';
+      event: PolicyEvent;
+    };
 
 export interface PolicyEvent {
   timestamp: number;
