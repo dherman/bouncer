@@ -140,7 +140,7 @@ await test('detect GitHub repo from worktree', async () => {
 await test('build and write policy state', async () => {
   const policy = buildSessionPolicy('test-owner/test-repo', repo.branch);
   assert.equal(policy.repo, 'test-owner/test-repo');
-  assert.deepEqual(policy.allowedPushRefs, [repo.branch]);
+  assert.deepEqual(policy.allowedPushRefs, ['refs/heads/*']);
   assert.equal(policy.canCreatePr, true);
   assert.equal(policy.ownedPrNumber, null);
 
