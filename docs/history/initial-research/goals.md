@@ -6,7 +6,7 @@ Our goal for the "Bouncer" project is to experiment with _some amount_ of automa
 
 The _ideal_ would be to identify classes of common coding use cases where the policy bot can automate away 100% of the need for human permission requests with 0% false negatives (i.e., cases where the policy bot allows the coding agent to do an operation that turns out to have been unsafe). But this may not be an achievable goal.
 
-A _good result_ would be one where we can implement a policy automation that automates away _some_ permission requests with 0% false nmegatives.
+A _good result_ would be one where we can implement a policy automation that automates away _some_ permission requests with 0% false negatives.
 
 In other words, our **top priority** is safety; our **secondary priority** is automating unnecessary permission requests.
 
