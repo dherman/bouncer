@@ -93,48 +93,50 @@ Validate the Electron + ACP plumbing end-to-end: a user types a message in the U
 A standalone Node.js script that speaks ACP on the agent side. This is our test double for Claude Code in later milestones.
 
 **Responsibilities:**
+
 - Create an `AgentSideConnection` from `@agentclientprotocol/sdk`
 - Handle `InitializeRequest`: return capabilities (name, version, supported features)
 - Handle `NewSessionRequest`: create a session, return session ID
 - Handle `PromptRequest`: extract the user's message text, stream it back as a `SessionNotification` containing `TextContent`, then send `PromptResponse` with `StopReason.EndTurn`
 
 **Behavior:**
+
 - Echoes the user's message prefixed with `Echo: `
 - Streams the response in small chunks (simulating token-by-token streaming) with short delays between chunks, so we can validate the streaming UI
 - Logs lifecycle events to stderr
 
 ```typescript
 // Pseudocode for the echo agent
-import { AgentSideConnection, StopReason } from "@agentclientprotocol/sdk";
+import { AgentSideConnection, StopReason } from '@agentclientprotocol/sdk'
 
-const connection = new AgentSideConnection(process.stdin, process.stdout);
+const connection = new AgentSideConnection(process.stdin, process.stdout)
 
 connection.onInitialize(async (params) => {
   return {
-    name: "glitterball-echo-agent",
-    version: "0.1.0",
+    name: 'glitterball-echo-agent',
+    version: '0.1.0',
     // ... capabilities
-  };
-});
+  }
+})
 
 connection.onNewSession(async (params) => {
-  return { sessionId: crypto.randomUUID() };
-});
+  return { sessionId: crypto.randomUUID() }
+})
 
 connection.onPrompt(async (params, { sendUpdate, signal }) => {
-  const userText = extractTextFromPrompt(params);
-  const reply = `Echo: ${userText}`;
+  const userText = extractTextFromPrompt(params)
+  const reply = `Echo: ${userText}`
 
   // Stream in chunks to exercise the streaming path
   for (const chunk of chunkString(reply, 10)) {
-    sendUpdate({ type: "text", text: chunk });
-    await delay(50);
+    sendUpdate({ type: 'text', text: chunk })
+    await delay(50)
   }
 
-  return { stopReason: StopReason.EndTurn };
-});
+  return { stopReason: StopReason.EndTurn }
+})
 
-connection.listen();
+connection.listen()
 ```
 
 > **Note:** The exact API surface of `AgentSideConnection` may differ from the pseudocode above. The first implementation task should be to read the actual SDK source/docs and adjust. The ACP TypeScript SDK is at `@agentclientprotocol/sdk`.
@@ -144,22 +146,25 @@ connection.listen();
 Runs in the Electron main process. Manages session lifecycle and ACP connections.
 
 **State per session:**
+
 ```typescript
 interface SessionState {
-  id: string;
-  agentProcess: ChildProcess;
-  connection: ClientSideConnection;
-  messages: Message[];       // in-memory history for the UI
-  status: "initializing" | "ready" | "error" | "closed";
+  id: string
+  agentProcess: ChildProcess
+  connection: ClientSideConnection
+  messages: Message[] // in-memory history for the UI
+  status: 'initializing' | 'ready' | 'error' | 'closed'
 }
 ```
 
 **Lifecycle:**
+
 1. **Create session**: Spawn echo agent as child process → create `ClientSideConnection` over its stdio → send `InitializeRequest` → send `NewSessionRequest` → mark session `ready`
 2. **Send message**: Send `PromptRequest` with user text → listen for `SessionNotification` updates → accumulate into message history → forward to renderer via IPC
 3. **Close session**: Send cancel if a turn is in progress → kill child process → clean up state
 
 **Error handling:**
+
 - If the agent process exits unexpectedly, mark the session as `error` and surface it in the UI
 - If `InitializeRequest` fails or times out (~5s), mark session as `error`
 
@@ -171,22 +176,22 @@ Exposes a typed API to the renderer via `contextBridge.exposeInMainWorld`:
 // Exposed as window.glitterball
 interface GlitterballAPI {
   sessions: {
-    list(): Promise<SessionSummary[]>;
-    create(): Promise<SessionSummary>;
-    sendMessage(sessionId: string, text: string): Promise<void>;
-    onUpdate(callback: (update: SessionUpdate) => void): () => void; // returns unsubscribe
-  };
+    list(): Promise<SessionSummary[]>
+    create(): Promise<SessionSummary>
+    sendMessage(sessionId: string, text: string): Promise<void>
+    onUpdate(callback: (update: SessionUpdate) => void): () => void // returns unsubscribe
+  }
 }
 
 interface SessionSummary {
-  id: string;
-  status: "initializing" | "ready" | "error" | "closed";
-  messageCount: number;
+  id: string
+  status: 'initializing' | 'ready' | 'error' | 'closed'
+  messageCount: number
 }
 
 interface SessionUpdate {
-  sessionId: string;
-  type: "message" | "status-change" | "stream-chunk";
+  sessionId: string
+  type: 'message' | 'status-change' | 'stream-chunk'
   // ... payload varies by type
 }
 ```
@@ -215,12 +220,12 @@ Minimal two-panel layout. No routing library, no state management library — ju
 
 ### Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `electron` | App shell |
-| `@agentclientprotocol/sdk` | ACP client + agent connections |
-| `react`, `react-dom` | UI |
-| `typescript` | Type safety throughout |
+| Package                             | Purpose                                                |
+| ----------------------------------- | ------------------------------------------------------ |
+| `electron`                          | App shell                                              |
+| `@agentclientprotocol/sdk`          | ACP client + agent connections                         |
+| `react`, `react-dom`                | UI                                                     |
+| `typescript`                        | Type safety throughout                                 |
 | `electron-forge` or `electron-vite` | Build tooling (bundling, dev server, HMR for renderer) |
 
 **Build tooling choice:** `electron-vite` is the lighter option — it uses Vite for the renderer (fast HMR) and esbuild/Vite for main/preload. `electron-forge` is more opinionated and heavier. Recommend **`electron-vite`** for this spike given the preference for fast iteration.
@@ -257,6 +262,7 @@ bouncer/
 ### TypeScript Configuration
 
 Three tsconfig files (standard electron-vite pattern):
+
 - `tsconfig.json` — base config with shared compiler options
 - `tsconfig.main.json` — extends base, targets Node (main + preload + agents)
 - `tsconfig.renderer.json` — extends base, targets DOM (React)
