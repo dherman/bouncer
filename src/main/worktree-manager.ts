@@ -1,8 +1,8 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join, resolve } from "node:path";
-import { homedir, tmpdir } from "node:os";
-import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { join, resolve } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,14 +20,14 @@ export class WorktreeManager {
   private metadataPath: string;
 
   constructor(basePath?: string) {
-    this.basePath = resolve(basePath ?? join(tmpdir(), "bouncer-worktrees"));
-    this.metadataPath = join(homedir(), ".cache", "bouncer", "worktrees");
+    this.basePath = resolve(basePath ?? join(tmpdir(), 'bouncer-worktrees'));
+    this.metadataPath = join(homedir(), '.cache', 'bouncer', 'worktrees');
   }
 
   /** Validate that a directory is a git repository. */
   async validateGitRepo(dir: string): Promise<boolean> {
     try {
-      await execFileAsync("git", ["rev-parse", "--git-dir"], { cwd: dir });
+      await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd: dir });
       return true;
     } catch {
       return false;
@@ -45,42 +45,34 @@ export class WorktreeManager {
 
     await mkdir(this.basePath, { recursive: true });
 
-    await execFileAsync(
-      "git",
-      ["worktree", "add", "-b", branch, "--", worktreePath, "HEAD"],
-      { cwd: projectDir }
-    );
+    await execFileAsync('git', ['worktree', 'add', '-b', branch, '--', worktreePath, 'HEAD'], {
+      cwd: projectDir,
+    });
 
     // Resolve the git common dir — linked worktrees store refs/metadata
     // in the parent repo's .git directory. Without write access to this
     // path, git operations (commit, branch, etc.) fail from the worktree.
-    const { stdout: commonDirRaw } = await execFileAsync(
-      "git",
-      ["rev-parse", "--git-common-dir"],
-      { cwd: worktreePath }
-    );
+    const { stdout: commonDirRaw } = await execFileAsync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: worktreePath,
+    });
     const resolvedCommonDir = resolve(worktreePath, commonDirRaw.trim());
 
     // Validate that the common dir is under the project directory to avoid
     // granting sandbox write access to unexpected locations (e.g., repos
     // created with --separate-git-dir or a crafted .git file).
-    const expectedPrefix = resolve(projectDir) + "/";
+    const expectedPrefix = resolve(projectDir) + '/';
     let gitCommonDir: string | undefined;
     if (resolvedCommonDir.startsWith(expectedPrefix)) {
       gitCommonDir = resolvedCommonDir;
     } else {
       console.warn(
-        `Git common dir ${resolvedCommonDir} is outside project ${projectDir} — skipping sandbox grant`
+        `Git common dir ${resolvedCommonDir} is outside project ${projectDir} — skipping sandbox grant`,
       );
     }
 
     // Store project dir breadcrumb so orphan cleanup can find the parent repo
     await mkdir(this.metadataPath, { recursive: true });
-    await writeFile(
-      join(this.metadataPath, sessionId),
-      projectDir,
-      "utf-8"
-    );
+    await writeFile(join(this.metadataPath, sessionId), projectDir, 'utf-8');
 
     return { path: worktreePath, branch, projectDir, gitCommonDir };
   }
@@ -88,17 +80,15 @@ export class WorktreeManager {
   /** Remove a worktree and delete its session branch. */
   async remove(info: WorktreeInfo): Promise<void> {
     try {
-      await execFileAsync(
-        "git",
-        ["worktree", "remove", "--force", "--", info.path],
-        { cwd: info.projectDir }
-      );
+      await execFileAsync('git', ['worktree', 'remove', '--force', '--', info.path], {
+        cwd: info.projectDir,
+      });
     } catch (err) {
       console.warn(`Failed to remove worktree ${info.path}:`, err);
     }
 
     try {
-      await execFileAsync("git", ["branch", "-D", "--", info.branch], {
+      await execFileAsync('git', ['branch', '-D', '--', info.branch], {
         cwd: info.projectDir,
       });
     } catch {
@@ -106,7 +96,7 @@ export class WorktreeManager {
     }
 
     // Clean up metadata breadcrumb
-    const sessionId = info.path.split("/").pop();
+    const sessionId = info.path.split('/').pop();
     if (sessionId) {
       await rm(join(this.metadataPath, sessionId), { force: true });
     }
@@ -134,9 +124,7 @@ export class WorktreeManager {
       // Read the project dir from the metadata breadcrumb
       let projectDir: string | null = null;
       try {
-        projectDir = (
-          await readFile(join(this.metadataPath, entry), "utf-8")
-        ).trim();
+        projectDir = (await readFile(join(this.metadataPath, entry), 'utf-8')).trim();
       } catch {
         // No breadcrumb — just rm the directory
       }
@@ -152,7 +140,7 @@ export class WorktreeManager {
       if (projectDir) {
         // Prune stale worktree entries from git
         try {
-          await execFileAsync("git", ["worktree", "prune"], {
+          await execFileAsync('git', ['worktree', 'prune'], {
             cwd: projectDir,
           });
         } catch {
@@ -161,7 +149,7 @@ export class WorktreeManager {
 
         // Delete the orphan branch
         try {
-          await execFileAsync("git", ["branch", "-D", "--", branch], {
+          await execFileAsync('git', ['branch', '-D', '--', branch], {
             cwd: projectDir,
           });
         } catch {

@@ -1,29 +1,29 @@
-import { useState } from 'react'
-import type { AgentType, PolicyTemplateSummary, Repository } from '../../../main/types'
+import { useState } from 'react';
+import type { AgentType, PolicyTemplateSummary, Repository } from '../../../main/types';
 
 interface Props {
-  repo: Repository
-  policies: PolicyTemplateSummary[]
-  onSave: (id: string, changes: Partial<Repository>) => void
-  onClose: () => void
+  repo: Repository;
+  policies: PolicyTemplateSummary[];
+  onSave: (id: string, changes: Partial<Repository>) => void;
+  onClose: () => void;
 }
 
 export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
-  const [name, setName] = useState(repo.name)
-  const [githubRepo, setGithubRepo] = useState(repo.githubRepo ?? '')
-  const [defaultPolicyId, setDefaultPolicyId] = useState(repo.defaultPolicyId)
-  const [defaultAgentType, setDefaultAgentType] = useState<AgentType>(repo.defaultAgentType)
+  const [name, setName] = useState(repo.name);
+  const [githubRepo, setGithubRepo] = useState(repo.githubRepo ?? '');
+  const [defaultPolicyId, setDefaultPolicyId] = useState(repo.defaultPolicyId);
+  const [defaultAgentType, setDefaultAgentType] = useState<AgentType>(repo.defaultAgentType);
 
   function handleSave() {
-    const changes: Partial<Repository> = {}
-    if (name !== repo.name) changes.name = name
-    if ((githubRepo || null) !== repo.githubRepo) changes.githubRepo = githubRepo || null
-    if (defaultPolicyId !== repo.defaultPolicyId) changes.defaultPolicyId = defaultPolicyId
-    if (defaultAgentType !== repo.defaultAgentType) changes.defaultAgentType = defaultAgentType
+    const changes: Partial<Repository> = {};
+    if (name !== repo.name) changes.name = name;
+    if ((githubRepo || null) !== repo.githubRepo) changes.githubRepo = githubRepo || null;
+    if (defaultPolicyId !== repo.defaultPolicyId) changes.defaultPolicyId = defaultPolicyId;
+    if (defaultAgentType !== repo.defaultAgentType) changes.defaultAgentType = defaultAgentType;
     if (Object.keys(changes).length > 0) {
-      onSave(repo.id, changes)
+      onSave(repo.id, changes);
     }
-    onClose()
+    onClose();
   }
 
   return (
@@ -31,16 +31,14 @@ export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
       <div className="repo-settings" onClick={(e) => e.stopPropagation()}>
         <div className="repo-settings-header">
           <span>Repository Settings</span>
-          <button type="button" className="close-btn" onClick={onClose}>×</button>
+          <button type="button" className="close-btn" onClick={onClose}>
+            ×
+          </button>
         </div>
         <div className="repo-settings-body">
           <label className="repo-settings-field">
             <span className="repo-settings-label">Name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="repo-settings-field">
             <span className="repo-settings-label">Local path</span>
@@ -57,12 +55,11 @@ export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
           </label>
           <label className="repo-settings-field">
             <span className="repo-settings-label">Default policy</span>
-            <select
-              value={defaultPolicyId}
-              onChange={(e) => setDefaultPolicyId(e.target.value)}
-            >
+            <select value={defaultPolicyId} onChange={(e) => setDefaultPolicyId(e.target.value)}>
               {policies.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </label>
@@ -78,10 +75,14 @@ export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
           </label>
         </div>
         <div className="repo-settings-footer">
-          <button type="button" className="repo-settings-cancel" onClick={onClose}>Cancel</button>
-          <button type="button" className="repo-settings-save" onClick={handleSave}>Save</button>
+          <button type="button" className="repo-settings-cancel" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="repo-settings-save" onClick={handleSave}>
+            Save
+          </button>
         </div>
       </div>
     </div>
-  )
+  );
 }

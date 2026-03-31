@@ -1,12 +1,12 @@
-import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron'
-import { join } from 'path'
-import { WorkspaceManager } from './workspace-manager.js'
-import { RepositoryStore } from './repository-store.js'
-import { PreferencesStore } from './preferences-store.js'
-import { loadSession } from './dataset-loader.js'
-import { isDockerAvailable, ensureAgentImage } from './container.js'
+import { app, shell, ipcMain, dialog, BrowserWindow, nativeImage } from 'electron';
+import { join } from 'path';
+import { WorkspaceManager } from './workspace-manager.js';
+import { RepositoryStore } from './repository-store.js';
+import { PreferencesStore } from './preferences-store.js';
+import { loadSession } from './dataset-loader.js';
+import { isDockerAvailable, ensureAgentImage } from './container.js';
 
-let mainWindow: BrowserWindow | null = null
+let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -19,218 +19,227 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
-    }
-  })
-  mainWindow = window
+      nodeIntegration: false,
+    },
+  });
+  mainWindow = window;
 
   window.on('ready-to-show', () => {
-    window.show()
-  })
+    window.show();
+  });
 
   // Monitor renderer health
   window.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[main] Renderer process gone:', details.reason, 'exitCode:', details.exitCode)
-  })
+    console.error('[main] Renderer process gone:', details.reason, 'exitCode:', details.exitCode);
+  });
   window.webContents.on('unresponsive', () => {
-    console.error('[main] Renderer became unresponsive')
-  })
+    console.error('[main] Renderer became unresponsive');
+  });
   window.webContents.on('responsive', () => {
-    console.log('[main] Renderer became responsive again')
-  })
+    console.log('[main] Renderer became responsive again');
+  });
 
   window.webContents.setWindowOpenHandler((details) => {
     try {
-      const parsedUrl = new URL(details.url)
+      const parsedUrl = new URL(details.url);
       if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
-        void shell.openExternal(details.url)
+        void shell.openExternal(details.url);
       }
     } catch {
       // Ignore invalid URLs
     }
-    return { action: 'deny' }
-  })
+    return { action: 'deny' };
+  });
 
   // HMR for renderer in dev, load from file in production
-  const isDev = !app.isPackaged
+  const isDev = !app.isPackaged;
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    window.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
-    window.loadFile(join(__dirname, '../renderer/index.html'))
+    window.loadFile(join(__dirname, '../renderer/index.html'));
   }
 }
 
 app.whenReady().then(async () => {
   // Set Dock icon on macOS (works in dev mode too)
   if (process.platform === 'darwin' && app.dock) {
-    const iconPath = join(__dirname, '../../resources/icon.png')
-    app.dock.setIcon(nativeImage.createFromPath(iconPath))
+    const iconPath = join(__dirname, '../../resources/icon.png');
+    app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
 
-  createWindow()
+  createWindow();
 
   // Pre-warm Docker: check availability and build/cache the agent image
   isDockerAvailable().then((available) => {
-    console.log(`[main] Docker available: ${available}`)
+    console.log(`[main] Docker available: ${available}`);
     if (available) {
       ensureAgentImage().catch((err) => {
-        console.warn('[main] Failed to pre-build agent image:', err)
-      })
+        console.warn('[main] Failed to pre-build agent image:', err);
+      });
     }
-  })
+  });
 
   // Load persisted repository list and preferences
-  const repoStore = new RepositoryStore()
-  await repoStore.load()
-  const prefsStore = new PreferencesStore()
-  await prefsStore.load()
+  const repoStore = new RepositoryStore();
+  await repoStore.load();
+  const prefsStore = new PreferencesStore();
+  await prefsStore.load();
 
   // WorkspaceManager forwards events to the renderer via IPC
   // Track IPC throughput to diagnose renderer crashes
-  let ipcCount = 0
-  let ipcLastReport = Date.now()
+  let ipcCount = 0;
+  let ipcLastReport = Date.now();
   const workspaceManager = new WorkspaceManager(repoStore, (channel, data) => {
-    ipcCount++
-    const now = Date.now()
+    ipcCount++;
+    const now = Date.now();
     if (now - ipcLastReport >= 5000) {
-      console.log(`[main] IPC events in last 5s: ${ipcCount} (${(ipcCount / 5).toFixed(0)}/sec)`)
-      ipcCount = 0
-      ipcLastReport = now
+      console.log(`[main] IPC events in last 5s: ${ipcCount} (${(ipcCount / 5).toFixed(0)}/sec)`);
+      ipcCount = 0;
+      ipcLastReport = now;
     }
-    mainWindow?.webContents.send(channel, data)
-  })
+    mainWindow?.webContents.send(channel, data);
+  });
 
   // Clean up orphan worktrees and sandbox policies from previous crashes
   workspaceManager.cleanupOrphans().catch((err) => {
-    console.warn('Failed to clean up orphans:', err)
-  })
+    console.warn('Failed to clean up orphans:', err);
+  });
 
   // Repository IPC handlers
-  ipcMain.handle('repositories:list', () => repoStore.list())
+  ipcMain.handle('repositories:list', () => repoStore.list());
   ipcMain.handle('repositories:add', async (_e, localPath: unknown) => {
     if (typeof localPath !== 'string') {
-      throw new Error('Invalid argument: localPath must be a string')
+      throw new Error('Invalid argument: localPath must be a string');
     }
-    return repoStore.add(localPath)
-  })
+    return repoStore.add(localPath);
+  });
   ipcMain.handle('repositories:update', async (_e, id: unknown, changes: unknown) => {
     if (typeof id !== 'string') {
-      throw new Error('Invalid argument: id must be a string')
+      throw new Error('Invalid argument: id must be a string');
     }
     if (typeof changes !== 'object' || changes === null || Array.isArray(changes)) {
-      throw new Error('Invalid argument: changes must be an object')
+      throw new Error('Invalid argument: changes must be an object');
     }
-    const allowed = ['name', 'localPath', 'githubRepo', 'defaultPolicyId', 'defaultAgentType'] as const
-    const validated: Record<string, unknown> = {}
+    const allowed = [
+      'name',
+      'localPath',
+      'githubRepo',
+      'defaultPolicyId',
+      'defaultAgentType',
+    ] as const;
+    const validated: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in changes) {
-        validated[key] = (changes as Record<string, unknown>)[key]
+        validated[key] = (changes as Record<string, unknown>)[key];
       }
     }
-    return repoStore.update(id, validated)
-  })
+    return repoStore.update(id, validated);
+  });
   ipcMain.handle('repositories:remove', async (_e, id: unknown) => {
     if (typeof id !== 'string') {
-      throw new Error('Invalid argument: id must be a string')
+      throw new Error('Invalid argument: id must be a string');
     }
-    return repoStore.remove(id)
-  })
+    return repoStore.remove(id);
+  });
 
   // Preferences IPC handlers
-  ipcMain.handle('preferences:getFocusedRepoId', () => prefsStore.focusedRepoId)
+  ipcMain.handle('preferences:getFocusedRepoId', () => prefsStore.focusedRepoId);
   ipcMain.handle('preferences:setFocusedRepoId', async (_e, id: unknown) => {
-    if (typeof id !== 'string') throw new Error('Invalid argument: id must be a string')
-    return prefsStore.setFocusedRepoId(id)
-  })
+    if (typeof id !== 'string') throw new Error('Invalid argument: id must be a string');
+    return prefsStore.setFocusedRepoId(id);
+  });
 
   // Workspace IPC handlers
-  ipcMain.handle('workspaces:list', () => workspaceManager.listWorkspaces())
+  ipcMain.handle('workspaces:list', () => workspaceManager.listWorkspaces());
   ipcMain.handle('workspaces:create', (_e, repositoryId: unknown) => {
     if (typeof repositoryId !== 'string') {
-      throw new Error('Invalid argument: repositoryId must be a string')
+      throw new Error('Invalid argument: repositoryId must be a string');
     }
-    return workspaceManager.createWorkspaceFromRepo(repositoryId)
-  })
+    return workspaceManager.createWorkspaceFromRepo(repositoryId);
+  });
 
   ipcMain.handle('policies:list', () => {
-    return workspaceManager.policyRegistry.list()
-  })
+    return workspaceManager.policyRegistry.list();
+  });
   ipcMain.handle('workspaces:getMessages', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
-      throw new Error('Invalid argument: sessionId must be a string')
+      throw new Error('Invalid argument: sessionId must be a string');
     }
-    return workspaceManager.getMessages(sessionId)
-  })
+    return workspaceManager.getMessages(sessionId);
+  });
   ipcMain.handle('workspaces:sendMessage', (_e, sessionId: unknown, text: unknown) => {
     if (typeof sessionId !== 'string' || typeof text !== 'string') {
-      throw new Error('Invalid arguments: sessionId and text must be strings')
+      throw new Error('Invalid arguments: sessionId and text must be strings');
     }
-    return workspaceManager.sendMessage(sessionId, text)
-  })
+    return workspaceManager.sendMessage(sessionId, text);
+  });
   ipcMain.handle('workspaces:close', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
-      throw new Error('Invalid argument: sessionId must be a string')
+      throw new Error('Invalid argument: sessionId must be a string');
     }
-    return workspaceManager.closeWorkspace(sessionId)
-  })
+    return workspaceManager.closeWorkspace(sessionId);
+  });
   ipcMain.handle('workspaces:refreshCredentials', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
-      throw new Error('Invalid argument: sessionId must be a string')
+      throw new Error('Invalid argument: sessionId must be a string');
     }
-    return workspaceManager.refreshCredentials(sessionId)
-  })
+    return workspaceManager.refreshCredentials(sessionId);
+  });
 
   ipcMain.handle('workspaces:getSandboxViolations', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
-      throw new Error('Invalid argument: sessionId must be a string')
+      throw new Error('Invalid argument: sessionId must be a string');
     }
-    return workspaceManager.getSandboxViolations(sessionId)
-  })
+    return workspaceManager.getSandboxViolations(sessionId);
+  });
 
   ipcMain.handle('workspaces:loadReplayData', async (_e, datasetSessionId: unknown) => {
     if (typeof datasetSessionId !== 'string') {
-      throw new Error('Invalid argument: datasetSessionId must be a string')
+      throw new Error('Invalid argument: datasetSessionId must be a string');
     }
-    const toolCalls = await loadSession(join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'), datasetSessionId)
+    const toolCalls = await loadSession(
+      join(app.getAppPath(), 'data', 'tool-use-dataset.jsonl'),
+      datasetSessionId,
+    );
     if (toolCalls.length === 0) {
-      throw new Error(`Session not found in dataset: ${datasetSessionId}`)
+      throw new Error(`Session not found in dataset: ${datasetSessionId}`);
     }
-    return toolCalls
-  })
+    return toolCalls;
+  });
 
   ipcMain.handle('dialog:selectDirectory', async (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-    if (!window) return null
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory'],
-      title: 'Select project directory'
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
-  })
+      title: 'Select project directory',
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
 
   // Clean up all workspaces before quitting
   app.on('before-quit', (event) => {
-    event.preventDefault()
+    event.preventDefault();
     workspaceManager.listWorkspaces().then((workspaces) => {
-      const activeWorkspaces = workspaces.filter((s) => s.status !== 'closed')
+      const activeWorkspaces = workspaces.filter((s) => s.status !== 'closed');
       if (activeWorkspaces.length > 0) {
         workspaceManager.closeAllWorkspaces().finally(() => {
-          app.quit()
-        })
+          app.quit();
+        });
       } else {
-        app.exit()
+        app.exit();
       }
-    })
-  })
+    });
+  });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit()
+    app.quit();
   }
-})
+});

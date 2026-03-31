@@ -77,9 +77,9 @@ export interface GitHubPolicy {
 /** Logged when the gh shim or git hook allows/denies an operation. */
 export interface PolicyEvent {
   timestamp: number;
-  tool: "gh" | "git";
+  tool: 'gh' | 'git';
   operation: string;
-  decision: "allow" | "deny";
+  decision: 'allow' | 'deny';
   reason?: string;
 }
 ```
@@ -108,7 +108,7 @@ Update `SessionUpdate` — add the `policy-event` variant:
 ```typescript
 export type SessionUpdate =
   // ... existing variants ...
-  | { sessionId: string; type: "policy-event"; event: PolicyEvent };
+  { sessionId: string; type: 'policy-event'; event: PolicyEvent };
 ```
 
 **Verify**: `npm run typecheck` passes.
@@ -120,12 +120,12 @@ export type SessionUpdate =
 This module handles GitHub remote detection and policy state file I/O.
 
 ```typescript
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { POLICY_DIR } from "./sandbox.js";
-import type { GitHubPolicy } from "./types.js";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { POLICY_DIR } from './sandbox.js';
+import type { GitHubPolicy } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -134,36 +134,37 @@ const execFileAsync = promisify(execFile);
  * Parses the origin remote URL (HTTPS or SSH format).
  * Returns null if no GitHub remote is found.
  */
-export async function detectGitHubRepo(cwd: string): Promise<string | null>
+export async function detectGitHubRepo(cwd: string): Promise<string | null>;
 
 /**
  * Build a GitHubPolicy for a new session.
  */
-export function buildSessionPolicy(repo: string, branch: string): GitHubPolicy
+export function buildSessionPolicy(repo: string, branch: string): GitHubPolicy;
 
 /**
  * Path to the policy state file for a session.
  */
-export function policyStatePath(sessionId: string): string
+export function policyStatePath(sessionId: string): string;
 
 /**
  * Write the policy state file. Called at session creation and
  * updated by the gh shim after PR creation.
  */
-export async function writePolicyState(sessionId: string, policy: GitHubPolicy): Promise<void>
+export async function writePolicyState(sessionId: string, policy: GitHubPolicy): Promise<void>;
 
 /**
  * Read the policy state file. Called by the gh shim on each invocation.
  */
-export async function readPolicyState(path: string): Promise<GitHubPolicy>
+export async function readPolicyState(path: string): Promise<GitHubPolicy>;
 
 /**
  * Clean up the policy state file for a session.
  */
-export async function cleanupPolicyState(sessionId: string): Promise<void>
+export async function cleanupPolicyState(sessionId: string): Promise<void>;
 ```
 
 Implementation notes:
+
 - `detectGitHubRepo`: run `git -C <cwd> remote get-url origin`, parse the URL. Handle both `https://github.com/owner/repo.git` and `git@github.com:owner/repo.git` formats. Strip trailing `.git`. Return `null` if the remote doesn't match GitHub.
 - `buildSessionPolicy`: returns `{ repo, allowedPushRefs: [branch], ownedPrNumber: null, canCreatePr: true }`.
 - `policyStatePath`: returns `join(POLICY_DIR, \`${sessionId}-github-policy.json\`)`.
@@ -179,8 +180,8 @@ Add the `github` field to `standardPrTemplate`:
 export const standardPrTemplate: PolicyTemplate = {
   // ... existing fields ...
   github: {
-    repo: "",              // Populated per-session
-    allowedPushRefs: [],   // Populated per-session
+    repo: '', // Populated per-session
+    allowedPushRefs: [], // Populated per-session
     ownedPrNumber: null,
     canCreatePr: true,
   },
@@ -196,6 +197,7 @@ The other two templates (`research-only`, `permissive`) remain unchanged — no 
 **New file**: `scripts/test-github-policy.ts`
 
 A standalone test script (consistent with the project's existing `scripts/test-*.ts` pattern) that:
+
 1. Calls `detectGitHubRepo` on the Bouncer repo itself (should return `dherman/bouncer` or similar)
 2. Tests URL parsing for HTTPS, SSH, and non-GitHub remotes
 3. Tests `buildSessionPolicy` output
@@ -250,26 +252,23 @@ export interface ParsedGhCommand {
  * Parse gh CLI arguments into a structured command.
  * Only extracts policy-relevant information; all other flags pass through.
  */
-export function parseGhArgs(args: string[]): ParsedGhCommand
+export function parseGhArgs(args: string[]): ParsedGhCommand;
 
 // --- Policy Evaluation ---
 
 export type PolicyDecision =
-  | { action: "allow" }
-  | { action: "allow-and-capture-pr" }
-  | { action: "deny"; reason: string };
+  | { action: 'allow' }
+  | { action: 'allow-and-capture-pr' }
+  | { action: 'deny'; reason: string };
 
 /**
  * Evaluate a parsed gh command against the session policy.
  */
-export function evaluatePolicy(
-  parsed: ParsedGhCommand,
-  policy: GitHubPolicy,
-): PolicyDecision
+export function evaluatePolicy(parsed: ParsedGhCommand, policy: GitHubPolicy): PolicyDecision;
 
 // --- Main (standalone entry point) ---
 
-async function main(): Promise<void>
+async function main(): Promise<void>;
 ```
 
 ### Step 2.2: Implement the subcommand parser
@@ -286,6 +285,7 @@ The parser processes `argv` (everything after the shim's own invocation, i.e., w
 6. For `api` command: extract `--method` / `-X` flag value; detect `-f` / `-F` / `--field` / `--raw-field` presence (implies POST)
 
 Edge cases to handle:
+
 - `gh pr view` (no positional args — operates on current branch's PR)
 - `gh pr view 42` (PR number as positional arg)
 - `gh pr create --title "foo" --body "bar"` (flags interspersed)
@@ -301,27 +301,24 @@ Edge cases to handle:
 Implements the [subcommand policy table](design.md#subcommand-policy-table) from the design doc. The function is a series of match clauses:
 
 ```typescript
-export function evaluatePolicy(
-  parsed: ParsedGhCommand,
-  policy: GitHubPolicy,
-): PolicyDecision {
+export function evaluatePolicy(parsed: ParsedGhCommand, policy: GitHubPolicy): PolicyDecision {
   const { command, subcommand, positionalArgs } = parsed;
 
   // Global help/version — always allow
-  if (command === "--help" || command === "--version") {
-    return { action: "allow" };
+  if (command === '--help' || command === '--version') {
+    return { action: 'allow' };
   }
 
   switch (command) {
-    case "pr":
+    case 'pr':
       return evaluatePrPolicy(subcommand, positionalArgs, parsed.flags, policy);
-    case "issue":
+    case 'issue':
       return evaluateIssuePolicy(subcommand);
-    case "api":
+    case 'api':
       return evaluateApiPolicy(positionalArgs, parsed.flags, policy);
     // ... other commands ...
     default:
-      return { action: "deny", reason: `command '${command}' is not allowed` };
+      return { action: 'deny', reason: `command '${command}' is not allowed` };
   }
 }
 ```
@@ -352,6 +349,7 @@ interface ApiEndpointMatch {
 ```
 
 The endpoint parser handles:
+
 - Absolute paths: `/repos/owner/repo/pulls/42`
 - Placeholder paths: `/repos/{owner}/{repo}/pulls` (gh expands `{owner}` and `{repo}`)
 - The `graphql` shorthand
@@ -388,6 +386,7 @@ PR number capture from `gh pr create` output: `gh pr create` prints a URL like `
 The shim needs to run as a standalone Node.js script outside the Electron context. Since the project uses electron-vite (Vite/Rollup), add a small build step.
 
 **Option A**: Use `tsx` at runtime (simpler, already a dev dependency):
+
 - The shim wrapper script is a shell script:
   ```bash
   #!/bin/bash
@@ -396,6 +395,7 @@ The shim needs to run as a standalone Node.js script outside the Electron contex
 - Pro: no build step. Con: slower startup (~100ms for tsx), and tsx must be accessible in the sandbox.
 
 **Option B**: Bundle with esbuild (add as dev dependency):
+
 - `npm install -D esbuild`
 - Add `scripts/build-gh-shim.ts` that calls esbuild to produce `out/gh-shim.js`
 - The wrapper script: `#!/bin/bash\nexec node /path/to/out/gh-shim.js "$@"`
@@ -420,6 +420,7 @@ The Session Manager replaces `__NODE__` and `__GH_SHIM_TS__` with actual paths a
 Test the exported functions (`parseGhArgs`, `evaluatePolicy`) directly — no subprocess needed.
 
 **Parser tests:**
+
 - `["pr", "create", "--title", "foo"]` → `{ command: "pr", subcommand: "create", ... }`
 - `["pr", "view", "42"]` → positionalArgs includes `"42"`
 - `["pr", "edit", "--title", "new", "42"]` → positional `"42"` extracted despite flags
@@ -430,6 +431,7 @@ Test the exported functions (`parseGhArgs`, `evaluatePolicy`) directly — no su
 - `["pr", "--help"]` → `command === "pr"`, subcommand === "--help"` (pass through to real gh)
 
 **Policy evaluation tests** — for each row in the subcommand policy table, one test case:
+
 - `pr create` with `canCreatePr: true` → `allow-and-capture-pr`
 - `pr create` with `canCreatePr: false` → `deny`
 - `pr edit 42` with `ownedPrNumber: 42` → `allow`
@@ -462,18 +464,18 @@ Add to `package.json` scripts: `"test:gh-shim": "tsx scripts/test-gh-shim.ts"`.
 **New file**: `src/main/hooks.ts`
 
 ```typescript
-import { mkdir, writeFile, chmod, rm } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
-import { POLICY_DIR } from "./sandbox.js";
+import { mkdir, writeFile, chmod, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { join } from 'node:path';
+import { POLICY_DIR } from './sandbox.js';
 
 const execFileAsync = promisify(execFile);
 
 /**
  * Path to the hooks directory for a session.
  */
-export function hooksDir(sessionId: string): string
+export function hooksDir(sessionId: string): string;
 
 /**
  * Install the pre-push hook for a session.
@@ -484,18 +486,16 @@ export async function installHooks(
   sessionId: string,
   worktreePath: string,
   policyFilePath: string,
-): Promise<void>
+): Promise<void>;
 
 /**
  * Remove the hooks directory and unset core.hooksPath.
  */
-export async function cleanupHooks(
-  sessionId: string,
-  worktreePath: string,
-): Promise<void>
+export async function cleanupHooks(sessionId: string, worktreePath: string): Promise<void>;
 ```
 
 Implementation notes:
+
 - `hooksDir`: returns `join(POLICY_DIR, \`${sessionId}-hooks\`)`.
 - `installHooks`:
   1. `mkdir` the hooks directory
@@ -574,7 +574,7 @@ if (template?.github && worktree) {
     await writePolicyState(id, githubPolicy);
     await installHooks(id, workingDir, policyStatePath(id));
   } else {
-    console.warn("No GitHub remote detected — skipping application-layer policy");
+    console.warn('No GitHub remote detected — skipping application-layer policy');
   }
 }
 session.githubPolicy = githubPolicy;
@@ -595,7 +595,7 @@ if (githubPolicy) {
     BOUNCER_REAL_GH: realGhPath,
   };
   // Prepend shim bin dir to PATH
-  shimEnv.PATH = `${shimBinDir}:${process.env.PATH ?? ""}`;
+  shimEnv.PATH = `${shimBinDir}:${process.env.PATH ?? ''}`;
 }
 ```
 
@@ -608,7 +608,7 @@ Update the `spawn` call to merge `shimEnv`:
 
 ```typescript
 const agentProcess = spawn(cmd, args, {
-  stdio: ["pipe", "pipe", "pipe"],
+  stdio: ['pipe', 'pipe', 'pipe'],
   env: { ...process.env, ...env, ...shimEnv },
   cwd,
 });
@@ -634,15 +634,15 @@ Add cleanup before the existing worktree removal:
 // Clean up application-layer policy artifacts
 if (session.githubPolicy && session.worktree) {
   await cleanupHooks(sessionId, session.worktree.path).catch((err) =>
-    console.warn(`Failed to clean up hooks for session ${sessionId}:`, err)
+    console.warn(`Failed to clean up hooks for session ${sessionId}:`, err),
   );
 }
 if (session.githubPolicy) {
   await cleanupPolicyState(sessionId).catch((err) =>
-    console.warn(`Failed to clean up policy state for session ${sessionId}:`, err)
+    console.warn(`Failed to clean up policy state for session ${sessionId}:`, err),
   );
   await cleanupGhShim(sessionId).catch((err) =>
-    console.warn(`Failed to clean up gh shim for session ${sessionId}:`, err)
+    console.warn(`Failed to clean up gh shim for session ${sessionId}:`, err),
   );
 }
 ```
@@ -709,7 +709,7 @@ Add to `package.json` scripts: `"test:app-layer-policy": "tsx scripts/test-app-l
 **New file**: `src/main/policy-event-parser.ts`
 
 ```typescript
-import type { PolicyEvent } from "./types.js";
+import type { PolicyEvent } from './types.js';
 
 /**
  * Attempt to parse a stderr line as a Bouncer policy event.
@@ -721,7 +721,7 @@ import type { PolicyEvent } from "./types.js";
  *   [bouncer:git] DENY push to refs/heads/main — reason text
  *   [bouncer:git] ALLOW push to refs/heads/bouncer/abc123
  */
-export function parsePolicyEvent(line: string): PolicyEvent | null
+export function parsePolicyEvent(line: string): PolicyEvent | null;
 ```
 
 ### Step 5.2: Integrate into stderr capture
@@ -729,8 +729,9 @@ export function parsePolicyEvent(line: string): PolicyEvent | null
 **File**: `src/main/session-manager.ts` — the stderr `data` handler (line ~271).
 
 Currently:
+
 ```typescript
-agentProcess.stderr?.on("data", (data: Buffer) => {
+agentProcess.stderr?.on('data', (data: Buffer) => {
   collectedStderr += data.toString();
   process.stderr.write(data);
 });
@@ -739,22 +740,22 @@ agentProcess.stderr?.on("data", (data: Buffer) => {
 Add line-by-line parsing:
 
 ```typescript
-let stderrBuffer = "";
-agentProcess.stderr?.on("data", (data: Buffer) => {
+let stderrBuffer = '';
+agentProcess.stderr?.on('data', (data: Buffer) => {
   const chunk = data.toString();
   collectedStderr += chunk;
   process.stderr.write(data);
 
   // Parse policy events from complete lines
   stderrBuffer += chunk;
-  const lines = stderrBuffer.split("\n");
-  stderrBuffer = lines.pop() ?? ""; // Keep incomplete last line in buffer
+  const lines = stderrBuffer.split('\n');
+  stderrBuffer = lines.pop() ?? ''; // Keep incomplete last line in buffer
   for (const line of lines) {
     const event = parsePolicyEvent(line);
     if (event) {
-      this.emit("session-update", {
+      this.emit('session-update', {
         sessionId: id,
-        type: "policy-event",
+        type: 'policy-event',
         event,
       });
     }
@@ -772,8 +773,8 @@ After evaluating the policy, write to stderr:
 function logDecision(parsed: ParsedGhCommand, decision: PolicyDecision): void {
   const op = [parsed.command, parsed.subcommand, ...parsed.positionalArgs]
     .filter(Boolean)
-    .join(" ");
-  if (decision.action === "deny") {
+    .join(' ');
+  if (decision.action === 'deny') {
     process.stderr.write(`[bouncer:gh] DENY ${op} — ${decision.reason}\n`);
   } else {
     process.stderr.write(`[bouncer:gh] ALLOW ${op}\n`);
@@ -819,8 +820,9 @@ Add parser tests to `scripts/test-gh-shim.ts` (or a new `scripts/test-policy-eve
 Add state for policy events (alongside the existing `violationsBySession`):
 
 ```typescript
-const [policyEventsBySession, setPolicyEventsBySession] =
-  useState<Map<string, PolicyEvent[]>>(new Map());
+const [policyEventsBySession, setPolicyEventsBySession] = useState<Map<string, PolicyEvent[]>>(
+  new Map(),
+);
 ```
 
 Add a case in `handleUpdate`:
@@ -853,6 +855,7 @@ interface Props {
 ```
 
 Merge and sort both lists by timestamp. Render with visual differentiation:
+
 - Policy allow events: green check mark or similar
 - Policy deny events: red X
 - Sandbox violations: existing shield icon
@@ -868,6 +871,7 @@ If `session.githubRepo` is set, show it under the session entry (e.g., "dherman/
 ### Step 6.4: Visual verification
 
 Run the Electron app (`npm run dev`), create a `standard-pr` session against a repo with a GitHub remote, and verify:
+
 - The session shows the GitHub repo name
 - Policy events appear when the agent runs `gh` commands
 - Denied operations show a clear reason
@@ -907,6 +911,7 @@ Create a disposable test repo on GitHub (e.g., `dherman/bouncer-sandbox-test`) w
 ### Step 7.4: Document findings
 
 Write results and any issues discovered to `docs/milestones/application-layer-policies/findings.md` (following the pattern from earlier milestones if one exists). Note:
+
 - Any `gh` subcommands the agent tried that weren't in the policy table
 - Any false denials (legitimate operations incorrectly blocked)
 - UX quality of the error messages — did the agent understand and adapt?
@@ -918,39 +923,39 @@ Write results and any issues discovered to `docs/milestones/application-layer-po
 
 ### New Files
 
-| File | Purpose |
-|---|---|
-| `src/main/github-policy.ts` | GitHubPolicy logic, remote detection, state file I/O |
-| `src/main/gh-shim.ts` | `gh` shim: parser, policy engine, entry point |
-| `src/main/gh-shim-wrapper.sh` | Shell wrapper template for the shim |
-| `src/main/hooks.ts` | Git hook installation and cleanup |
-| `src/main/policy-event-parser.ts` | Stderr log line → PolicyEvent parser |
-| `scripts/test-github-policy.ts` | Tests for remote detection, policy state I/O |
-| `scripts/test-gh-shim.ts` | Tests for parser, policy evaluation, API matching |
-| `scripts/test-hooks.ts` | Tests for hook installation and ref enforcement |
-| `scripts/test-app-layer-policy.ts` | Integration test for full session lifecycle |
+| File                               | Purpose                                              |
+| ---------------------------------- | ---------------------------------------------------- |
+| `src/main/github-policy.ts`        | GitHubPolicy logic, remote detection, state file I/O |
+| `src/main/gh-shim.ts`              | `gh` shim: parser, policy engine, entry point        |
+| `src/main/gh-shim-wrapper.sh`      | Shell wrapper template for the shim                  |
+| `src/main/hooks.ts`                | Git hook installation and cleanup                    |
+| `src/main/policy-event-parser.ts`  | Stderr log line → PolicyEvent parser                 |
+| `scripts/test-github-policy.ts`    | Tests for remote detection, policy state I/O         |
+| `scripts/test-gh-shim.ts`          | Tests for parser, policy evaluation, API matching    |
+| `scripts/test-hooks.ts`            | Tests for hook installation and ref enforcement      |
+| `scripts/test-app-layer-policy.ts` | Integration test for full session lifecycle          |
 
 ### Modified Files
 
-| File | Changes |
-|---|---|
-| `src/main/types.ts` | Add `GitHubPolicy`, `PolicyEvent`, update `PolicyTemplate`, `SessionSummary`, `SessionUpdate` |
-| `src/main/policy-templates.ts` | Add `github` field to `standard-pr` template |
-| `src/main/session-manager.ts` | GitHub policy setup in `createSession`, cleanup in `closeSession`, stderr parsing, `SessionState` extension, `summarize` update |
-| `src/main/index.ts` | No changes expected (IPC passes through generically) |
-| `src/renderer/src/App.tsx` | Handle `policy-event` updates, pass to `SandboxLog` |
-| `src/renderer/src/components/SandboxLog.tsx` | Accept and display policy events alongside violations |
-| `src/renderer/src/components/SessionList.tsx` | Show GitHub repo and PR number |
-| `package.json` | New test scripts |
+| File                                          | Changes                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main/types.ts`                           | Add `GitHubPolicy`, `PolicyEvent`, update `PolicyTemplate`, `SessionSummary`, `SessionUpdate`                                   |
+| `src/main/policy-templates.ts`                | Add `github` field to `standard-pr` template                                                                                    |
+| `src/main/session-manager.ts`                 | GitHub policy setup in `createSession`, cleanup in `closeSession`, stderr parsing, `SessionState` extension, `summarize` update |
+| `src/main/index.ts`                           | No changes expected (IPC passes through generically)                                                                            |
+| `src/renderer/src/App.tsx`                    | Handle `policy-event` updates, pass to `SandboxLog`                                                                             |
+| `src/renderer/src/components/SandboxLog.tsx`  | Accept and display policy events alongside violations                                                                           |
+| `src/renderer/src/components/SessionList.tsx` | Show GitHub repo and PR number                                                                                                  |
+| `package.json`                                | New test scripts                                                                                                                |
 
 ### Not Modified
 
-| File | Reason |
-|---|---|
-| `src/main/sandbox.ts` | Safehouse integration unchanged |
-| `src/main/policy-sandbox.ts` | `policyToSandboxConfig` unchanged (GitHub policy is orthogonal to Seatbelt config) |
-| `src/main/policy-registry.ts` | Registry logic unchanged (templates still registered the same way) |
-| `src/main/worktree-manager.ts` | Worktree creation unchanged |
-| `src/main/sandbox-monitor.ts` | Seatbelt monitoring unchanged |
-| `src/agents/replay-agent.ts` | Replay agent unchanged (doesn't interact with gh/git in ways that need policy) |
-| `src/preload/index.ts` | Generic IPC bridge, no changes needed |
+| File                           | Reason                                                                             |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `src/main/sandbox.ts`          | Safehouse integration unchanged                                                    |
+| `src/main/policy-sandbox.ts`   | `policyToSandboxConfig` unchanged (GitHub policy is orthogonal to Seatbelt config) |
+| `src/main/policy-registry.ts`  | Registry logic unchanged (templates still registered the same way)                 |
+| `src/main/worktree-manager.ts` | Worktree creation unchanged                                                        |
+| `src/main/sandbox-monitor.ts`  | Seatbelt monitoring unchanged                                                      |
+| `src/agents/replay-agent.ts`   | Replay agent unchanged (doesn't interact with gh/git in ways that need policy)     |
+| `src/preload/index.ts`         | Generic IPC bridge, no changes needed                                              |
