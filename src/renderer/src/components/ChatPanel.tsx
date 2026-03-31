@@ -2,7 +2,14 @@ import { type RefObject, useEffect, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Message, MessagePart, PolicyEvent, SandboxViolationInfo, WorkspaceSummary, ToolCallInfo } from '../../../main/types'
+import type {
+  Message,
+  MessagePart,
+  PolicyEvent,
+  SandboxViolationInfo,
+  WorkspaceSummary,
+  ToolCallInfo,
+} from '../../../main/types'
 import { MessageInput } from './MessageInput'
 import thinkingVideo from '../assets/thinking.webm'
 
@@ -25,7 +32,6 @@ interface Props {
   onRefreshCredentials: () => void
 }
 
-
 function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -34,9 +40,11 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
   const hasOutput = !!toolCall.output
   const hasDetail = (isBash && command) || hasOutput
   const dotClass =
-    toolCall.status === 'completed' ? 'step-dot tool-dot-success' :
-    toolCall.status === 'failed' ? 'step-dot tool-dot-fail' :
-    'step-dot tool-dot-progress'
+    toolCall.status === 'completed'
+      ? 'step-dot tool-dot-success'
+      : toolCall.status === 'failed'
+        ? 'step-dot tool-dot-fail'
+        : 'step-dot tool-dot-progress'
 
   return (
     <div className="message agent tool-step">
@@ -73,9 +81,7 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
 }
 
 /** Groups consecutive tool parts from the parts array, preserving text parts as-is. */
-type PartGroup =
-  | { type: 'text'; part: MessagePart & { type: 'text' } }
-  | { type: 'tools'; toolCallIds: string[] }
+type PartGroup = { type: 'text'; part: MessagePart & { type: 'text' } } | { type: 'tools'; toolCallIds: string[] }
 
 function groupParts(parts: MessagePart[]): PartGroup[] {
   const groups: PartGroup[] = []
@@ -94,7 +100,11 @@ function groupParts(parts: MessagePart[]): PartGroup[] {
   return groups
 }
 
-function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
+function ToolRunGroup({
+  toolCallIds,
+  toolCalls,
+  isStreaming,
+}: {
   toolCallIds: string[]
   toolCalls: ToolCallInfo[]
   isStreaming: boolean
@@ -127,7 +137,9 @@ function ToolRunGroup({ toolCallIds, toolCalls, isStreaming }: {
             </span>
           </button>
         )}
-        {resolved.map((tc) => <ToolCallStep key={tc.id} toolCall={tc} />)}
+        {resolved.map((tc) => (
+          <ToolCallStep key={tc.id} toolCall={tc} />
+        ))}
       </>
     )
   }
@@ -163,7 +175,8 @@ export function ChatPanel({
 
   const isStreaming = messages.some((m) => m.streaming)
   const hasPendingMessage = sessionStatus === 'initializing' && messages.some((m) => m.role === 'user')
-  const inputDisabled = isStreaming || hasPendingMessage || (sessionStatus !== 'ready' && sessionStatus !== 'initializing')
+  const inputDisabled =
+    isStreaming || hasPendingMessage || (sessionStatus !== 'ready' && sessionStatus !== 'initializing')
 
   // Throttle scrolling to at most once per 100ms
   useEffect(() => {
@@ -185,7 +198,9 @@ export function ChatPanel({
             return (
               <div key={msg.id} className="message user">
                 <div className="user-bubble">
-                  <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>
+                  <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>
+                    {displayText}
+                  </Markdown>
                 </div>
               </div>
             )
@@ -229,7 +244,13 @@ export function ChatPanel({
                   return (
                     <div key={`text-${group.part.index}`} className="message agent agent-text">
                       <div className={`step-content${isActiveSegment ? ' streaming' : ''}`}>
-                        <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} disallowedElements={['img']}>{displayText}</Markdown>
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          components={markdownComponents}
+                          disallowedElements={['img']}
+                        >
+                          {displayText}
+                        </Markdown>
                       </div>
                     </div>
                   )
@@ -255,7 +276,9 @@ export function ChatPanel({
         {sessionStatus === 'error' && sessionErrorKind === 'auth' && (
           <div className="workspace-state-banner auth-error">
             Authentication expired. Run <code>claude auth login</code> in your terminal, then:
-            <button type="button" onClick={onRefreshCredentials}>Retry</button>
+            <button type="button" onClick={onRefreshCredentials}>
+              Retry
+            </button>
           </div>
         )}
         {sessionStatus === 'error' && sessionErrorKind !== 'auth' && (
@@ -264,11 +287,7 @@ export function ChatPanel({
             <button onClick={onCloseSession}>Close workspace</button>
           </div>
         )}
-        {sessionStatus === 'closed' && (
-          <div className="workspace-state-banner closed">
-            Workspace closed
-          </div>
-        )}
+        {sessionStatus === 'closed' && <div className="workspace-state-banner closed">Workspace closed</div>}
         <div ref={bottomRef} />
       </div>
       <MessageInput
@@ -279,10 +298,13 @@ export function ChatPanel({
         violations={violations}
         policyEvents={policyEvents}
         placeholder={
-          sessionStatus === 'error' ? 'Workspace disconnected' :
-          sessionStatus === 'closed' ? 'Workspace closed' :
-          sessionStatus === 'initializing' && hasPendingMessage ? 'Starting workspace...' :
-          undefined
+          sessionStatus === 'error'
+            ? 'Workspace disconnected'
+            : sessionStatus === 'closed'
+              ? 'Workspace closed'
+              : sessionStatus === 'initializing' && hasPendingMessage
+                ? 'Starting workspace...'
+                : undefined
         }
       />
     </div>

@@ -6,14 +6,14 @@
  * gh shim reads at invocation time.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { chmod, mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { POLICY_DIR } from "./sandbox.js";
-import type { GitHubPolicy } from "./types.js";
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { chmod, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { POLICY_DIR } from './sandbox.js'
+import type { GitHubPolicy } from './types.js'
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = promisify(execFile)
 
 /**
  * Detect the GitHub "owner/repo" from the git remote in a directory.
@@ -22,10 +22,10 @@ const execFileAsync = promisify(execFile);
  */
 export async function detectGitHubRepo(cwd: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", cwd, "remote", "get-url", "origin"]);
-    return parseGitHubRemoteUrl(stdout.trim());
+    const { stdout } = await execFileAsync('git', ['-C', cwd, 'remote', 'get-url', 'origin'])
+    return parseGitHubRemoteUrl(stdout.trim())
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -40,18 +40,18 @@ export async function detectGitHubRepo(cwd: string): Promise<string | null> {
  */
 export function parseGitHubRemoteUrl(url: string): string | null {
   // HTTPS: https://github.com/owner/repo[.git]
-  const httpsMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
-  if (httpsMatch) return httpsMatch[1];
+  const httpsMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/)
+  if (httpsMatch) return httpsMatch[1]
 
   // SSH shorthand: git@github.com:owner/repo[.git]
-  const sshMatch = url.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/);
-  if (sshMatch) return sshMatch[1];
+  const sshMatch = url.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/)
+  if (sshMatch) return sshMatch[1]
 
   // SSH URL: ssh://git@github.com/owner/repo[.git]
-  const sshUrlMatch = url.match(/^ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
-  if (sshUrlMatch) return sshUrlMatch[1];
+  const sshUrlMatch = url.match(/^ssh:\/\/git@github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/)
+  if (sshUrlMatch) return sshUrlMatch[1]
 
-  return null;
+  return null
 }
 
 /**
@@ -63,14 +63,14 @@ export function buildSessionPolicy(repo: string, branch: string): GitHubPolicy {
     allowedPushRefs: [branch],
     ownedPrNumber: null,
     canCreatePr: true,
-  };
+  }
 }
 
 /**
  * Path to the policy state file for a session.
  */
 export function policyStatePath(sessionId: string): string {
-  return join(POLICY_DIR, `${sessionId}-github-policy.json`);
+  return join(POLICY_DIR, `${sessionId}-github-policy.json`)
 }
 
 /**
@@ -78,16 +78,16 @@ export function policyStatePath(sessionId: string): string {
  * updated by the gh shim after PR creation.
  */
 export async function writePolicyState(sessionId: string, policy: GitHubPolicy): Promise<void> {
-  await mkdir(POLICY_DIR, { recursive: true });
-  await writeFile(policyStatePath(sessionId), JSON.stringify(policy, null, 2), "utf-8");
+  await mkdir(POLICY_DIR, { recursive: true })
+  await writeFile(policyStatePath(sessionId), JSON.stringify(policy, null, 2), 'utf-8')
 }
 
 /**
  * Read the policy state file. Called by the gh shim on each invocation.
  */
 export async function readPolicyState(path: string): Promise<GitHubPolicy> {
-  const content = await readFile(path, "utf-8");
-  return JSON.parse(content) as GitHubPolicy;
+  const content = await readFile(path, 'utf-8')
+  return JSON.parse(content) as GitHubPolicy
 }
 
 /**
@@ -95,7 +95,7 @@ export async function readPolicyState(path: string): Promise<GitHubPolicy> {
  */
 export async function cleanupPolicyState(sessionId: string): Promise<void> {
   try {
-    await rm(policyStatePath(sessionId));
+    await rm(policyStatePath(sessionId))
   } catch {
     // File may not exist — that's fine
   }
@@ -107,7 +107,7 @@ export async function cleanupPolicyState(sessionId: string): Promise<void> {
  * Path to the shim bin directory for a session.
  */
 export function shimBinDir(sessionId: string): string {
-  return join(POLICY_DIR, `bin-${sessionId}`);
+  return join(POLICY_DIR, `bin-${sessionId}`)
 }
 
 /**
@@ -118,73 +118,71 @@ export function shimBinDir(sessionId: string): string {
 /**
  * Path to the cached bundled shim JS. Built once per app launch.
  */
-let cachedBundlePath: string | null = null;
+let cachedBundlePath: string | null = null
 
 /**
  * Bundle gh-shim.ts into a standalone JS file using esbuild.
  * Cached so it's only built once per app launch.
  */
 async function buildShimBundle(ghShimTsPath: string): Promise<string> {
-  if (cachedBundlePath) return cachedBundlePath;
+  if (cachedBundlePath) return cachedBundlePath
 
-  const outPath = join(POLICY_DIR, "gh-shim-bundle.js");
-  await mkdir(POLICY_DIR, { recursive: true });
-  await execFileAsync("npx", ["esbuild", ghShimTsPath,
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    "--packages=external",
+  const outPath = join(POLICY_DIR, 'gh-shim-bundle.js')
+  await mkdir(POLICY_DIR, { recursive: true })
+  await execFileAsync('npx', [
+    'esbuild',
+    ghShimTsPath,
+    '--bundle',
+    '--platform=node',
+    '--format=esm',
+    '--packages=external',
     `--outfile=${outPath}`,
-  ]);
-  cachedBundlePath = outPath;
-  return outPath;
+  ])
+  cachedBundlePath = outPath
+  return outPath
 }
 
-export async function installGhShim(
-  sessionId: string,
-  ghShimTsPath: string,
-  nodePath: string,
-): Promise<string> {
-  const dir = shimBinDir(sessionId);
-  await mkdir(dir, { recursive: true });
+export async function installGhShim(sessionId: string, ghShimTsPath: string, nodePath: string): Promise<string> {
+  const dir = shimBinDir(sessionId)
+  await mkdir(dir, { recursive: true })
 
   // Bundle the shim to a standalone JS file (no tsx/cwd dependencies)
-  const bundlePath = await buildShimBundle(ghShimTsPath);
+  const bundlePath = await buildShimBundle(ghShimTsPath)
 
   const shimScript = `#!/bin/bash
 # Bouncer gh shim — policy-aware wrapper for the GitHub CLI.
 # Generated by Bouncer session manager — do not edit.
 exec "${nodePath}" "${bundlePath}" "$@"
-`;
+`
 
-  const shimPath = join(dir, "gh");
-  await writeFile(shimPath, shimScript, "utf-8");
-  await chmod(shimPath, 0o755);
-  return dir;
+  const shimPath = join(dir, 'gh')
+  await writeFile(shimPath, shimScript, 'utf-8')
+  await chmod(shimPath, 0o755)
+  return dir
 }
 
 /**
  * Clean up the gh shim bin directory for a session.
  */
 export async function cleanupGhShim(sessionId: string): Promise<void> {
-  await rm(shimBinDir(sessionId), { recursive: true, force: true });
+  await rm(shimBinDir(sessionId), { recursive: true, force: true })
 }
 
 /**
  * Find the real gh binary. Caches the result.
  * Returns null if gh is not installed.
  */
-let cachedRealGh: string | null | undefined = undefined;
+let cachedRealGh: string | null | undefined = undefined
 export async function findRealGh(): Promise<string | null> {
-  if (cachedRealGh !== undefined) return cachedRealGh;
+  if (cachedRealGh !== undefined) return cachedRealGh
   try {
-    const { stdout } = await execFileAsync("which", ["gh"]);
-    const path = stdout.trim();
-    cachedRealGh = path || null;
+    const { stdout } = await execFileAsync('which', ['gh'])
+    const path = stdout.trim()
+    cachedRealGh = path || null
   } catch {
-    cachedRealGh = null;
+    cachedRealGh = null
   }
-  return cachedRealGh;
+  return cachedRealGh
 }
 
 // --- Orphan cleanup ---
@@ -194,32 +192,32 @@ export async function findRealGh(): Promise<string | null> {
  * shim bin dirs, allowed-refs files) left behind by crashed sessions.
  */
 export async function cleanupOrphanGitHubArtifacts(activeIds: Set<string>): Promise<void> {
-  let entries: string[];
+  let entries: string[]
   try {
-    entries = await readdir(POLICY_DIR);
+    entries = await readdir(POLICY_DIR)
   } catch {
-    return; // Directory may not exist
+    return // Directory may not exist
   }
 
   for (const entry of entries) {
     // Match patterns: {sessionId}-github-policy.json, {sessionId}-hooks, bin-{sessionId}, {sessionId}-allowed-refs.txt
-    let sessionId: string | null = null;
+    let sessionId: string | null = null
 
-    const policyMatch = entry.match(/^(.+)-github-policy\.json$/);
-    if (policyMatch) sessionId = policyMatch[1];
+    const policyMatch = entry.match(/^(.+)-github-policy\.json$/)
+    if (policyMatch) sessionId = policyMatch[1]
 
-    const hooksMatch = entry.match(/^(.+)-hooks$/);
-    if (hooksMatch) sessionId = hooksMatch[1];
+    const hooksMatch = entry.match(/^(.+)-hooks$/)
+    if (hooksMatch) sessionId = hooksMatch[1]
 
-    const binMatch = entry.match(/^bin-(.+)$/);
-    if (binMatch) sessionId = binMatch[1];
+    const binMatch = entry.match(/^bin-(.+)$/)
+    if (binMatch) sessionId = binMatch[1]
 
-    const refsMatch = entry.match(/^(.+)-allowed-refs\.txt$/);
-    if (refsMatch) sessionId = refsMatch[1];
+    const refsMatch = entry.match(/^(.+)-allowed-refs\.txt$/)
+    if (refsMatch) sessionId = refsMatch[1]
 
     if (sessionId && !activeIds.has(sessionId)) {
       try {
-        await rm(join(POLICY_DIR, entry), { recursive: true, force: true });
+        await rm(join(POLICY_DIR, entry), { recursive: true, force: true })
       } catch {
         // Best effort
       }

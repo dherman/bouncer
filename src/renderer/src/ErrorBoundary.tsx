@@ -25,18 +25,18 @@ export class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.error) {
       return (
-        <div style={{
-          padding: 40,
-          color: '#d9534f',
-          backgroundColor: '#1a1a1a',
-          fontFamily: 'monospace',
-          height: '100vh',
-          overflow: 'auto',
-        }}>
+        <div
+          style={{
+            padding: 40,
+            color: '#d9534f',
+            backgroundColor: '#1a1a1a',
+            fontFamily: 'monospace',
+            height: '100vh',
+            overflow: 'auto',
+          }}
+        >
           <h2>Renderer Error</h2>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {this.state.error.message}
-          </pre>
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.error.message}</pre>
           <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#888', fontSize: 12 }}>
             {this.state.error.stack}
           </pre>

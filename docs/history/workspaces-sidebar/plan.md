@@ -75,51 +75,52 @@ This is the largest phase by file count but the simplest conceptually. It's a me
 
 ### Rename map
 
-| Old | New |
-|---|---|
-| `SessionSummary` | `WorkspaceSummary` |
-| `SessionState` | `WorkspaceState` |
-| `SessionManager` | `WorkspaceManager` |
-| `SessionUpdate` | `WorkspaceUpdate` |
-| `SessionSummary['status']` | `WorkspaceSummary['status']` |
-| `activeSessionId` | `activeWorkspaceId` |
-| `messagesBySession` | `messagesByWorkspace` |
-| `violationsBySession` | `violationsByWorkspace` |
-| `policyEventsBySession` | `policyEventsByWorkspace` |
-| `streamingTextRef` | (unchanged — not session-specific in name) |
-| `session-update` (IPC channel) | `workspace-update` |
-| `sessions:list` | `workspaces:list` |
-| `sessions:create` | `workspaces:create` |
-| `sessions:sendMessage` | `workspaces:sendMessage` |
-| `sessions:close` | `workspaces:close` |
-| `sessions:getSandboxViolations` | `workspaces:getSandboxViolations` |
-| `sessions:loadReplayData` | `workspaces:loadReplayData` |
-| `window.glitterball` | `window.bouncer` |
-| `SessionList` component | `WorkspacesSidebar` component |
-| `NewSessionDialog` component | (kept for now, renamed in Phase 6) |
-| `.session-list` CSS | `.workspaces-sidebar` |
-| `.session-item` CSS | `.workspace-item` |
-| `.new-session-btn` CSS | `.new-workspace-btn` |
+| Old                             | New                                        |
+| ------------------------------- | ------------------------------------------ |
+| `SessionSummary`                | `WorkspaceSummary`                         |
+| `SessionState`                  | `WorkspaceState`                           |
+| `SessionManager`                | `WorkspaceManager`                         |
+| `SessionUpdate`                 | `WorkspaceUpdate`                          |
+| `SessionSummary['status']`      | `WorkspaceSummary['status']`               |
+| `activeSessionId`               | `activeWorkspaceId`                        |
+| `messagesBySession`             | `messagesByWorkspace`                      |
+| `violationsBySession`           | `violationsByWorkspace`                    |
+| `policyEventsBySession`         | `policyEventsByWorkspace`                  |
+| `streamingTextRef`              | (unchanged — not session-specific in name) |
+| `session-update` (IPC channel)  | `workspace-update`                         |
+| `sessions:list`                 | `workspaces:list`                          |
+| `sessions:create`               | `workspaces:create`                        |
+| `sessions:sendMessage`          | `workspaces:sendMessage`                   |
+| `sessions:close`                | `workspaces:close`                         |
+| `sessions:getSandboxViolations` | `workspaces:getSandboxViolations`          |
+| `sessions:loadReplayData`       | `workspaces:loadReplayData`                |
+| `window.glitterball`            | `window.bouncer`                           |
+| `SessionList` component         | `WorkspacesSidebar` component              |
+| `NewSessionDialog` component    | (kept for now, renamed in Phase 6)         |
+| `.session-list` CSS             | `.workspaces-sidebar`                      |
+| `.session-item` CSS             | `.workspace-item`                          |
+| `.new-session-btn` CSS          | `.new-workspace-btn`                       |
 
 ### Files changed
 
-| File | Change |
-|---|---|
-| `src/main/types.ts` | Rename types |
-| `src/main/session-manager.ts` → `src/main/workspace-manager.ts` | Rename file + class + methods |
-| `src/main/index.ts` | Update imports and references |
-| `src/preload/index.ts` | Rename API surface (`glitterball` → `bouncer`, `sessions` → `workspaces`) |
-| `src/preload/index.d.ts` | Update type declarations |
-| `src/renderer/src/App.tsx` | Rename state vars, IPC references, component usage |
-| `src/renderer/src/components/SessionList.tsx` → `WorkspacesSidebar.tsx` | Rename file + component |
-| `src/renderer/src/components/ChatPanel.tsx` | Update prop types if referencing session types |
-| `src/renderer/src/components/MessageInput.tsx` | Update prop types if referencing session types |
-| `src/renderer/src/components/NewSessionDialog.tsx` | Update imports (keep component for now) |
-| `src/renderer/src/index.css` | Rename CSS classes |
+| File                                                                    | Change                                                                    |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/main/types.ts`                                                     | Rename types                                                              |
+| `src/main/session-manager.ts` → `src/main/workspace-manager.ts`         | Rename file + class + methods                                             |
+| `src/main/index.ts`                                                     | Update imports and references                                             |
+| `src/preload/index.ts`                                                  | Rename API surface (`glitterball` → `bouncer`, `sessions` → `workspaces`) |
+| `src/preload/index.d.ts`                                                | Update type declarations                                                  |
+| `src/renderer/src/App.tsx`                                              | Rename state vars, IPC references, component usage                        |
+| `src/renderer/src/components/SessionList.tsx` → `WorkspacesSidebar.tsx` | Rename file + component                                                   |
+| `src/renderer/src/components/ChatPanel.tsx`                             | Update prop types if referencing session types                            |
+| `src/renderer/src/components/MessageInput.tsx`                          | Update prop types if referencing session types                            |
+| `src/renderer/src/components/NewSessionDialog.tsx`                      | Update imports (keep component for now)                                   |
+| `src/renderer/src/index.css`                                            | Rename CSS classes                                                        |
 
 ### Approach
 
 Use TypeScript's compiler as a safety net:
+
 1. Rename the types first (in `types.ts`) — this breaks all consumers
 2. Fix each consumer file — TypeScript errors guide the work
 3. Rename IPC channels (string literals — must grep for these)
@@ -127,6 +128,7 @@ Use TypeScript's compiler as a safety net:
 5. Build, verify no errors, run the app
 
 ### Exit criteria
+
 - `npm run build` succeeds with zero errors
 - App runs and behaves identically to before
 - No remaining references to "session" in code (except `acpSessionId` in ACP protocol layer, which is external terminology)
@@ -141,13 +143,13 @@ Use TypeScript's compiler as a safety net:
 
 ```typescript
 export interface Repository {
-  id: string;
-  name: string;
-  localPath: string;
-  githubRepo: string | null;
-  defaultPolicyId: string;
-  defaultAgentType: AgentType;
-  createdAt: number;
+  id: string
+  name: string
+  localPath: string
+  githubRepo: string | null
+  defaultPolicyId: string
+  defaultAgentType: AgentType
+  createdAt: number
 }
 ```
 
@@ -155,25 +157,26 @@ export interface Repository {
 
 ```typescript
 export class RepositoryStore {
-  private repos: Repository[] = [];
-  private configPath: string;
+  private repos: Repository[] = []
+  private configPath: string
 
   constructor(configDir?: string) {
     // Default: ~/.config/bouncer
-    this.configPath = path.join(configDir ?? path.join(os.homedir(), '.config', 'bouncer'), 'repositories.json');
+    this.configPath = path.join(configDir ?? path.join(os.homedir(), '.config', 'bouncer'), 'repositories.json')
   }
 
-  async load(): Promise<void>;
-  async save(): Promise<void>;
-  list(): Repository[];
-  get(id: string): Repository | null;
-  async add(localPath: string): Promise<Repository>;
-  async update(id: string, changes: Partial<Omit<Repository, 'id' | 'createdAt'>>): Promise<void>;
-  async remove(id: string): Promise<void>;
+  async load(): Promise<void>
+  async save(): Promise<void>
+  list(): Repository[]
+  get(id: string): Repository | null
+  async add(localPath: string): Promise<Repository>
+  async update(id: string, changes: Partial<Omit<Repository, 'id' | 'createdAt'>>): Promise<void>
+  async remove(id: string): Promise<void>
 }
 ```
 
 **`add(localPath)`** implementation:
+
 1. Validate: `git -C {localPath} rev-parse --git-dir` (must be a git repo)
 2. Auto-detect name: `path.basename(localPath)`
 3. Auto-detect GitHub repo: `git -C {localPath} remote get-url origin` → parse `github.com:owner/repo` or `github.com/owner/repo`
@@ -181,11 +184,13 @@ export class RepositoryStore {
 5. Generate UUID, create `Repository`, append to list, save
 
 **`save()`** implementation:
+
 - `fs.mkdir(path.dirname(configPath), { recursive: true })` (ensure dir exists)
 - `fs.writeFile(configPath, JSON.stringify(repos, null, 2))`
 - Atomic write (write to temp file, rename) for crash safety
 
 **`load()`** implementation:
+
 - If file doesn't exist → empty list (first run)
 - Parse JSON, validate shape, populate `repos`
 
@@ -204,6 +209,7 @@ const workspaceManager = new WorkspaceManager(repoStore, ...);
 - Manual: add a repo, restart app, verify repo is still there
 
 ### Exit criteria
+
 - Repos persist across app restarts
 - Auto-detection correctly identifies repo name and GitHub URL
 - Invalid paths (not git repos) are rejected with a clear error
@@ -217,11 +223,12 @@ const workspaceManager = new WorkspaceManager(repoStore, ...);
 ### Changes to `src/main/index.ts`
 
 Add IPC handlers:
+
 ```typescript
-ipcMain.handle('repositories:list', () => repoStore.list());
-ipcMain.handle('repositories:add', (_, localPath: string) => repoStore.add(localPath));
-ipcMain.handle('repositories:update', (_, id: string, changes) => repoStore.update(id, changes));
-ipcMain.handle('repositories:remove', (_, id: string) => repoStore.remove(id));
+ipcMain.handle('repositories:list', () => repoStore.list())
+ipcMain.handle('repositories:add', (_, localPath: string) => repoStore.add(localPath))
+ipcMain.handle('repositories:update', (_, id: string, changes) => repoStore.update(id, changes))
+ipcMain.handle('repositories:remove', (_, id: string) => repoStore.remove(id))
 ```
 
 ### Changes to preload
@@ -241,6 +248,7 @@ bouncer: {
 ```
 
 ### Exit criteria
+
 - Renderer can call `window.bouncer.repositories.list()` and get back the persisted repo list
 - Add/update/remove from renderer persists to disk
 
@@ -253,13 +261,15 @@ bouncer: {
 ### Changes to `src/main/types.ts`
 
 Add to `WorkspaceSummary`:
+
 ```typescript
-repositoryId: string;
+repositoryId: string
 ```
 
 ### Changes to `src/main/workspace-manager.ts`
 
 New public method:
+
 ```typescript
 async createWorkspace(repositoryId: string): Promise<WorkspaceSummary> {
   const repo = this.repoStore.get(repositoryId);
@@ -284,6 +294,7 @@ workspaces: {
 ```
 
 ### Exit criteria
+
 - `workspaces.create(repoId)` creates a workspace using the repo's defaults
 - `WorkspaceSummary.repositoryId` is populated
 
@@ -334,26 +345,29 @@ function RepoGroup({ repo, workspaces, ... }) {
 ### Changes to `App.tsx`
 
 New state:
+
 ```typescript
-const [repos, setRepos] = useState<Repository[]>([]);
+const [repos, setRepos] = useState<Repository[]>([])
 ```
 
 On mount:
+
 ```typescript
-window.bouncer.repositories.list().then(setRepos);
+window.bouncer.repositories.list().then(setRepos)
 ```
 
 New handlers:
+
 ```typescript
 async function handleAddRepo() {
-  const dir = await window.bouncer.dialog.selectDirectory();
-  if (!dir) return;
-  const repo = await window.bouncer.repositories.add(dir);
-  setRepos(prev => [...prev, repo]);
+  const dir = await window.bouncer.dialog.selectDirectory()
+  if (!dir) return
+  const repo = await window.bouncer.repositories.add(dir)
+  setRepos((prev) => [...prev, repo])
 }
 
 async function handleCreateWorkspace(repositoryId: string) {
-  const ws = await window.bouncer.workspaces.create(repositoryId);
+  const ws = await window.bouncer.workspaces.create(repositoryId)
   // ... same as current session creation handling
 }
 ```
@@ -361,6 +375,7 @@ async function handleCreateWorkspace(repositoryId: string) {
 ### CSS changes
 
 New classes for the hierarchy layout:
+
 - `.sidebar-header` — fixed top bar with title and add button
 - `.repo-group` — container for a repo and its workspaces
 - `.repo-row` — the repository entry (flex: triangle, name, + button)
@@ -368,6 +383,7 @@ New classes for the hierarchy layout:
 - `.repo-row .create-btn` — the [+] button on repo rows
 
 ### Exit criteria
+
 - Sidebar shows repos with workspaces grouped underneath
 - [+ Repo] opens directory browser and adds repo
 - [+] on repo creates workspace with defaults
@@ -380,15 +396,18 @@ New classes for the hierarchy layout:
 **Goal**: Clean up the now-unused session creation dialog.
 
 ### Files removed
+
 - `src/renderer/src/components/NewSessionDialog.tsx`
 
 ### Changes
+
 - `App.tsx`: remove `showNewSession` state, dialog rendering, `handleCreateSession` handler
 - `index.ts`: optionally remove `dialog:selectDirectory` IPC if not used elsewhere (still needed for [+ Repo])
 
 Actually, `dialog.selectDirectory` is still needed for the [+ Repo] flow. Keep it.
 
 ### Exit criteria
+
 - No modal dialog anywhere in the app
 - Clean build, no dead imports
 
@@ -403,6 +422,7 @@ Actually, `dialog.selectDirectory` is still needed for the [+ Repo] flow. Keep i
 A small inline panel or popover that opens when the user right-clicks a repo and selects "Settings".
 
 Contents:
+
 - **Name**: text input (saves on blur/enter)
 - **Local path**: read-only, monospace text
 - **GitHub repo**: text input (auto-detected, editable)
@@ -412,16 +432,19 @@ Contents:
 ### Context menu
 
 Add a right-click context menu to repo rows:
+
 - "Settings" → opens settings panel
 - "Remove" → confirmation dialog if active workspaces exist, then `repositories.remove(id)`
 
 Electron context menus can be done via:
+
 - `onContextMenu` event → IPC to main → `Menu.buildFromTemplate().popup()`
 - Or: pure renderer-side context menu component
 
 Recommend renderer-side for simplicity — no IPC round-trip, easier to style consistently.
 
 ### Exit criteria
+
 - Right-click on repo shows context menu
 - Settings panel lets user change name, GitHub repo, default policy, default agent type
 - Changes persist and affect subsequent workspace creation
@@ -454,6 +477,7 @@ Recommend renderer-side for simplicity — no IPC round-trip, easier to style co
 - [ ] Collapse/expand: disclosure triangles work, auto-expand on workspace creation
 
 ### Exit criteria
+
 - All validation checklist items pass
 - Roadmap updated with M8
 
@@ -489,28 +513,28 @@ All phases are sequential — each builds on the previous. Phase 6 can happen an
 
 ## Risk Checkpoints
 
-| After Phase | Check |
-|---|---|
-| Phase 1 | App builds and runs identically (pure refactor) |
-| Phase 2 | Repos persist to disk and survive restart |
-| Phase 3 | Renderer can CRUD repos via IPC |
-| Phase 4 | Workspace creation via repo ID works end-to-end |
-| Phase 5 | Sidebar shows grouped hierarchy, quick-create works |
-| Phase 6 | Dialog removed, no dead code |
-| Phase 7 | Settings changes affect new workspace creation |
-| Phase 8 | Full PR workflow, edge cases handled |
+| After Phase | Check                                               |
+| ----------- | --------------------------------------------------- |
+| Phase 1     | App builds and runs identically (pure refactor)     |
+| Phase 2     | Repos persist to disk and survive restart           |
+| Phase 3     | Renderer can CRUD repos via IPC                     |
+| Phase 4     | Workspace creation via repo ID works end-to-end     |
+| Phase 5     | Sidebar shows grouped hierarchy, quick-create works |
+| Phase 6     | Dialog removed, no dead code                        |
+| Phase 7     | Settings changes affect new workspace creation      |
+| Phase 8     | Full PR workflow, edge cases handled                |
 
 ---
 
 ## Estimated Scope
 
-| Phase | Files changed | Complexity |
-|---|---|---|
-| Phase 1 (rename) | ~15 files | Low (mechanical) |
-| Phase 2 (repo store) | 3 new/modified | Low |
-| Phase 3 (IPC) | 3 modified | Low |
-| Phase 4 (link) | 4 modified | Low |
-| Phase 5 (sidebar UI) | 3 modified | Medium (main UI work) |
-| Phase 6 (remove dialog) | 2 modified, 1 deleted | Low |
-| Phase 7 (repo settings) | 2 new/modified | Medium |
-| Phase 8 (polish) | 3 modified | Low |
+| Phase                   | Files changed         | Complexity            |
+| ----------------------- | --------------------- | --------------------- |
+| Phase 1 (rename)        | ~15 files             | Low (mechanical)      |
+| Phase 2 (repo store)    | 3 new/modified        | Low                   |
+| Phase 3 (IPC)           | 3 modified            | Low                   |
+| Phase 4 (link)          | 4 modified            | Low                   |
+| Phase 5 (sidebar UI)    | 3 modified            | Medium (main UI work) |
+| Phase 6 (remove dialog) | 2 modified, 1 deleted | Low                   |
+| Phase 7 (repo settings) | 2 new/modified        | Medium                |
+| Phase 8 (polish)        | 3 modified            | Low                   |

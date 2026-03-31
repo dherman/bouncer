@@ -116,14 +116,11 @@ Build the echo agent as a standalone Node script before touching any Electron co
 This script will be run as a child process — it reads JSON-RPC from stdin and writes to stdout.
 
 ```typescript
-import * as acp from "@agentclientprotocol/sdk";
-import { Writable, Readable } from "node:stream";
+import * as acp from '@agentclientprotocol/sdk'
+import { Writable, Readable } from 'node:stream'
 
 // Create the ndJson stream over stdio
-const stream = acp.ndJsonStream(
-  Writable.toWeb(process.stdout),
-  Readable.toWeb(process.stdin)
-);
+const stream = acp.ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin))
 
 // Create the agent-side connection
 new acp.AgentSideConnection(
@@ -131,58 +128,58 @@ new acp.AgentSideConnection(
     async initialize(params) {
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
-        agentInfo: { name: "glitterball-echo-agent", version: "0.1.0" },
+        agentInfo: { name: 'glitterball-echo-agent', version: '0.1.0' },
         agentCapabilities: { streaming: true },
-      };
+      }
     },
 
     async newSession(params) {
       return {
         sessionId: crypto.randomUUID(),
-      };
+      }
     },
 
     async prompt(params) {
       // Extract text from the prompt content blocks
       const userText = params.prompt
-        .filter((block): block is acp.TextContent => block.type === "text")
+        .filter((block): block is acp.TextContent => block.type === 'text')
         .map((block) => block.text)
-        .join("");
+        .join('')
 
-      const reply = `Echo: ${userText}`;
+      const reply = `Echo: ${userText}`
 
       // Stream in small chunks to exercise the streaming path
-      const chunkSize = 10;
+      const chunkSize = 10
       for (let i = 0; i < reply.length; i += chunkSize) {
-        const chunk = reply.slice(i, i + chunkSize);
+        const chunk = reply.slice(i, i + chunkSize)
         await connection.sessionUpdate({
           sessionId: params.sessionId,
-          update: { type: "agent_message_chunk", text: chunk },
-        });
-        await new Promise((r) => setTimeout(r, 50));
+          update: { type: 'agent_message_chunk', text: chunk },
+        })
+        await new Promise((r) => setTimeout(r, 50))
       }
 
-      return { stopReason: "end_turn" };
+      return { stopReason: 'end_turn' }
     },
 
     // Stubs for required interface methods
     async loadSession(params) {
-      throw new Error("Not implemented");
+      throw new Error('Not implemented')
     },
     async authenticate(params) {
-      return {};
+      return {}
     },
     async setSessionMode(params) {
-      return {};
+      return {}
     },
     async cancel(params) {
-      return {};
+      return {}
     },
   }),
-  stream
-);
+  stream,
+)
 
-process.stderr.write("Echo agent started\n");
+process.stderr.write('Echo agent started\n')
 ```
 
 > **Important:** The exact API may differ from the above. The `Agent` interface returned from the `AgentSideConnection` callback may have additional required methods, or the types may be slightly different. Adapt based on what TypeScript reports. The critical discovery questions are:
@@ -200,12 +197,14 @@ process.stderr.write("Echo agent started\n");
 Options:
 
 **Option A (recommended for dev): Run directly with tsx**
+
 ```bash
 npx tsx electron/agents/echo-agent.ts
 ```
 
 **Option B: Build with esbuild**
 Add to `package.json`:
+
 ```json
 {
   "scripts": {
@@ -233,61 +232,75 @@ If the agent doesn't handle single-shot stdin well (it likely expects a long-liv
 
 ```typescript
 // scripts/test-echo-agent.ts
-import { spawn } from "node:child_process";
-import * as acp from "@agentclientprotocol/sdk";
-import { Writable, Readable } from "node:stream";
+import { spawn } from 'node:child_process'
+import * as acp from '@agentclientprotocol/sdk'
+import { Writable, Readable } from 'node:stream'
 
-const agent = spawn("npx", ["tsx", "electron/agents/echo-agent.ts"], {
-  stdio: ["pipe", "pipe", "inherit"],
-});
+const agent = spawn('npx', ['tsx', 'electron/agents/echo-agent.ts'], {
+  stdio: ['pipe', 'pipe', 'inherit'],
+})
 
-const stream = acp.ndJsonStream(
-  Writable.toWeb(agent.stdin),
-  Readable.toWeb(agent.stdout)
-);
+const stream = acp.ndJsonStream(Writable.toWeb(agent.stdin), Readable.toWeb(agent.stdout))
 
 const connection = new acp.ClientSideConnection(
   (agentInterface) => ({
     async sessionUpdate(params) {
-      console.log("Stream update:", JSON.stringify(params.update));
+      console.log('Stream update:', JSON.stringify(params.update))
     },
     // Stub other Client methods...
-    async readTextFile(params) { throw new Error("Not implemented"); },
-    async writeTextFile(params) { throw new Error("Not implemented"); },
-    async requestPermission(params) { throw new Error("Not implemented"); },
-    async createTerminal(params) { throw new Error("Not implemented"); },
-    async terminalOutput(params) { throw new Error("Not implemented"); },
-    async killTerminal(params) { throw new Error("Not implemented"); },
-    async waitForTerminalExit(params) { throw new Error("Not implemented"); },
-    async releaseTerminal(params) { throw new Error("Not implemented"); },
+    async readTextFile(params) {
+      throw new Error('Not implemented')
+    },
+    async writeTextFile(params) {
+      throw new Error('Not implemented')
+    },
+    async requestPermission(params) {
+      throw new Error('Not implemented')
+    },
+    async createTerminal(params) {
+      throw new Error('Not implemented')
+    },
+    async terminalOutput(params) {
+      throw new Error('Not implemented')
+    },
+    async killTerminal(params) {
+      throw new Error('Not implemented')
+    },
+    async waitForTerminalExit(params) {
+      throw new Error('Not implemented')
+    },
+    async releaseTerminal(params) {
+      throw new Error('Not implemented')
+    },
   }),
-  stream
-);
+  stream,
+)
 
 // Drive the protocol
 const initResp = await connection.initialize({
   protocolVersion: acp.PROTOCOL_VERSION,
-  clientInfo: { name: "test-harness", version: "0.1.0" },
+  clientInfo: { name: 'test-harness', version: '0.1.0' },
   clientCapabilities: {},
-});
-console.log("Initialized:", initResp);
+})
+console.log('Initialized:', initResp)
 
 const sessionResp = await connection.newSession({
   cwd: process.cwd(),
   mcpServers: [],
-});
-console.log("Session:", sessionResp.sessionId);
+})
+console.log('Session:', sessionResp.sessionId)
 
 const promptResp = await connection.prompt({
   sessionId: sessionResp.sessionId,
-  prompt: [{ type: "text", text: "Hello world" }],
-});
-console.log("Prompt done:", promptResp);
+  prompt: [{ type: 'text', text: 'Hello world' }],
+})
+console.log('Prompt done:', promptResp)
 
-agent.kill();
+agent.kill()
 ```
 
 Run with:
+
 ```bash
 npx tsx scripts/test-echo-agent.ts
 ```
@@ -313,24 +326,24 @@ npx tsx scripts/test-echo-agent.ts
 
 ```typescript
 export interface Message {
-  id: string;
-  role: "user" | "agent";
-  text: string;
-  timestamp: number;
-  streaming?: boolean; // true while agent is still sending chunks
+  id: string
+  role: 'user' | 'agent'
+  text: string
+  timestamp: number
+  streaming?: boolean // true while agent is still sending chunks
 }
 
 export interface SessionSummary {
-  id: string;
-  status: "initializing" | "ready" | "error" | "closed";
-  messageCount: number;
+  id: string
+  status: 'initializing' | 'ready' | 'error' | 'closed'
+  messageCount: number
 }
 
 export type SessionUpdate =
-  | { sessionId: string; type: "status-change"; status: SessionSummary["status"] }
-  | { sessionId: string; type: "message"; message: Message }
-  | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { sessionId: string; type: "stream-end"; messageId: string };
+  | { sessionId: string; type: 'status-change'; status: SessionSummary['status'] }
+  | { sessionId: string; type: 'message'; message: Message }
+  | { sessionId: string; type: 'stream-chunk'; messageId: string; text: string }
+  | { sessionId: string; type: 'stream-end'; messageId: string }
 ```
 
 ### 3.2 Implement `SessionManager.createSession()`
@@ -343,21 +356,22 @@ export type SessionUpdate =
 - [x] Listen for `exit`/`error` on child process → mark session `error`
 
 ```typescript
-import { spawn, ChildProcess } from "node:child_process";
-import { Writable, Readable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import { spawn, ChildProcess } from 'node:child_process'
+import { Writable, Readable } from 'node:stream'
+import * as acp from '@agentclientprotocol/sdk'
 
 interface SessionState {
-  id: string;
-  acpSessionId: string;  // the session ID returned by the agent
-  agentProcess: ChildProcess;
-  connection: acp.ClientSideConnection;
-  messages: Message[];
-  status: "initializing" | "ready" | "error" | "closed";
+  id: string
+  acpSessionId: string // the session ID returned by the agent
+  agentProcess: ChildProcess
+  connection: acp.ClientSideConnection
+  messages: Message[]
+  status: 'initializing' | 'ready' | 'error' | 'closed'
 }
 ```
 
 **`createSession()` flow:**
+
 1. Generate a local session ID (`crypto.randomUUID()`)
 2. Spawn the echo agent: `spawn("npx", ["tsx", "electron/agents/echo-agent.ts"], { stdio: ["pipe", "pipe", "inherit"] })`
    - In production builds, spawn `node dist-electron/agents/echo-agent.js` instead
@@ -378,6 +392,7 @@ interface SessionState {
 - [x] On prompt completion, finalize agent message and emit `stream-end`
 
 **`sendMessage()` flow:**
+
 1. Look up session, verify status is `ready`
 2. Create a user `Message`, push to `messages[]`, emit IPC event
 3. Create an agent `Message` (empty, `streaming: true`), push to `messages[]`, emit IPC event
@@ -414,23 +429,21 @@ class SessionManager {
 - [x] Update `src/preload/index.ts` with `contextBridge.exposeInMainWorld`
 
 ```typescript
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer } from 'electron'
 
-contextBridge.exposeInMainWorld("glitterball", {
+contextBridge.exposeInMainWorld('glitterball', {
   sessions: {
-    list: () => ipcRenderer.invoke("sessions:list"),
-    create: () => ipcRenderer.invoke("sessions:create"),
-    sendMessage: (sessionId: string, text: string) =>
-      ipcRenderer.invoke("sessions:sendMessage", sessionId, text),
-    closeSession: (sessionId: string) =>
-      ipcRenderer.invoke("sessions:close", sessionId),
+    list: () => ipcRenderer.invoke('sessions:list'),
+    create: () => ipcRenderer.invoke('sessions:create'),
+    sendMessage: (sessionId: string, text: string) => ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
+    closeSession: (sessionId: string) => ipcRenderer.invoke('sessions:close', sessionId),
     onUpdate: (callback: (update: any) => void) => {
-      const handler = (_event: any, update: any) => callback(update);
-      ipcRenderer.on("session-update", handler);
-      return () => ipcRenderer.removeListener("session-update", handler);
+      const handler = (_event: any, update: any) => callback(update)
+      ipcRenderer.on('session-update', handler)
+      return () => ipcRenderer.removeListener('session-update', handler)
     },
   },
-});
+})
 ```
 
 ### 4.2 Type declarations for renderer
@@ -440,16 +453,16 @@ contextBridge.exposeInMainWorld("glitterball", {
 ```typescript
 interface GlitterballAPI {
   sessions: {
-    list(): Promise<import("../electron/main/types").SessionSummary[]>;
-    create(): Promise<import("../electron/main/types").SessionSummary>;
-    sendMessage(sessionId: string, text: string): Promise<void>;
-    closeSession(sessionId: string): Promise<void>;
-    onUpdate(callback: (update: import("../electron/main/types").SessionUpdate) => void): () => void;
-  };
+    list(): Promise<import('../electron/main/types').SessionSummary[]>
+    create(): Promise<import('../electron/main/types').SessionSummary>
+    sendMessage(sessionId: string, text: string): Promise<void>
+    closeSession(sessionId: string): Promise<void>
+    onUpdate(callback: (update: import('../electron/main/types').SessionUpdate) => void): () => void
+  }
 }
 
 interface Window {
-  glitterball: GlitterballAPI;
+  glitterball: GlitterballAPI
 }
 ```
 
@@ -458,20 +471,16 @@ interface Window {
 - [x] Register `ipcMain.handle` handlers that delegate to `SessionManager`
 
 ```typescript
-import { ipcMain } from "electron";
+import { ipcMain } from 'electron'
 
 const sessionManager = new SessionManager((channel, data) => {
-  mainWindow.webContents.send(channel, data);
-});
+  mainWindow.webContents.send(channel, data)
+})
 
-ipcMain.handle("sessions:list", () => sessionManager.listSessions());
-ipcMain.handle("sessions:create", () => sessionManager.createSession());
-ipcMain.handle("sessions:sendMessage", (_e, sessionId, text) =>
-  sessionManager.sendMessage(sessionId, text)
-);
-ipcMain.handle("sessions:close", (_e, sessionId) =>
-  sessionManager.closeSession(sessionId)
-);
+ipcMain.handle('sessions:list', () => sessionManager.listSessions())
+ipcMain.handle('sessions:create', () => sessionManager.createSession())
+ipcMain.handle('sessions:sendMessage', (_e, sessionId, text) => sessionManager.sendMessage(sessionId, text))
+ipcMain.handle('sessions:close', (_e, sessionId) => sessionManager.closeSession(sessionId))
 ```
 
 ### 4.4 Verify from renderer
@@ -514,10 +523,10 @@ ipcMain.handle("sessions:close", (_e, sessionId) =>
 
 ```typescript
 interface Props {
-  sessions: SessionSummary[];
-  activeSessionId: string | null;
-  onSelect: (id: string) => void;
-  onCreate: () => void;
+  sessions: SessionSummary[]
+  activeSessionId: string | null
+  onSelect: (id: string) => void
+  onCreate: () => void
 }
 ```
 
@@ -530,10 +539,10 @@ interface Props {
 
 ```typescript
 interface Props {
-  messages: Message[];
-  streamingText: Map<string, string>;
-  onSendMessage: (text: string) => void;
-  disabled: boolean;
+  messages: Message[]
+  streamingText: Map<string, string>
+  onSendMessage: (text: string) => void
+  disabled: boolean
 }
 ```
 
@@ -547,8 +556,8 @@ interface Props {
 
 ```typescript
 interface Props {
-  onSend: (text: string) => void;
-  disabled: boolean;
+  onSend: (text: string) => void
+  disabled: boolean
 }
 ```
 
@@ -559,20 +568,20 @@ interface Props {
 ```typescript
 function handleUpdate(update: SessionUpdate) {
   switch (update.type) {
-    case "status-change":
+    case 'status-change':
       // Update session status in sessions[]
-      break;
-    case "message":
+      break
+    case 'message':
       // Append to messagesBySession
-      break;
-    case "stream-chunk":
+      break
+    case 'stream-chunk':
       // Append text to streamingText[messageId]
       // This triggers re-render of the streaming message
-      break;
-    case "stream-end":
+      break
+    case 'stream-end':
       // Finalize the message text, remove from streamingText
       // Mark the Message as streaming: false
-      break;
+      break
   }
 }
 ```
@@ -642,13 +651,13 @@ Run through this manually before considering M0 complete:
 
 ## Sequencing Summary
 
-| Phase | Description | Depends On | Key Risk |
-|------|-------------|------------|----------|
-| 1 | Project scaffolding | — | electron-vite conflicts with existing files |
-| 2 | Echo agent | Phase 1 (for deps) | ACP SDK API surface unknowns |
-| 3 | Session manager | Phase 2 | Stdio transport in Electron main process |
-| 4 | IPC bridge | Phase 3 | contextBridge typing ceremony |
-| 5 | React UI | Phase 4 | Streaming state management |
-| 6 | Edge cases | Phase 5 | Agent lifecycle edge cases |
+| Phase | Description         | Depends On         | Key Risk                                    |
+| ----- | ------------------- | ------------------ | ------------------------------------------- |
+| 1     | Project scaffolding | —                  | electron-vite conflicts with existing files |
+| 2     | Echo agent          | Phase 1 (for deps) | ACP SDK API surface unknowns                |
+| 3     | Session manager     | Phase 2            | Stdio transport in Electron main process    |
+| 4     | IPC bridge          | Phase 3            | contextBridge typing ceremony               |
+| 5     | React UI            | Phase 4            | Streaming state management                  |
+| 6     | Edge cases          | Phase 5            | Agent lifecycle edge cases                  |
 
 The **highest-risk phase is 2** (echo agent) because it's our first real contact with the ACP SDK. Everything after that builds incrementally on known foundations. If Phase 2 reveals that the SDK works differently than documented, update the design doc before proceeding.

@@ -59,36 +59,36 @@ Add the following types to the existing types file:
 // --- Policy Template Types ---
 
 export interface PolicyTemplate {
-  id: string;
-  name: string;
-  description: string;
-  filesystem: FilesystemPolicy;
-  network: NetworkPolicy;
-  env: EnvPolicy;
-  safehouseIntegrations: string[];
-  appendProfile?: string;
+  id: string
+  name: string
+  description: string
+  filesystem: FilesystemPolicy
+  network: NetworkPolicy
+  env: EnvPolicy
+  safehouseIntegrations: string[]
+  appendProfile?: string
 }
 
 export interface FilesystemPolicy {
-  worktreeAccess: "read-write" | "read-only";
-  additionalWritableDirs: string[];
-  additionalReadOnlyDirs: string[];
+  worktreeAccess: 'read-write' | 'read-only'
+  additionalWritableDirs: string[]
+  additionalReadOnlyDirs: string[]
 }
 
 export interface NetworkPolicy {
-  access: "full" | "none" | "filtered";
-  allowedDomains?: string[];
+  access: 'full' | 'none' | 'filtered'
+  allowedDomains?: string[]
 }
 
 export interface EnvPolicy {
-  additional: string[];
-  exclude: string[];
+  additional: string[]
+  exclude: string[]
 }
 
 export interface PolicyTemplateSummary {
-  id: string;
-  name: string;
-  description: string;
+  id: string
+  name: string
+  description: string
 }
 ```
 
@@ -96,14 +96,14 @@ Also update `SessionSummary` to include policy info:
 
 ```typescript
 export interface SessionSummary {
-  id: string;
-  status: "initializing" | "ready" | "error" | "closed";
-  messageCount: number;
-  agentType: AgentType;
-  projectDir: string;
-  sandboxed: boolean;
-  policyId: string | null;     // NEW
-  policyName: string | null;   // NEW
+  id: string
+  status: 'initializing' | 'ready' | 'error' | 'closed'
+  messageCount: number
+  agentType: AgentType
+  projectDir: string
+  sandboxed: boolean
+  policyId: string | null // NEW
+  policyName: string | null // NEW
 }
 ```
 
@@ -113,53 +113,53 @@ Define the three built-in templates as exported constants. Separating template d
 
 ```typescript
 // src/main/policy-templates.ts
-import type { PolicyTemplate } from "./types.js";
+import type { PolicyTemplate } from './types.js'
 
 /**
  * Standard PR implementation: read-write worktree, no network.
  * The tightest practical boundary for offline coding tasks.
  */
 export const standardPrTemplate: PolicyTemplate = {
-  id: "standard-pr",
-  name: "Standard PR",
-  description: "Read-write worktree, standard toolchains, no network",
+  id: 'standard-pr',
+  name: 'Standard PR',
+  description: 'Read-write worktree, standard toolchains, no network',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "none",
+    access: 'none',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
-};
+  safehouseIntegrations: ['all-agents'],
+}
 
 /**
  * Research only: read-only filesystem, full network.
  * For code review, analysis, and web research tasks.
  */
 export const researchOnlyTemplate: PolicyTemplate = {
-  id: "research-only",
-  name: "Research Only",
-  description: "Read-only filesystem, full network access",
+  id: 'research-only',
+  name: 'Research Only',
+  description: 'Read-only filesystem, full network access',
   filesystem: {
-    worktreeAccess: "read-only",
+    worktreeAccess: 'read-only',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "full",
+    access: 'full',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
-};
+  safehouseIntegrations: ['all-agents'],
+}
 
 /**
  * Permissive: read-write worktree, full network.
@@ -167,53 +167,45 @@ export const researchOnlyTemplate: PolicyTemplate = {
  * Equivalent to the M2 default safehouse configuration.
  */
 export const permissiveTemplate: PolicyTemplate = {
-  id: "permissive",
-  name: "Permissive",
-  description: "Read-write worktree, toolchains, full network access",
+  id: 'permissive',
+  name: 'Permissive',
+  description: 'Read-write worktree, toolchains, full network access',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "full",
+    access: 'full',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
-};
+  safehouseIntegrations: ['all-agents'],
+}
 ```
 
 ### 1.3 Create `src/main/policy-registry.ts`
 
 ```typescript
 // src/main/policy-registry.ts
-import type { PolicyTemplate, PolicyTemplateSummary } from "./types.js";
-import {
-  standardPrTemplate,
-  researchOnlyTemplate,
-  permissiveTemplate,
-} from "./policy-templates.js";
+import type { PolicyTemplate, PolicyTemplateSummary } from './types.js'
+import { standardPrTemplate, researchOnlyTemplate, permissiveTemplate } from './policy-templates.js'
 
-const BUILT_IN_TEMPLATES: PolicyTemplate[] = [
-  standardPrTemplate,
-  researchOnlyTemplate,
-  permissiveTemplate,
-];
+const BUILT_IN_TEMPLATES: PolicyTemplate[] = [standardPrTemplate, researchOnlyTemplate, permissiveTemplate]
 
 export class PolicyTemplateRegistry {
-  private templates: Map<string, PolicyTemplate>;
+  private templates: Map<string, PolicyTemplate>
 
   constructor() {
-    this.templates = new Map(BUILT_IN_TEMPLATES.map((t) => [t.id, t]));
+    this.templates = new Map(BUILT_IN_TEMPLATES.map((t) => [t.id, t]))
   }
 
   get(id: string): PolicyTemplate {
-    const template = this.templates.get(id);
-    if (!template) throw new Error(`Unknown policy template: ${id}`);
-    return template;
+    const template = this.templates.get(id)
+    if (!template) throw new Error(`Unknown policy template: ${id}`)
+    return template
   }
 
   list(): PolicyTemplateSummary[] {
@@ -221,11 +213,11 @@ export class PolicyTemplateRegistry {
       id: t.id,
       name: t.name,
       description: t.description,
-    }));
+    }))
   }
 
   get defaultId(): string {
-    return "standard-pr";
+    return 'standard-pr'
   }
 }
 ```
@@ -249,83 +241,73 @@ The mapper function that replaces `defaultSandboxConfig()` as the source of sand
 
 ```typescript
 // src/main/policy-sandbox.ts
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import type { PolicyTemplate } from "./types.js";
-import type { SandboxConfig } from "./sandbox.js";
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import type { PolicyTemplate } from './types.js'
+import type { SandboxConfig } from './sandbox.js'
 
-const POLICY_DIR = join(tmpdir(), "glitterball-sandbox");
+const POLICY_DIR = join(tmpdir(), 'glitterball-sandbox')
 
 export interface SessionContext {
-  sessionId: string;
-  worktreePath: string;
-  gitCommonDir?: string;
-  readOnlyDirs?: string[];
+  sessionId: string
+  worktreePath: string
+  gitCommonDir?: string
+  readOnlyDirs?: string[]
 }
 
 const BASE_ENV = [
-  "ANTHROPIC_API_KEY",
-  "NODE_OPTIONS",
-  "NODE_PATH",
-  "EDITOR",
-  "VISUAL",
-  "GIT_AUTHOR_NAME",
-  "GIT_AUTHOR_EMAIL",
-  "GIT_COMMITTER_NAME",
-  "GIT_COMMITTER_EMAIL",
-];
+  'ANTHROPIC_API_KEY',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'EDITOR',
+  'VISUAL',
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+]
 
-export function policyToSandboxConfig(
-  template: PolicyTemplate,
-  ctx: SessionContext,
-): SandboxConfig {
-  const writableDirs: string[] = [];
-  const readOnlyDirs: string[] = [...(ctx.readOnlyDirs ?? [])];
+export function policyToSandboxConfig(template: PolicyTemplate, ctx: SessionContext): SandboxConfig {
+  const writableDirs: string[] = []
+  const readOnlyDirs: string[] = [...(ctx.readOnlyDirs ?? [])]
 
   // Worktree access mode
-  if (template.filesystem.worktreeAccess === "read-write") {
-    writableDirs.push(ctx.worktreePath);
+  if (template.filesystem.worktreeAccess === 'read-write') {
+    writableDirs.push(ctx.worktreePath)
   } else {
-    readOnlyDirs.push(ctx.worktreePath);
+    readOnlyDirs.push(ctx.worktreePath)
   }
 
   // Git common dir follows worktree access mode
   if (ctx.gitCommonDir) {
-    if (template.filesystem.worktreeAccess === "read-write") {
-      writableDirs.push(ctx.gitCommonDir);
+    if (template.filesystem.worktreeAccess === 'read-write') {
+      writableDirs.push(ctx.gitCommonDir)
     } else {
-      readOnlyDirs.push(ctx.gitCommonDir);
+      readOnlyDirs.push(ctx.gitCommonDir)
     }
   }
 
   // Additional dirs from template
-  writableDirs.push(...template.filesystem.additionalWritableDirs);
-  readOnlyDirs.push(...template.filesystem.additionalReadOnlyDirs);
+  writableDirs.push(...template.filesystem.additionalWritableDirs)
+  readOnlyDirs.push(...template.filesystem.additionalReadOnlyDirs)
 
   // Environment variables: base set minus excludes, plus additions
-  const envPassthrough = [
-    ...BASE_ENV.filter((v) => !template.env.exclude.includes(v)),
-    ...template.env.additional,
-  ];
+  const envPassthrough = [...BASE_ENV.filter((v) => !template.env.exclude.includes(v)), ...template.env.additional]
 
   // Build append profile content from template + network policy
-  let appendProfileContent: string | undefined;
-  const profileParts: string[] = [];
+  let appendProfileContent: string | undefined
+  const profileParts: string[] = []
 
-  if (template.network.access === "none") {
-    profileParts.push(
-      ";; Block all outbound network access.",
-      "(deny network-outbound)",
-      "(deny network-bind)",
-    );
+  if (template.network.access === 'none') {
+    profileParts.push(';; Block all outbound network access.', '(deny network-outbound)', '(deny network-bind)')
   }
 
   if (template.appendProfile) {
-    profileParts.push(template.appendProfile.trim());
+    profileParts.push(template.appendProfile.trim())
   }
 
   if (profileParts.length > 0) {
-    appendProfileContent = "(version 1)\n" + profileParts.join("\n") + "\n";
+    appendProfileContent = '(version 1)\n' + profileParts.join('\n') + '\n'
   }
 
   return {
@@ -335,7 +317,7 @@ export function policyToSandboxConfig(
     envPassthrough,
     policyOutputPath: join(POLICY_DIR, `${ctx.sessionId}.sb`),
     appendProfileContent,
-  };
+  }
 }
 ```
 
@@ -347,94 +329,89 @@ Update `src/main/sandbox.ts`:
 
 ```typescript
 export interface SandboxConfig {
-  workdir: string;
-  writableDirs: string[];
-  readOnlyDirs: string[];
-  envPassthrough: string[];
-  policyOutputPath: string;
-  appendProfileContent?: string;  // NEW
+  workdir: string
+  writableDirs: string[]
+  readOnlyDirs: string[]
+  envPassthrough: string[]
+  policyOutputPath: string
+  appendProfileContent?: string // NEW
 }
 ```
 
 Update `buildSafehouseArgs()` to write the append profile to a file and pass `--append-profile`:
 
 ```typescript
-export function buildSafehouseArgs(
-  config: SandboxConfig,
-  command: string[],
-): string[] {
-  const args: string[] = [];
+export function buildSafehouseArgs(config: SandboxConfig, command: string[]): string[] {
+  const args: string[] = []
 
-  args.push(`--output=${config.policyOutputPath}`);
-  args.push("--enable=all-agents");
-  args.push(`--workdir=${config.workdir}`);
+  args.push(`--output=${config.policyOutputPath}`)
+  args.push('--enable=all-agents')
+  args.push(`--workdir=${config.workdir}`)
 
   if (config.writableDirs.length > 0) {
-    args.push(`--add-dirs=${config.writableDirs.join(":")}`);
+    args.push(`--add-dirs=${config.writableDirs.join(':')}`)
   }
   if (config.readOnlyDirs.length > 0) {
-    args.push(`--add-dirs-ro=${config.readOnlyDirs.join(":")}`);
+    args.push(`--add-dirs-ro=${config.readOnlyDirs.join(':')}`)
   }
   if (config.envPassthrough.length > 0) {
-    args.push(`--env-pass=${config.envPassthrough.join(",")}`);
+    args.push(`--env-pass=${config.envPassthrough.join(',')}`)
   }
 
   // NEW: append profile overlay
   if (config.appendProfileContent) {
-    const appendPath = config.policyOutputPath.replace(/\.sb$/, "-append.sb");
-    args.push(`--append-profile=${appendPath}`);
+    const appendPath = config.policyOutputPath.replace(/\.sb$/, '-append.sb')
+    args.push(`--append-profile=${appendPath}`)
   }
 
-  args.push("--");
-  args.push(...command);
-  return args;
+  args.push('--')
+  args.push(...command)
+  return args
 }
 ```
 
-**Important:** `buildSafehouseArgs()` only builds the arg list — it doesn't write files. The append profile file must be written *before* spawning safehouse. This write happens in the session manager (Phase 3) alongside the `ensurePolicyDir()` call.
+**Important:** `buildSafehouseArgs()` only builds the arg list — it doesn't write files. The append profile file must be written _before_ spawning safehouse. This write happens in the session manager (Phase 3) alongside the `ensurePolicyDir()` call.
 
 ### 2.3 Add append-profile file lifecycle helpers
 
 Add to `src/main/sandbox.ts`:
 
 ```typescript
-import { writeFile } from "node:fs/promises";
+import { writeFile } from 'node:fs/promises'
 
 /**
  * Write the append profile file if the config includes custom SBPL content.
  * Must be called before spawning safehouse.
  */
 export async function writeAppendProfile(config: SandboxConfig): Promise<void> {
-  if (!config.appendProfileContent) return;
-  const appendPath = config.policyOutputPath.replace(/\.sb$/, "-append.sb");
-  await writeFile(appendPath, config.appendProfileContent, "utf-8");
+  if (!config.appendProfileContent) return
+  const appendPath = config.policyOutputPath.replace(/\.sb$/, '-append.sb')
+  await writeFile(appendPath, config.appendProfileContent, 'utf-8')
 }
 
 /**
  * Clean up a session's policy file(s), including any append profile.
  */
 export async function cleanupPolicy(policyPath: string): Promise<void> {
-  const appendPath = policyPath.replace(/\.sb$/, "-append.sb");
-  await rm(policyPath, { force: true }).catch(() => {});
-  await rm(appendPath, { force: true }).catch(() => {});
+  const appendPath = policyPath.replace(/\.sb$/, '-append.sb')
+  await rm(policyPath, { force: true }).catch(() => {})
+  await rm(appendPath, { force: true }).catch(() => {})
 }
 ```
 
 Update `cleanupOrphanPolicies()` to also clean `*-append.sb` files (already covered since it removes all `.sb` files matching session IDs — just ensure the `-append.sb` suffix is also caught):
 
 ```typescript
-export async function cleanupOrphanPolicies(
-  activeSessionIds: Set<string>,
-): Promise<void> {
-  const { readdir } = await import("node:fs/promises");
+export async function cleanupOrphanPolicies(activeSessionIds: Set<string>): Promise<void> {
+  const { readdir } = await import('node:fs/promises')
   try {
-    const entries = await readdir(POLICY_DIR);
+    const entries = await readdir(POLICY_DIR)
     for (const entry of entries) {
-      if (entry.endsWith(".sb")) {
+      if (entry.endsWith('.sb')) {
         // Extract session ID from both "uuid.sb" and "uuid-append.sb"
-        const sessionId = entry.replace(/-append\.sb$/, "").replace(/\.sb$/, "");
+        const sessionId = entry.replace(/-append\.sb$/, '').replace(/\.sb$/, '')
         if (!activeSessionIds.has(sessionId)) {
-          await rm(join(POLICY_DIR, entry), { force: true });
+          await rm(join(POLICY_DIR, entry), { force: true })
         }
       }
     }
@@ -456,64 +433,72 @@ A standalone test script that exercises the mapping from templates to sandbox co
 //
 // Usage: npx tsx scripts/test-policy-sandbox.ts
 
-import { PolicyTemplateRegistry } from "../src/main/policy-registry.js";
-import { policyToSandboxConfig } from "../src/main/policy-sandbox.js";
-import { buildSafehouseArgs } from "../src/main/sandbox.js";
+import { PolicyTemplateRegistry } from '../src/main/policy-registry.js'
+import { policyToSandboxConfig } from '../src/main/policy-sandbox.js'
+import { buildSafehouseArgs } from '../src/main/sandbox.js'
 
-const registry = new PolicyTemplateRegistry();
+const registry = new PolicyTemplateRegistry()
 const ctx = {
-  sessionId: "test-session-id",
-  worktreePath: "/tmp/test-worktree",
-  gitCommonDir: "/Users/test/project/.git",
-  readOnlyDirs: ["/path/to/agent-pkg"],
-};
-
-console.log("=== Policy Template → Sandbox Config Tests ===\n");
-
-for (const summary of registry.list()) {
-  const template = registry.get(summary.id);
-  const config = policyToSandboxConfig(template, ctx);
-  const args = buildSafehouseArgs(config, ["node", "/path/to/agent.js"]);
-
-  console.log(`--- ${summary.id} (${summary.name}) ---`);
-  console.log(`  Description: ${summary.description}`);
-  console.log(`  Writable dirs: ${config.writableDirs.join(", ") || "(none)"}`);
-  console.log(`  Read-only dirs: ${config.readOnlyDirs.join(", ") || "(none)"}`);
-  console.log(`  Env passthrough: ${config.envPassthrough.join(", ")}`);
-  console.log(`  Append profile: ${config.appendProfileContent ? "yes" : "no"}`);
-  if (config.appendProfileContent) {
-    console.log(`  Append profile content:\n${config.appendProfileContent.split("\n").map(l => "    " + l).join("\n")}`);
-  }
-  console.log(`  Safehouse args: safehouse ${args.join(" ")}`);
-
-  // Assertions
-  const hasAppendProfile = args.some((a) => a.startsWith("--append-profile="));
-  const hasWorktreeWritable = config.writableDirs.includes(ctx.worktreePath);
-  const hasWorktreeReadOnly = config.readOnlyDirs.includes(ctx.worktreePath);
-
-  if (summary.id === "standard-pr") {
-    console.assert(hasWorktreeWritable, "standard-pr: worktree should be writable");
-    console.assert(!hasWorktreeReadOnly, "standard-pr: worktree should not be read-only");
-    console.assert(hasAppendProfile, "standard-pr: should have append profile (network deny)");
-    console.assert(config.appendProfileContent!.includes("deny network-outbound"),
-      "standard-pr: append profile should deny network");
-  } else if (summary.id === "research-only") {
-    console.assert(!hasWorktreeWritable, "research-only: worktree should not be writable");
-    console.assert(hasWorktreeReadOnly, "research-only: worktree should be read-only");
-    console.assert(!hasAppendProfile, "research-only: should not have append profile");
-  } else if (summary.id === "permissive") {
-    console.assert(hasWorktreeWritable, "permissive: worktree should be writable");
-    console.assert(!hasWorktreeReadOnly, "permissive: worktree should not be read-only");
-    console.assert(!hasAppendProfile, "permissive: should not have append profile");
-  }
-
-  console.log(`  ✓ Assertions passed\n`);
+  sessionId: 'test-session-id',
+  worktreePath: '/tmp/test-worktree',
+  gitCommonDir: '/Users/test/project/.git',
+  readOnlyDirs: ['/path/to/agent-pkg'],
 }
 
-console.log("=== All tests passed ===");
+console.log('=== Policy Template → Sandbox Config Tests ===\n')
+
+for (const summary of registry.list()) {
+  const template = registry.get(summary.id)
+  const config = policyToSandboxConfig(template, ctx)
+  const args = buildSafehouseArgs(config, ['node', '/path/to/agent.js'])
+
+  console.log(`--- ${summary.id} (${summary.name}) ---`)
+  console.log(`  Description: ${summary.description}`)
+  console.log(`  Writable dirs: ${config.writableDirs.join(', ') || '(none)'}`)
+  console.log(`  Read-only dirs: ${config.readOnlyDirs.join(', ') || '(none)'}`)
+  console.log(`  Env passthrough: ${config.envPassthrough.join(', ')}`)
+  console.log(`  Append profile: ${config.appendProfileContent ? 'yes' : 'no'}`)
+  if (config.appendProfileContent) {
+    console.log(
+      `  Append profile content:\n${config.appendProfileContent
+        .split('\n')
+        .map((l) => '    ' + l)
+        .join('\n')}`,
+    )
+  }
+  console.log(`  Safehouse args: safehouse ${args.join(' ')}`)
+
+  // Assertions
+  const hasAppendProfile = args.some((a) => a.startsWith('--append-profile='))
+  const hasWorktreeWritable = config.writableDirs.includes(ctx.worktreePath)
+  const hasWorktreeReadOnly = config.readOnlyDirs.includes(ctx.worktreePath)
+
+  if (summary.id === 'standard-pr') {
+    console.assert(hasWorktreeWritable, 'standard-pr: worktree should be writable')
+    console.assert(!hasWorktreeReadOnly, 'standard-pr: worktree should not be read-only')
+    console.assert(hasAppendProfile, 'standard-pr: should have append profile (network deny)')
+    console.assert(
+      config.appendProfileContent!.includes('deny network-outbound'),
+      'standard-pr: append profile should deny network',
+    )
+  } else if (summary.id === 'research-only') {
+    console.assert(!hasWorktreeWritable, 'research-only: worktree should not be writable')
+    console.assert(hasWorktreeReadOnly, 'research-only: worktree should be read-only')
+    console.assert(!hasAppendProfile, 'research-only: should not have append profile')
+  } else if (summary.id === 'permissive') {
+    console.assert(hasWorktreeWritable, 'permissive: worktree should be writable')
+    console.assert(!hasWorktreeReadOnly, 'permissive: worktree should not be read-only')
+    console.assert(!hasAppendProfile, 'permissive: should not have append profile')
+  }
+
+  console.log(`  ✓ Assertions passed\n`)
+}
+
+console.log('=== All tests passed ===')
 ```
 
 Add to `package.json`:
+
 ```json
 "test:policy-sandbox": "tsx scripts/test-policy-sandbox.ts"
 ```
@@ -538,15 +523,15 @@ Wire the policy system into the session manager, replacing the hardcoded `defaul
 
 ```typescript
 // In session-manager.ts
-import { PolicyTemplateRegistry } from "./policy-registry.js";
-import { policyToSandboxConfig, type SessionContext } from "./policy-sandbox.js";
-import { writeAppendProfile } from "./sandbox.js";
+import { PolicyTemplateRegistry } from './policy-registry.js'
+import { policyToSandboxConfig, type SessionContext } from './policy-sandbox.js'
+import { writeAppendProfile } from './sandbox.js'
 
 export class SessionManager {
-  private sessions = new Map<string, SessionState>();
-  private worktreeManager = new WorktreeManager();
-  private safehouseWarningLogged = false;
-  readonly policyRegistry = new PolicyTemplateRegistry();  // NEW — public for IPC access
+  private sessions = new Map<string, SessionState>()
+  private worktreeManager = new WorktreeManager()
+  private safehouseWarningLogged = false
+  readonly policyRegistry = new PolicyTemplateRegistry() // NEW — public for IPC access
   // ...
 }
 ```
@@ -614,7 +599,7 @@ Update `SessionState`:
 ```typescript
 interface SessionState {
   // ... existing fields ...
-  policyId: string | null;  // NEW
+  policyId: string | null // NEW
 }
 ```
 
@@ -624,7 +609,7 @@ Initialize in `createSession()`:
 const session: SessionState = {
   // ... existing fields ...
   policyId: resolvedPolicyId,
-};
+}
 ```
 
 Update `summarize()`:
@@ -694,22 +679,22 @@ Expose the policy system to the renderer process.
 In `src/main/index.ts`, after the existing IPC handlers:
 
 ```typescript
-ipcMain.handle("policies:list", () => {
-  return sessionManager.policyRegistry.list();
-});
+ipcMain.handle('policies:list', () => {
+  return sessionManager.policyRegistry.list()
+})
 ```
 
 ### 4.2 Update `sessions:create` handler to accept `policyId`
 
 ```typescript
-ipcMain.handle("sessions:create", (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
-  if (typeof projectDir !== "string") {
-    throw new Error("Invalid argument: projectDir must be a string");
+ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown, policyId: unknown) => {
+  if (typeof projectDir !== 'string') {
+    throw new Error('Invalid argument: projectDir must be a string')
   }
-  const validAgentType = agentType === "echo" ? "echo" as const : "claude-code" as const;
-  const validPolicyId = typeof policyId === "string" ? policyId : undefined;
-  return sessionManager.createSession(projectDir, validAgentType, validPolicyId);
-});
+  const validAgentType = agentType === 'echo' ? ('echo' as const) : ('claude-code' as const)
+  const validPolicyId = typeof policyId === 'string' ? policyId : undefined
+  return sessionManager.createSession(projectDir, validAgentType, validPolicyId)
+})
 ```
 
 ### 4.3 Update preload bridge
@@ -717,31 +702,31 @@ ipcMain.handle("sessions:create", (_e, projectDir: unknown, agentType: unknown, 
 In `src/preload/index.ts`:
 
 ```typescript
-contextBridge.exposeInMainWorld("glitterball", {
+contextBridge.exposeInMainWorld('glitterball', {
   sessions: {
-    list: () => ipcRenderer.invoke("sessions:list"),
-    create: (projectDir: string, agentType?: string, policyId?: string) =>  // UPDATED
-      ipcRenderer.invoke("sessions:create", projectDir, agentType, policyId),
-    sendMessage: (sessionId: string, text: string) =>
-      ipcRenderer.invoke("sessions:sendMessage", sessionId, text),
-    closeSession: (sessionId: string) =>
-      ipcRenderer.invoke("sessions:close", sessionId),
-    getSandboxViolations: (sessionId: string) =>
-      ipcRenderer.invoke("sessions:getSandboxViolations", sessionId),
+    list: () => ipcRenderer.invoke('sessions:list'),
+    create: (
+      projectDir: string,
+      agentType?: string,
+      policyId?: string, // UPDATED
+    ) => ipcRenderer.invoke('sessions:create', projectDir, agentType, policyId),
+    sendMessage: (sessionId: string, text: string) => ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
+    closeSession: (sessionId: string) => ipcRenderer.invoke('sessions:close', sessionId),
+    getSandboxViolations: (sessionId: string) => ipcRenderer.invoke('sessions:getSandboxViolations', sessionId),
     onUpdate: (callback: (update: unknown) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, update: unknown): void =>
-        callback(update);
-      ipcRenderer.on("session-update", handler);
-      return () => ipcRenderer.removeListener("session-update", handler);
+      const handler = (_event: Electron.IpcRendererEvent, update: unknown): void => callback(update)
+      ipcRenderer.on('session-update', handler)
+      return () => ipcRenderer.removeListener('session-update', handler)
     },
   },
-  policies: {                                                              // NEW
-    list: () => ipcRenderer.invoke("policies:list"),
+  policies: {
+    // NEW
+    list: () => ipcRenderer.invoke('policies:list'),
   },
   dialog: {
-    selectDirectory: () => ipcRenderer.invoke("dialog:selectDirectory"),
+    selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
   },
-});
+})
 ```
 
 ### 4.4 Update `env.d.ts` type declarations
@@ -749,27 +734,28 @@ contextBridge.exposeInMainWorld("glitterball", {
 ```typescript
 import type {
   AgentType,
-  PolicyTemplateSummary,     // NEW
+  PolicyTemplateSummary, // NEW
   SandboxViolationInfo,
   SessionSummary,
   SessionUpdate,
-} from "../../main/types";
+} from '../../main/types'
 
 interface GlitterballAPI {
   sessions: {
-    list(): Promise<SessionSummary[]>;
-    create(projectDir: string, agentType?: AgentType, policyId?: string): Promise<SessionSummary>;  // UPDATED
-    sendMessage(sessionId: string, text: string): Promise<void>;
-    closeSession(sessionId: string): Promise<void>;
-    getSandboxViolations(sessionId: string): Promise<SandboxViolationInfo[]>;
-    onUpdate(callback: (update: SessionUpdate) => void): () => void;
-  };
-  policies: {                                          // NEW
-    list(): Promise<PolicyTemplateSummary[]>;
-  };
+    list(): Promise<SessionSummary[]>
+    create(projectDir: string, agentType?: AgentType, policyId?: string): Promise<SessionSummary> // UPDATED
+    sendMessage(sessionId: string, text: string): Promise<void>
+    closeSession(sessionId: string): Promise<void>
+    getSandboxViolations(sessionId: string): Promise<SandboxViolationInfo[]>
+    onUpdate(callback: (update: SessionUpdate) => void): () => void
+  }
+  policies: {
+    // NEW
+    list(): Promise<PolicyTemplateSummary[]>
+  }
   dialog: {
-    selectDirectory(): Promise<string | null>;
-  };
+    selectDirectory(): Promise<string | null>
+  }
 }
 ```
 
@@ -889,13 +875,18 @@ Replace the current shield emoji badge:
 
 ```tsx
 // Current (M2):
-{s.sandboxed && <span className="sandbox-badge">&#x1F6E1;</span>}
+{
+  s.sandboxed && <span className="sandbox-badge">&#x1F6E1;</span>
+}
 
 // New (M3):
-{s.policyName && <span className="policy-badge">{s.policyName}</span>}
+{
+  s.policyName && <span className="policy-badge">{s.policyName}</span>
+}
 ```
 
 Style the policy badge with a background color or border to distinguish it from the session label. Consider color-coding by policy type:
+
 - `standard-pr` → blue/neutral (restrictive but productive)
 - `research-only` → green (safe, read-only)
 - `permissive` → amber/yellow (wider access, use with care)
@@ -905,21 +896,21 @@ Style the policy badge with a background color or border to distinguish it from 
 When the user hovers over the policy badge, show a tooltip with the template's capability summary. Use the `title` attribute for a simple implementation, or a lightweight custom tooltip component if more structure is needed.
 
 Simple approach:
+
 ```tsx
-<span
-  className="policy-badge"
-  title={`${s.policyName}\n${policyDescription(s.policyId)}`}
->
+<span className="policy-badge" title={`${s.policyName}\n${policyDescription(s.policyId)}`}>
   {s.policyName}
 </span>
 ```
 
 Where `policyDescription()` returns a brief summary like:
+
 - "Filesystem: read-write | Network: blocked"
 - "Filesystem: read-only | Network: full"
 - "Filesystem: read-write | Network: full"
 
 To get the description, the session list can either:
+
 1. Use the `policyName` field already on `SessionSummary` (simple, no extra data needed)
 2. Fetch the full template list once and look up by `policyId` (richer, needed for tooltip)
 
@@ -1020,24 +1011,24 @@ Run these checks after all phases are complete:
 
 ### New files
 
-| File | Purpose |
-|------|---------|
-| `src/main/policy-templates.ts` | Three built-in policy template definitions |
-| `src/main/policy-registry.ts` | `PolicyTemplateRegistry` class for template lookup/listing |
-| `src/main/policy-sandbox.ts` | `policyToSandboxConfig()` mapper: template → safehouse config |
-| `src/renderer/src/components/NewSessionDialog.tsx` | New session dialog with policy selector |
-| `scripts/test-policy-sandbox.ts` | Test harness for policy → sandbox config mapping |
+| File                                               | Purpose                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------- |
+| `src/main/policy-templates.ts`                     | Three built-in policy template definitions                    |
+| `src/main/policy-registry.ts`                      | `PolicyTemplateRegistry` class for template lookup/listing    |
+| `src/main/policy-sandbox.ts`                       | `policyToSandboxConfig()` mapper: template → safehouse config |
+| `src/renderer/src/components/NewSessionDialog.tsx` | New session dialog with policy selector                       |
+| `scripts/test-policy-sandbox.ts`                   | Test harness for policy → sandbox config mapping              |
 
 ### Modified files
 
-| File | Changes |
-|------|---------|
-| `src/main/types.ts` | Add `PolicyTemplate`, `FilesystemPolicy`, `NetworkPolicy`, `EnvPolicy`, `PolicyTemplateSummary`; extend `SessionSummary` with `policyId`/`policyName` |
-| `src/main/sandbox.ts` | Add `appendProfileContent` to `SandboxConfig`; add `writeAppendProfile()`; update `buildSafehouseArgs()` for `--append-profile`; update `cleanupPolicy()` and `cleanupOrphanPolicies()` for append files |
-| `src/main/session-manager.ts` | Add `policyRegistry` field; update `createSession()` to accept `policyId` and use `policyToSandboxConfig()`; add `policyId` to `SessionState`; update `summarize()` for policy fields |
-| `src/main/index.ts` | Add `policies:list` IPC handler; update `sessions:create` handler to accept `policyId` |
-| `src/preload/index.ts` | Add `policies` namespace; update `create()` signature with `policyId` |
-| `src/renderer/src/env.d.ts` | Add `policies` to `GlitterballAPI`; update `create()` type; import `PolicyTemplateSummary` |
-| `src/renderer/src/App.tsx` | Add `showNewSessionDialog` state; render `NewSessionDialog`; fetch policy templates on mount |
-| `src/renderer/src/components/SessionList.tsx` | Replace shield emoji badge with policy name badge; add tooltip |
-| `package.json` | Add `test:policy-sandbox` script |
+| File                                          | Changes                                                                                                                                                                                                  |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main/types.ts`                           | Add `PolicyTemplate`, `FilesystemPolicy`, `NetworkPolicy`, `EnvPolicy`, `PolicyTemplateSummary`; extend `SessionSummary` with `policyId`/`policyName`                                                    |
+| `src/main/sandbox.ts`                         | Add `appendProfileContent` to `SandboxConfig`; add `writeAppendProfile()`; update `buildSafehouseArgs()` for `--append-profile`; update `cleanupPolicy()` and `cleanupOrphanPolicies()` for append files |
+| `src/main/session-manager.ts`                 | Add `policyRegistry` field; update `createSession()` to accept `policyId` and use `policyToSandboxConfig()`; add `policyId` to `SessionState`; update `summarize()` for policy fields                    |
+| `src/main/index.ts`                           | Add `policies:list` IPC handler; update `sessions:create` handler to accept `policyId`                                                                                                                   |
+| `src/preload/index.ts`                        | Add `policies` namespace; update `create()` signature with `policyId`                                                                                                                                    |
+| `src/renderer/src/env.d.ts`                   | Add `policies` to `GlitterballAPI`; update `create()` type; import `PolicyTemplateSummary`                                                                                                               |
+| `src/renderer/src/App.tsx`                    | Add `showNewSessionDialog` state; render `NewSessionDialog`; fetch policy templates on mount                                                                                                             |
+| `src/renderer/src/components/SessionList.tsx` | Replace shield emoji badge with policy name badge; add tooltip                                                                                                                                           |
+| `package.json`                                | Add `test:policy-sandbox` script                                                                                                                                                                         |

@@ -6,26 +6,26 @@
  * alongside the policy state JSON — no JSON parsing in bash needed.
  */
 
-import { mkdir, writeFile, chmod, rm } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
-import { POLICY_DIR } from "./sandbox.js";
+import { mkdir, writeFile, chmod, rm } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { join } from 'node:path'
+import { POLICY_DIR } from './sandbox.js'
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = promisify(execFile)
 
 /**
  * Path to the hooks directory for a session.
  */
 export function hooksDir(sessionId: string): string {
-  return join(POLICY_DIR, `${sessionId}-hooks`);
+  return join(POLICY_DIR, `${sessionId}-hooks`)
 }
 
 /**
  * Path to the allowed-refs file for a session.
  */
 export function allowedRefsPath(sessionId: string): string {
-  return join(POLICY_DIR, `${sessionId}-allowed-refs.txt`);
+  return join(POLICY_DIR, `${sessionId}-allowed-refs.txt`)
 }
 
 /**
@@ -73,7 +73,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 done
 
 exit 0
-`;
+`
 }
 
 /**
@@ -82,7 +82,7 @@ exit 0
  * for the allowed-refs file (mounted at /etc/bouncer/allowed-refs.txt).
  */
 export function generatePrePushHookForContainer(): string {
-  return generatePrePushHook("/etc/bouncer/allowed-refs.txt");
+  return generatePrePushHook('/etc/bouncer/allowed-refs.txt')
 }
 
 /**
@@ -90,45 +90,38 @@ export function generatePrePushHookForContainer(): string {
  * Creates the hooks directory, writes the hook script and allowed-refs file,
  * and sets core.hooksPath in the worktree's git config.
  */
-export async function installHooks(
-  sessionId: string,
-  worktreePath: string,
-  allowedPushRefs: string[],
-): Promise<void> {
-  const dir = hooksDir(sessionId);
-  await mkdir(dir, { recursive: true });
+export async function installHooks(sessionId: string, worktreePath: string, allowedPushRefs: string[]): Promise<void> {
+  const dir = hooksDir(sessionId)
+  await mkdir(dir, { recursive: true })
 
   // Write the allowed-refs companion file
-  const refsFile = allowedRefsPath(sessionId);
-  await writeFile(refsFile, allowedPushRefs.join("\n") + "\n", "utf-8");
+  const refsFile = allowedRefsPath(sessionId)
+  await writeFile(refsFile, allowedPushRefs.join('\n') + '\n', 'utf-8')
 
   // Write the pre-push hook
-  const hookPath = join(dir, "pre-push");
-  await writeFile(hookPath, generatePrePushHook(refsFile), "utf-8");
-  await chmod(hookPath, 0o755);
+  const hookPath = join(dir, 'pre-push')
+  await writeFile(hookPath, generatePrePushHook(refsFile), 'utf-8')
+  await chmod(hookPath, 0o755)
 
   // Point the worktree's git config to our hooks directory
-  await execFileAsync("git", ["-C", worktreePath, "config", "core.hooksPath", dir]);
+  await execFileAsync('git', ['-C', worktreePath, 'config', 'core.hooksPath', dir])
 }
 
 /**
  * Remove the hooks directory, allowed-refs file, and unset core.hooksPath.
  */
-export async function cleanupHooks(
-  sessionId: string,
-  worktreePath: string,
-): Promise<void> {
+export async function cleanupHooks(sessionId: string, worktreePath: string): Promise<void> {
   // Unset core.hooksPath (catch errors — worktree may already be gone)
   try {
-    await execFileAsync("git", ["-C", worktreePath, "config", "--unset", "core.hooksPath"]);
+    await execFileAsync('git', ['-C', worktreePath, 'config', '--unset', 'core.hooksPath'])
   } catch {
     // Worktree may be gone or config already unset
   }
 
   // Remove hooks directory and allowed-refs file
-  await rm(hooksDir(sessionId), { recursive: true, force: true });
+  await rm(hooksDir(sessionId), { recursive: true, force: true })
   try {
-    await rm(allowedRefsPath(sessionId));
+    await rm(allowedRefsPath(sessionId))
   } catch {
     // May not exist
   }

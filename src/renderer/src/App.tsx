@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Message, PolicyEvent, PolicyTemplateSummary, Repository, SandboxViolationInfo, WorkspaceSummary, WorkspaceUpdate } from '../../main/types'
+import type {
+  Message,
+  PolicyEvent,
+  PolicyTemplateSummary,
+  Repository,
+  SandboxViolationInfo,
+  WorkspaceSummary,
+  WorkspaceUpdate,
+} from '../../main/types'
 import { WorkspacesSidebar } from './components/WorkspacesSidebar'
 import { ChatPanel } from './components/ChatPanel'
 import { RepoSettings } from './components/RepoSettings'
@@ -10,7 +18,7 @@ function App() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [messagesByWorkspace, setMessagesByWorkspace] = useState<Map<string, Message[]>>(new Map())
   const [workspaceErrors, setWorkspaceErrors] = useState<Map<string, string>>(new Map())
-  const [workspaceErrorKinds, setWorkspaceErrorKinds] = useState<Map<string, "auth">>(new Map())
+  const [workspaceErrorKinds, setWorkspaceErrorKinds] = useState<Map<string, 'auth'>>(new Map())
   const [violationsByWorkspace, setViolationsByWorkspace] = useState<Map<string, SandboxViolationInfo[]>>(new Map())
   const [policies, setPolicies] = useState<PolicyTemplateSummary[]>([])
   const [policyDescriptions, setPolicyDescriptions] = useState<Map<string, string>>(new Map())
@@ -35,151 +43,156 @@ function App() {
     }
   }, [])
 
-  const handleUpdate = useCallback((update: WorkspaceUpdate) => {
-    switch (update.type) {
-      case 'status-change':
-        setWorkspaces((prev) => {
-          const exists = prev.some((s) => s.id === update.workspaceId)
-          if (!exists) {
-            // Workspace not yet in state — stash for when it arrives
-            pendingStatusUpdates.current.set(update.workspaceId, update)
-            return prev
+  const handleUpdate = useCallback(
+    (update: WorkspaceUpdate) => {
+      switch (update.type) {
+        case 'status-change':
+          setWorkspaces((prev) => {
+            const exists = prev.some((s) => s.id === update.workspaceId)
+            if (!exists) {
+              // Workspace not yet in state — stash for when it arrives
+              pendingStatusUpdates.current.set(update.workspaceId, update)
+              return prev
+            }
+            return prev.map((s) =>
+              s.id === update.workspaceId
+                ? update.summary
+                  ? { ...s, ...update.summary }
+                  : { ...s, status: update.status }
+                : s,
+            )
+          })
+          if (update.status === 'error' && update.error) {
+            setWorkspaceErrors((prev) => {
+              const next = new Map(prev)
+              next.set(update.workspaceId, update.error!)
+              return next
+            })
           }
-          return prev.map((s) =>
-            s.id === update.workspaceId
-              ? update.summary ? { ...s, ...update.summary } : { ...s, status: update.status }
-              : s
-          )
-        })
-        if (update.status === 'error' && update.error) {
-          setWorkspaceErrors((prev) => {
+          if (update.errorKind) {
+            setWorkspaceErrorKinds((prev) => {
+              const next = new Map(prev)
+              next.set(update.workspaceId, update.errorKind!)
+              return next
+            })
+          } else {
+            // Clear errorKind when transitioning to a non-auth error or away from error
+            setWorkspaceErrorKinds((prev) => {
+              if (!prev.has(update.workspaceId)) return prev
+              const next = new Map(prev)
+              next.delete(update.workspaceId)
+              return next
+            })
+          }
+          break
+
+        case 'message':
+          setMessagesByWorkspace((prev) => {
             const next = new Map(prev)
-            next.set(update.workspaceId, update.error!)
+            const msgs = next.get(update.workspaceId) ?? []
+            next.set(update.workspaceId, [...msgs, update.message])
             return next
           })
-        }
-        if (update.errorKind) {
-          setWorkspaceErrorKinds((prev) => {
-            const next = new Map(prev)
-            next.set(update.workspaceId, update.errorKind!)
-            return next
-          })
-        } else {
-          // Clear errorKind when transitioning to a non-auth error or away from error
-          setWorkspaceErrorKinds((prev) => {
-            if (!prev.has(update.workspaceId)) return prev
-            const next = new Map(prev)
-            next.delete(update.workspaceId)
-            return next
-          })
-        }
-        break
+          if (update.message.streaming) {
+            streamingTextRef.current.set(update.message.id, [''])
+          }
+          break
 
-      case 'message':
-        setMessagesByWorkspace((prev) => {
-          const next = new Map(prev)
-          const msgs = next.get(update.workspaceId) ?? []
-          next.set(update.workspaceId, [...msgs, update.message])
-          return next
-        })
-        if (update.message.streaming) {
-          streamingTextRef.current.set(update.message.id, [''])
+        case 'stream-chunk': {
+          const segments = streamingTextRef.current.get(update.messageId) ?? ['']
+          // Expand array if needed for new segment index
+          while (segments.length <= update.segmentIndex) {
+            segments.push('')
+          }
+          segments[update.segmentIndex] += update.text
+          streamingTextRef.current.set(update.messageId, segments)
+          scheduleStreamTick()
+          break
         }
-        break
 
-      case 'stream-chunk': {
-        const segments = streamingTextRef.current.get(update.messageId) ?? ['']
-        // Expand array if needed for new segment index
-        while (segments.length <= update.segmentIndex) {
-          segments.push('')
-        }
-        segments[update.segmentIndex] += update.text
-        streamingTextRef.current.set(update.messageId, segments)
-        scheduleStreamTick()
-        break
-      }
-
-      case 'stream-end': {
-        streamingTextRef.current.delete(update.messageId)
-        setMessagesByWorkspace((prevMsgs) => {
-          const next = new Map(prevMsgs)
-          const msgs = next.get(update.workspaceId)
-          if (msgs) {
-            next.set(
-              update.workspaceId,
-              msgs.map((m) =>
-                m.id === update.messageId
-                  ? {
-                      ...m,
-                      text: update.textSegments.join('\n\n'),
-                      textSegments: update.textSegments,
-                      parts: update.parts,
-                      streaming: false,
-                    }
-                  : m
+        case 'stream-end': {
+          streamingTextRef.current.delete(update.messageId)
+          setMessagesByWorkspace((prevMsgs) => {
+            const next = new Map(prevMsgs)
+            const msgs = next.get(update.workspaceId)
+            if (msgs) {
+              next.set(
+                update.workspaceId,
+                msgs.map((m) =>
+                  m.id === update.messageId
+                    ? {
+                        ...m,
+                        text: update.textSegments.join('\n\n'),
+                        textSegments: update.textSegments,
+                        parts: update.parts,
+                        streaming: false,
+                      }
+                    : m,
+                ),
               )
-            )
-          }
-          return next
-        })
-        // Force a final render to clear streaming state
-        setStreamTick((t) => t + 1)
-        break
-      }
+            }
+            return next
+          })
+          // Force a final render to clear streaming state
+          setStreamTick((t) => t + 1)
+          break
+        }
 
-      case 'tool-call':
-        setMessagesByWorkspace((prev) => {
-          const next = new Map(prev)
-          const msgs = next.get(update.workspaceId)
-          if (msgs) {
-            next.set(
-              update.workspaceId,
-              msgs.map((m) => {
-                if (m.id !== update.messageId) return m
-                const toolCalls = m.toolCalls ? [...m.toolCalls] : []
-                const existing = toolCalls.findIndex((tc) => tc.id === update.toolCall.id)
-                if (existing >= 0) {
-                  toolCalls[existing] = { ...toolCalls[existing] }
-                  for (const [k, v] of Object.entries(update.toolCall)) {
-                    if (v !== undefined) {
-                      (toolCalls[existing] as unknown as Record<string, unknown>)[k] = v
+        case 'tool-call':
+          setMessagesByWorkspace((prev) => {
+            const next = new Map(prev)
+            const msgs = next.get(update.workspaceId)
+            if (msgs) {
+              next.set(
+                update.workspaceId,
+                msgs.map((m) => {
+                  if (m.id !== update.messageId) return m
+                  const toolCalls = m.toolCalls ? [...m.toolCalls] : []
+                  const existing = toolCalls.findIndex((tc) => tc.id === update.toolCall.id)
+                  if (existing >= 0) {
+                    toolCalls[existing] = { ...toolCalls[existing] }
+                    for (const [k, v] of Object.entries(update.toolCall)) {
+                      if (v !== undefined) {
+                        ;(toolCalls[existing] as unknown as Record<string, unknown>)[k] = v
+                      }
                     }
+                    return { ...m, toolCalls }
                   }
-                  return { ...m, toolCalls }
-                }
-                // New tool call: add to parts ordering
-                toolCalls.push(update.toolCall)
-                const parts = m.parts ? [...m.parts] : [{ type: 'text' as const, index: 0 }]
-                parts.push({ type: 'tool' as const, toolCallId: update.toolCall.id })
-                return { ...m, toolCalls, parts }
-              })
-            )
-          }
-          return next
-        })
-        break
+                  // New tool call: add to parts ordering
+                  toolCalls.push(update.toolCall)
+                  const parts = m.parts ? [...m.parts] : [{ type: 'text' as const, index: 0 }]
+                  parts.push({ type: 'tool' as const, toolCallId: update.toolCall.id })
+                  return { ...m, toolCalls, parts }
+                }),
+              )
+            }
+            return next
+          })
+          break
 
-      case 'sandbox-violation':
-        setViolationsByWorkspace((prev) => {
-          const next = new Map(prev)
-          const existing = next.get(update.workspaceId) ?? []
-          const updated = [...existing, update.violation].slice(-200)
-          next.set(update.workspaceId, updated)
-          return next
-        })
-        break
+        case 'sandbox-violation':
+          setViolationsByWorkspace((prev) => {
+            const next = new Map(prev)
+            const existing = next.get(update.workspaceId) ?? []
+            const updated = [...existing, update.violation].slice(-200)
+            next.set(update.workspaceId, updated)
+            return next
+          })
+          break
 
-      case 'policy-event':
-        setPolicyEventsByWorkspace((prev) => {
-          const next = new Map(prev)
-          const existing = next.get(update.workspaceId) ?? []
-          const updated = [...existing, update.event].slice(-200)
-          next.set(update.workspaceId, updated)
-          return next
-        })
-        break
-    }
-  }, [scheduleStreamTick])
+        case 'policy-event':
+          setPolicyEventsByWorkspace((prev) => {
+            const next = new Map(prev)
+            const existing = next.get(update.workspaceId) ?? []
+            const updated = [...existing, update.event].slice(-200)
+            next.set(update.workspaceId, updated)
+            return next
+          })
+          break
+      }
+    },
+    [scheduleStreamTick],
+  )
 
   // Fetch messages for all open workspaces from the main process.
   // Called on initial mount and when the app returns to foreground
@@ -195,7 +208,7 @@ function App() {
         } catch {
           return [w.id, [] as Message[]] as const
         }
-      })
+      }),
     )
     setMessagesByWorkspace((prev) => {
       const next = new Map(prev)
@@ -351,22 +364,16 @@ function App() {
   async function handleUpdateRepo(id: string, changes: Partial<Repository>) {
     try {
       await window.bouncer.repositories.update(id, changes)
-      setRepos((prev) => prev.map((r) => r.id === id ? { ...r, ...changes } : r))
+      setRepos((prev) => prev.map((r) => (r.id === id ? { ...r, ...changes } : r)))
     } catch (err) {
       console.error('Failed to update repository:', err)
     }
   }
 
   const activeWorkspace = workspaces.find((s) => s.id === activeWorkspaceId)
-  const activeMessages = activeWorkspaceId
-    ? messagesByWorkspace.get(activeWorkspaceId) ?? []
-    : []
-  const activeViolations = activeWorkspaceId
-    ? violationsByWorkspace.get(activeWorkspaceId) ?? []
-    : []
-  const activePolicyEvents = activeWorkspaceId
-    ? policyEventsByWorkspace.get(activeWorkspaceId) ?? []
-    : []
+  const activeMessages = activeWorkspaceId ? (messagesByWorkspace.get(activeWorkspaceId) ?? []) : []
+  const activeViolations = activeWorkspaceId ? (violationsByWorkspace.get(activeWorkspaceId) ?? []) : []
+  const activePolicyEvents = activeWorkspaceId ? (policyEventsByWorkspace.get(activeWorkspaceId) ?? []) : []
 
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const dragging = useRef(false)
@@ -459,18 +466,19 @@ function App() {
           </div>
         </div>
       )}
-      {settingsRepoId && (() => {
-        const repo = repos.find((r) => r.id === settingsRepoId)
-        if (!repo) return null
-        return (
-          <RepoSettings
-            repo={repo}
-            policies={policies}
-            onSave={handleUpdateRepo}
-            onClose={() => setSettingsRepoId(null)}
-          />
-        )
-      })()}
+      {settingsRepoId &&
+        (() => {
+          const repo = repos.find((r) => r.id === settingsRepoId)
+          if (!repo) return null
+          return (
+            <RepoSettings
+              repo={repo}
+              policies={policies}
+              onSave={handleUpdateRepo}
+              onClose={() => setSettingsRepoId(null)}
+            />
+          )
+        })()}
     </div>
   )
 }

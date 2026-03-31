@@ -19,8 +19,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
-    }
+      nodeIntegration: false,
+    },
   })
   mainWindow = window
 
@@ -203,7 +203,7 @@ app.whenReady().then(async () => {
     if (!window) return null
     const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory'],
-      title: 'Select project directory'
+      title: 'Select project directory',
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]

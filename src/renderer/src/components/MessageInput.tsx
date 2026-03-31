@@ -17,7 +17,15 @@ interface Props {
   policyEvents: PolicyEvent[]
 }
 
-export function MessageInput({ onSend, disabled, sandboxed, sessionStatus, placeholder, violations, policyEvents }: Props) {
+export function MessageInput({
+  onSend,
+  disabled,
+  sandboxed,
+  sessionStatus,
+  placeholder,
+  violations,
+  policyEvents,
+}: Props) {
   const [text, setText] = useState('')
   const [showLog, setShowLog] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -88,7 +96,9 @@ export function MessageInput({ onSend, disabled, sandboxed, sessionStatus, place
                 const v = entry.data as SandboxViolationInfo
                 return (
                   <div key={`v-${v.timestamp}-${v.operation}-${i}`} className="sandbox-log-entry sandbox-log-violation">
-                    <span className="sandbox-log-entry-icon" title="Sandbox violation">&#x1F6E1;</span>
+                    <span className="sandbox-log-entry-icon" title="Sandbox violation">
+                      &#x1F6E1;
+                    </span>
                     <span className="sandbox-log-op-violation">{v.operation}</span>
                     <span className="sandbox-log-process">{v.processName}</span>
                     {v.path && <span className="sandbox-log-path">{v.path}</span>}
@@ -98,7 +108,10 @@ export function MessageInput({ onSend, disabled, sandboxed, sessionStatus, place
                 const e = entry.data as PolicyEvent
                 const isAllow = e.decision === 'allow'
                 return (
-                  <div key={`p-${e.timestamp}-${e.operation}-${i}`} className={`sandbox-log-entry sandbox-log-policy-${e.decision}`}>
+                  <div
+                    key={`p-${e.timestamp}-${e.operation}-${i}`}
+                    className={`sandbox-log-entry sandbox-log-policy-${e.decision}`}
+                  >
                     <span className="sandbox-log-entry-icon" title={isAllow ? 'Allowed' : 'Denied'}>
                       {isAllow ? '\u2705' : '\u274C'}
                     </span>
@@ -156,7 +169,13 @@ export function MessageInput({ onSend, disabled, sandboxed, sessionStatus, place
               aria-label="Send message"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M8 3L8 13M8 3L4 7M8 3L12 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path
+                  d="M8 3L8 13M8 3L4 7M8 3L12 7"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
           </div>

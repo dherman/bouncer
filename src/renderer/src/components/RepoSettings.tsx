@@ -31,16 +31,14 @@ export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
       <div className="repo-settings" onClick={(e) => e.stopPropagation()}>
         <div className="repo-settings-header">
           <span>Repository Settings</span>
-          <button type="button" className="close-btn" onClick={onClose}>×</button>
+          <button type="button" className="close-btn" onClick={onClose}>
+            ×
+          </button>
         </div>
         <div className="repo-settings-body">
           <label className="repo-settings-field">
             <span className="repo-settings-label">Name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="repo-settings-field">
             <span className="repo-settings-label">Local path</span>
@@ -57,29 +55,29 @@ export function RepoSettings({ repo, policies, onSave, onClose }: Props) {
           </label>
           <label className="repo-settings-field">
             <span className="repo-settings-label">Default policy</span>
-            <select
-              value={defaultPolicyId}
-              onChange={(e) => setDefaultPolicyId(e.target.value)}
-            >
+            <select value={defaultPolicyId} onChange={(e) => setDefaultPolicyId(e.target.value)}>
               {policies.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </label>
           <label className="repo-settings-field">
             <span className="repo-settings-label">Agent type</span>
-            <select
-              value={defaultAgentType}
-              onChange={(e) => setDefaultAgentType(e.target.value as AgentType)}
-            >
+            <select value={defaultAgentType} onChange={(e) => setDefaultAgentType(e.target.value as AgentType)}>
               <option value="claude-code">Claude Code</option>
               <option value="echo">Echo (test)</option>
             </select>
           </label>
         </div>
         <div className="repo-settings-footer">
-          <button type="button" className="repo-settings-cancel" onClick={onClose}>Cancel</button>
-          <button type="button" className="repo-settings-save" onClick={handleSave}>Save</button>
+          <button type="button" className="repo-settings-cancel" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="repo-settings-save" onClick={handleSave}>
+            Save
+          </button>
         </div>
       </div>
     </div>

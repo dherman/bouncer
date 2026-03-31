@@ -18,7 +18,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 2.4 Write `scripts/test-claude-agent.ts` standalone test
   - [x] 2.5 Smoke test: ACP handshake + simple prompt with Claude Code
   - [x] 2.6 Document deviations in `sdk-deviations.md`
-- [x] **Phase 3+4+5: Session Manager Integration + IPC + UI** *(collapsed — Phase 2 revealed Claude Code handles tools internally, making Phase 3 terminal management unnecessary)*
+- [x] **Phase 3+4+5: Session Manager Integration + IPC + UI** _(collapsed — Phase 2 revealed Claude Code handles tools internally, making Phase 3 terminal management unnecessary)_
   - [x] Extend `SessionState` with agentType, projectDir, worktree
   - [x] Update `createSession()` — agent type selection + worktree creation
   - [x] Implement `resolveClaudeCodeCommand()`
@@ -53,30 +53,36 @@ Build and test the worktree manager in isolation before touching the session man
 - [ ] Create the file with the class skeleton and types
 
 ```typescript
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = promisify(execFile)
 
 export interface WorktreeInfo {
-  path: string;         // Absolute path to the worktree directory
-  branch: string;       // Branch name: bouncer/<session-id>
-  projectDir: string;   // Original project directory
+  path: string // Absolute path to the worktree directory
+  branch: string // Branch name: bouncer/<session-id>
+  projectDir: string // Original project directory
 }
 
 export class WorktreeManager {
-  private basePath: string;
+  private basePath: string
 
   constructor(basePath?: string) {
     // Default: system temp dir / glitterball-worktrees
-    this.basePath = basePath ?? join(tmpdir(), "glitterball-worktrees");
+    this.basePath = basePath ?? join(tmpdir(), 'glitterball-worktrees')
   }
 
-  async validateGitRepo(dir: string): Promise<boolean> { /* ... */ }
-  async create(sessionId: string, projectDir: string): Promise<WorktreeInfo> { /* ... */ }
-  async remove(info: WorktreeInfo): Promise<void> { /* ... */ }
+  async validateGitRepo(dir: string): Promise<boolean> {
+    /* ... */
+  }
+  async create(sessionId: string, projectDir: string): Promise<WorktreeInfo> {
+    /* ... */
+  }
+  async remove(info: WorktreeInfo): Promise<void> {
+    /* ... */
+  }
 }
 ```
 
@@ -164,65 +170,58 @@ async remove(info: WorktreeInfo): Promise<void> {
 
 ```typescript
 // scripts/test-worktree.ts
-import { WorktreeManager } from "../src/main/worktree-manager.js";
-import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { WorktreeManager } from '../src/main/worktree-manager.js'
+import { randomUUID } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
-const execFileAsync = promisify(execFile);
-const manager = new WorktreeManager();
+const execFileAsync = promisify(execFile)
+const manager = new WorktreeManager()
 
 // Use the bouncer repo itself as the test project
-const projectDir = process.cwd();
-const sessionId = randomUUID();
+const projectDir = process.cwd()
+const sessionId = randomUUID()
 
-console.log("=== Worktree Manager Test ===\n");
+console.log('=== Worktree Manager Test ===\n')
 
 // Validate git repo
-const isGitRepo = await manager.validateGitRepo(projectDir);
-console.log(`1. Is git repo: ${isGitRepo}`);
+const isGitRepo = await manager.validateGitRepo(projectDir)
+console.log(`1. Is git repo: ${isGitRepo}`)
 if (!isGitRepo) {
-  console.error("Not a git repo — run this from the bouncer project root");
-  process.exit(1);
+  console.error('Not a git repo — run this from the bouncer project root')
+  process.exit(1)
 }
 
 // Create worktree
-console.log(`\n2. Creating worktree for session ${sessionId}...`);
-const info = await manager.create(sessionId, projectDir);
-console.log(`   Path: ${info.path}`);
-console.log(`   Branch: ${info.branch}`);
+console.log(`\n2. Creating worktree for session ${sessionId}...`)
+const info = await manager.create(sessionId, projectDir)
+console.log(`   Path: ${info.path}`)
+console.log(`   Branch: ${info.branch}`)
 
 // Verify it exists
-const { stdout: worktreeList } = await execFileAsync(
-  "git", ["worktree", "list"], { cwd: projectDir }
-);
-console.log(`\n3. git worktree list:\n${worktreeList}`);
+const { stdout: worktreeList } = await execFileAsync('git', ['worktree', 'list'], { cwd: projectDir })
+console.log(`\n3. git worktree list:\n${worktreeList}`)
 
 // Verify branch exists
-const { stdout: branchList } = await execFileAsync(
-  "git", ["branch", "--list", info.branch], { cwd: projectDir }
-);
-console.log(`4. Branch exists: ${branchList.trim().length > 0}`);
+const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', info.branch], { cwd: projectDir })
+console.log(`4. Branch exists: ${branchList.trim().length > 0}`)
 
 // Remove worktree
-console.log(`\n5. Removing worktree...`);
-await manager.remove(info);
+console.log(`\n5. Removing worktree...`)
+await manager.remove(info)
 
 // Verify cleanup
-const { stdout: worktreeListAfter } = await execFileAsync(
-  "git", ["worktree", "list"], { cwd: projectDir }
-);
-console.log(`6. git worktree list after cleanup:\n${worktreeListAfter}`);
+const { stdout: worktreeListAfter } = await execFileAsync('git', ['worktree', 'list'], { cwd: projectDir })
+console.log(`6. git worktree list after cleanup:\n${worktreeListAfter}`)
 
-const { stdout: branchListAfter } = await execFileAsync(
-  "git", ["branch", "--list", info.branch], { cwd: projectDir }
-);
-console.log(`7. Branch gone: ${branchListAfter.trim().length === 0}`);
+const { stdout: branchListAfter } = await execFileAsync('git', ['branch', '--list', info.branch], { cwd: projectDir })
+console.log(`7. Branch gone: ${branchListAfter.trim().length === 0}`)
 
-console.log("\n=== Done ===");
+console.log('\n=== Done ===')
 ```
 
 Add to `package.json` scripts:
+
 ```json
 "test:worktree": "tsx scripts/test-worktree.ts"
 ```
@@ -270,16 +269,16 @@ ls -la node_modules/.bin/claude-agent-acp*
 The spawning pattern should mirror how we resolve `tsx` for the echo agent. In `session-manager.ts` the existing code uses `createRequire` to resolve binary paths:
 
 ```typescript
-const require = createRequire(app.getAppPath() + "/");
-const tsxBin = require.resolve("tsx/cli");
+const require = createRequire(app.getAppPath() + '/')
+const tsxBin = require.resolve('tsx/cli')
 ```
 
 We need the equivalent for `claude-agent-acp`. The exact `require.resolve()` target depends on what the package exports:
 
 ```typescript
 // Likely one of:
-require.resolve("@zed-industries/claude-agent-acp/bin");
-require.resolve("@zed-industries/claude-agent-acp/cli");
+require.resolve('@zed-industries/claude-agent-acp/bin')
+require.resolve('@zed-industries/claude-agent-acp/cli')
 // or the path from the package.json bin field
 ```
 
@@ -291,17 +290,17 @@ require.resolve("@zed-industries/claude-agent-acp/cli");
 
 The ACP SDK defines these optional Client methods (from `sdk-deviations.md`, only `requestPermission` and `sessionUpdate` are required):
 
-| Method | Required? | Expected by Claude Code? |
-|--------|-----------|--------------------------|
-| `sessionUpdate` | Yes | Yes — streaming responses |
-| `requestPermission` | Yes | Yes — permission prompts |
-| `readTextFile` | No | Likely — Read tool |
-| `writeTextFile` | No | Likely — Write/Edit tools |
-| `createTerminal` | No | Likely — Bash tool |
-| `terminalOutput` | No | Likely — get command output |
-| `killTerminal` | No | Likely — kill running commands |
-| `waitForTerminalExit` | No | Likely — await command completion |
-| `releaseTerminal` | No | Likely — cleanup after command |
+| Method                | Required? | Expected by Claude Code?          |
+| --------------------- | --------- | --------------------------------- |
+| `sessionUpdate`       | Yes       | Yes — streaming responses         |
+| `requestPermission`   | Yes       | Yes — permission prompts          |
+| `readTextFile`        | No        | Likely — Read tool                |
+| `writeTextFile`       | No        | Likely — Write/Edit tools         |
+| `createTerminal`      | No        | Likely — Bash tool                |
+| `terminalOutput`      | No        | Likely — get command output       |
+| `killTerminal`        | No        | Likely — kill running commands    |
+| `waitForTerminalExit` | No        | Likely — await command completion |
+| `releaseTerminal`     | No        | Likely — cleanup after command    |
 
 We need to discover which of these Claude Code actually calls. The test script in 2.4 will reveal this — any unimplemented method that Claude Code calls will throw an error.
 
@@ -323,29 +322,29 @@ We need to discover which of these Claude Code actually calls. The test script i
 //   - @zed-industries/claude-agent-acp installed
 //   - ANTHROPIC_API_KEY set or Claude Code OAuth active
 
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import { Writable, Readable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { Writable, Readable } from 'node:stream'
+import * as acp from '@agentclientprotocol/sdk'
 
-const require = createRequire(import.meta.url);
+const require = createRequire(import.meta.url)
 
 // --- Resolve the claude-agent-acp binary ---
 // TODO: Update this path after discovery in step 2.2
-const agentBin = require.resolve("@zed-industries/claude-agent-acp/bin");
+const agentBin = require.resolve('@zed-industries/claude-agent-acp/bin')
 
 const agent = spawn(process.execPath, [agentBin], {
-  stdio: ["pipe", "pipe", "inherit"], // stderr → console for debugging
+  stdio: ['pipe', 'pipe', 'inherit'], // stderr → console for debugging
   cwd: process.cwd(),
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-});
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+})
 
-agent.on("error", (err) => console.error("Agent spawn error:", err));
-agent.on("exit", (code) => console.log(`Agent exited with code ${code}`));
+agent.on('error', (err) => console.error('Agent spawn error:', err))
+agent.on('exit', (code) => console.log(`Agent exited with code ${code}`))
 
-const output = Writable.toWeb(agent.stdin!) as WritableStream<Uint8Array>;
-const input = Readable.toWeb(agent.stdout!) as ReadableStream<Uint8Array>;
-const stream = acp.ndJsonStream(output, input);
+const output = Writable.toWeb(agent.stdin!) as WritableStream<Uint8Array>
+const input = Readable.toWeb(agent.stdout!) as ReadableStream<Uint8Array>
+const stream = acp.ndJsonStream(output, input)
 
 // --- Client implementation with logging stubs ---
 // Every method logs its call so we can see what Claude Code actually uses.
@@ -353,146 +352,144 @@ const stream = acp.ndJsonStream(output, input);
 const connection = new acp.ClientSideConnection(
   (_agentInterface) => ({
     async sessionUpdate(params) {
-      const update = params.update;
-      if (
-        update.sessionUpdate === "agent_message_chunk" &&
-        update.content.type === "text"
-      ) {
-        process.stdout.write(update.content.text);
+      const update = params.update
+      if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
+        process.stdout.write(update.content.text)
       } else {
-        console.log("\n[sessionUpdate]", JSON.stringify(update, null, 2));
+        console.log('\n[sessionUpdate]', JSON.stringify(update, null, 2))
       }
     },
 
     async requestPermission(params) {
-      console.log("\n[requestPermission]", JSON.stringify(params, null, 2));
+      console.log('\n[requestPermission]', JSON.stringify(params, null, 2))
       // Auto-approve for testing
-      return { outcome: { outcome: "approved" as const } };
+      return { outcome: { outcome: 'approved' as const } }
     },
 
     // --- Discovery stubs: log and implement minimally ---
 
     async readTextFile(params) {
-      console.log("\n[readTextFile]", JSON.stringify(params));
+      console.log('\n[readTextFile]', JSON.stringify(params))
       // Passthrough to filesystem
-      const { readFile } = await import("node:fs/promises");
-      const content = await readFile(params.uri, "utf-8");
-      return { content };
+      const { readFile } = await import('node:fs/promises')
+      const content = await readFile(params.uri, 'utf-8')
+      return { content }
     },
 
     async writeTextFile(params) {
-      console.log("\n[writeTextFile]", JSON.stringify(params));
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(params.uri, params.content, "utf-8");
+      console.log('\n[writeTextFile]', JSON.stringify(params))
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(params.uri, params.content, 'utf-8')
     },
 
     async createTerminal(params) {
-      console.log("\n[createTerminal]", JSON.stringify(params));
+      console.log('\n[createTerminal]', JSON.stringify(params))
       // Minimal terminal: spawn shell, return ID
-      const { spawn: spawnShell } = await import("node:child_process");
-      const shell = spawnShell(process.env.SHELL || "/bin/zsh", [], {
+      const { spawn: spawnShell } = await import('node:child_process')
+      const shell = spawnShell(process.env.SHELL || '/bin/zsh', [], {
         cwd: process.cwd(),
         env: { ...process.env },
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      const terminalId = `term-${Date.now()}`;
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      const terminalId = `term-${Date.now()}`
       // Store for later use (simplified — real impl uses a Map on session state)
-      (globalThis as any).__terminals = (globalThis as any).__terminals || {};
-      (globalThis as any).__terminals[terminalId] = {
+      ;(globalThis as any).__terminals = (globalThis as any).__terminals || {}
+      ;(globalThis as any).__terminals[terminalId] = {
         process: shell,
-        output: "",
-      };
-      shell.stdout?.on("data", (data: Buffer) => {
-        (globalThis as any).__terminals[terminalId].output += data.toString();
-      });
-      shell.stderr?.on("data", (data: Buffer) => {
-        (globalThis as any).__terminals[terminalId].output += data.toString();
-      });
-      return { terminalId };
+        output: '',
+      }
+      shell.stdout?.on('data', (data: Buffer) => {
+        ;(globalThis as any).__terminals[terminalId].output += data.toString()
+      })
+      shell.stderr?.on('data', (data: Buffer) => {
+        ;(globalThis as any).__terminals[terminalId].output += data.toString()
+      })
+      return { terminalId }
     },
 
     async terminalOutput(params) {
-      console.log("\n[terminalOutput]", JSON.stringify(params));
-      const term = (globalThis as any).__terminals?.[params.terminalId];
-      if (!term) throw new Error(`Unknown terminal: ${params.terminalId}`);
-      const output = term.output;
-      term.output = ""; // Consume
-      return { output };
+      console.log('\n[terminalOutput]', JSON.stringify(params))
+      const term = (globalThis as any).__terminals?.[params.terminalId]
+      if (!term) throw new Error(`Unknown terminal: ${params.terminalId}`)
+      const output = term.output
+      term.output = '' // Consume
+      return { output }
     },
 
     async killTerminal(params) {
-      console.log("\n[killTerminal]", JSON.stringify(params));
-      const term = (globalThis as any).__terminals?.[params.terminalId];
-      if (term) term.process.kill("SIGTERM");
+      console.log('\n[killTerminal]', JSON.stringify(params))
+      const term = (globalThis as any).__terminals?.[params.terminalId]
+      if (term) term.process.kill('SIGTERM')
     },
 
     async waitForTerminalExit(params) {
-      console.log("\n[waitForTerminalExit]", JSON.stringify(params));
-      const term = (globalThis as any).__terminals?.[params.terminalId];
-      if (!term) return { exitCode: 1 };
+      console.log('\n[waitForTerminalExit]', JSON.stringify(params))
+      const term = (globalThis as any).__terminals?.[params.terminalId]
+      if (!term) return { exitCode: 1 }
       return new Promise((resolve) => {
         if (term.process.exitCode !== null) {
-          resolve({ exitCode: term.process.exitCode });
+          resolve({ exitCode: term.process.exitCode })
         } else {
-          term.process.on("exit", (code: number | null) => {
-            resolve({ exitCode: code ?? 1 });
-          });
+          term.process.on('exit', (code: number | null) => {
+            resolve({ exitCode: code ?? 1 })
+          })
         }
-      });
+      })
     },
 
     async releaseTerminal(params) {
-      console.log("\n[releaseTerminal]", JSON.stringify(params));
-      const term = (globalThis as any).__terminals?.[params.terminalId];
+      console.log('\n[releaseTerminal]', JSON.stringify(params))
+      const term = (globalThis as any).__terminals?.[params.terminalId]
       if (term) {
-        term.process.kill();
-        delete (globalThis as any).__terminals[params.terminalId];
+        term.process.kill()
+        delete (globalThis as any).__terminals[params.terminalId]
       }
     },
   }),
-  stream
-);
+  stream,
+)
 
 // --- Drive the protocol ---
 
 try {
-  console.log("Initializing...");
+  console.log('Initializing...')
   const initResp = await connection.initialize({
     protocolVersion: acp.PROTOCOL_VERSION,
     clientCapabilities: {},
-  });
-  console.log("Initialized:", JSON.stringify(initResp, null, 2));
+  })
+  console.log('Initialized:', JSON.stringify(initResp, null, 2))
 
-  console.log("\nCreating session...");
+  console.log('\nCreating session...')
   const sessionResp = await connection.newSession({
     cwd: process.cwd(),
     mcpServers: [],
-  });
-  console.log("Session:", sessionResp.sessionId);
+  })
+  console.log('Session:', sessionResp.sessionId)
 
   // Simple prompt that exercises file reading and terminal use
-  const prompt = "What files are in the current directory? List them briefly.";
-  console.log(`\nSending prompt: "${prompt}"\n`);
-  console.log("--- Response ---");
+  const prompt = 'What files are in the current directory? List them briefly.'
+  console.log(`\nSending prompt: "${prompt}"\n`)
+  console.log('--- Response ---')
 
   const promptResp = await connection.prompt({
     sessionId: sessionResp.sessionId,
-    prompt: [{ type: "text", text: prompt }],
-  });
+    prompt: [{ type: 'text', text: prompt }],
+  })
 
-  console.log("\n--- End Response ---");
-  console.log(`\nStop reason: ${promptResp.stopReason}`);
+  console.log('\n--- End Response ---')
+  console.log(`\nStop reason: ${promptResp.stopReason}`)
 } catch (err) {
-  console.error("\nError:", err);
-  process.exitCode = 1;
+  console.error('\nError:', err)
+  process.exitCode = 1
 } finally {
-  agent.kill();
+  agent.kill()
 }
 ```
 
 **Important:** The `readTextFile`, `writeTextFile`, `createTerminal`, etc. signatures above are guesses based on the ACP reference doc. The actual parameter and return types may differ. The SDK's TypeScript compiler will flag mismatches — fix them during implementation.
 
 Add to `package.json` scripts:
+
 ```json
 "test:claude-agent": "tsx scripts/test-claude-agent.ts"
 ```
@@ -508,6 +505,7 @@ Add to `package.json` scripts:
 **Expected observations:**
 
 For a prompt like "What files are in the current directory?", Claude Code should:
+
 1. Call `createTerminal` to spawn a shell
 2. Write `ls` (or similar) to the terminal
 3. Call `waitForTerminalExit` / `terminalOutput` to get the result
@@ -544,15 +542,15 @@ With the discovery from Phase 2 in hand, implement proper terminal management. T
 - [ ] Add to `src/main/types.ts`
 
 ```typescript
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess } from 'node:child_process'
 
 export interface TerminalState {
-  id: string;
-  process: ChildProcess;
-  output: string;        // Accumulated stdout + stderr since last read
-  exitCode: number | null;
-  exited: boolean;
-  exitPromise: Promise<number>; // Resolves when process exits
+  id: string
+  process: ChildProcess
+  output: string // Accumulated stdout + stderr since last read
+  exitCode: number | null
+  exited: boolean
+  exitPromise: Promise<number> // Resolves when process exits
 }
 ```
 
@@ -684,18 +682,18 @@ Wire everything together in the session manager. This phase modifies `src/main/s
 ```typescript
 interface SessionState {
   // Existing fields from M0
-  id: string;
-  acpSessionId: string;
-  agentProcess: ChildProcess;
-  connection: acp.ClientSideConnection;
-  messages: Message[];
-  status: "initializing" | "ready" | "error" | "closed";
+  id: string
+  acpSessionId: string
+  agentProcess: ChildProcess
+  connection: acp.ClientSideConnection
+  messages: Message[]
+  status: 'initializing' | 'ready' | 'error' | 'closed'
 
   // New fields for M1
-  agentType: AgentType;
-  projectDir: string;
-  worktree: WorktreeInfo | null;   // null for echo agent sessions
-  terminals: Map<string, TerminalState>;
+  agentType: AgentType
+  projectDir: string
+  worktree: WorktreeInfo | null // null for echo agent sessions
+  terminals: Map<string, TerminalState>
 }
 ```
 
@@ -758,24 +756,24 @@ async createSession(
 ```typescript
 function resolveAgentCommand(
   agentType: AgentType,
-  worktreePath: string | null
+  worktreePath: string | null,
 ): { cmd: string; args: string[]; env?: Record<string, string>; cwd?: string } {
-  if (agentType === "echo") {
-    return resolveEchoAgentCommand();
+  if (agentType === 'echo') {
+    return resolveEchoAgentCommand()
   }
-  return resolveClaudeCodeCommand(worktreePath!);
+  return resolveClaudeCodeCommand(worktreePath!)
 }
 
 function resolveClaudeCodeCommand(worktreePath: string) {
-  const require = createRequire(app.getAppPath() + "/");
+  const require = createRequire(app.getAppPath() + '/')
   // TODO: Update path based on Phase 2 discovery
-  const binPath = require.resolve("@zed-industries/claude-agent-acp/bin");
+  const binPath = require.resolve('@zed-industries/claude-agent-acp/bin')
   return {
     cmd: process.execPath,
     args: [binPath],
-    env: { ELECTRON_RUN_AS_NODE: "1" },
+    env: { ELECTRON_RUN_AS_NODE: '1' },
     cwd: worktreePath,
-  };
+  }
 }
 ```
 
@@ -801,15 +799,15 @@ Where `resolveFilePath` normalizes the URI/path:
 ```typescript
 function resolveFilePath(uri: string, cwd: string): string {
   // Handle file:// URIs
-  if (uri.startsWith("file://")) {
-    return new URL(uri).pathname;
+  if (uri.startsWith('file://')) {
+    return new URL(uri).pathname
   }
   // Handle relative paths
-  if (!uri.startsWith("/")) {
-    return join(cwd, uri);
+  if (!uri.startsWith('/')) {
+    return join(cwd, uri)
   }
   // Absolute path — use as-is
-  return uri;
+  return uri
 }
 ```
 
@@ -934,16 +932,16 @@ Wire the new session manager capabilities into the renderer through the IPC brid
 - [ ] Add handler in `src/main/index.ts`
 
 ```typescript
-import { dialog } from "electron";
+import { dialog } from 'electron'
 
-ipcMain.handle("dialog:selectDirectory", async () => {
+ipcMain.handle('dialog:selectDirectory', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ["openDirectory"],
-    title: "Select project directory",
-  });
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
-});
+    properties: ['openDirectory'],
+    title: 'Select project directory',
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
 ```
 
 ### 5.2 Update `sessions:create` to accept parameters
@@ -951,17 +949,13 @@ ipcMain.handle("dialog:selectDirectory", async () => {
 - [ ] Modify the IPC handler to pass through `projectDir` and `agentType`
 
 ```typescript
-ipcMain.handle(
-  "sessions:create",
-  (_e, projectDir: unknown, agentType: unknown) => {
-    if (typeof projectDir !== "string") {
-      throw new Error("Invalid argument: projectDir must be a string");
-    }
-    const validAgentType =
-      agentType === "echo" ? "echo" : "claude-code";
-    return sessionManager.createSession(projectDir, validAgentType);
+ipcMain.handle('sessions:create', (_e, projectDir: unknown, agentType: unknown) => {
+  if (typeof projectDir !== 'string') {
+    throw new Error('Invalid argument: projectDir must be a string')
   }
-);
+  const validAgentType = agentType === 'echo' ? 'echo' : 'claude-code'
+  return sessionManager.createSession(projectDir, validAgentType)
+})
 ```
 
 ### 5.3 Update preload bridge
@@ -969,26 +963,22 @@ ipcMain.handle(
 - [ ] Add `dialog.selectDirectory` and update `sessions.create` signature
 
 ```typescript
-contextBridge.exposeInMainWorld("glitterball", {
+contextBridge.exposeInMainWorld('glitterball', {
   sessions: {
-    list: () => ipcRenderer.invoke("sessions:list"),
-    create: (projectDir: string, agentType?: string) =>
-      ipcRenderer.invoke("sessions:create", projectDir, agentType),
-    sendMessage: (sessionId: string, text: string) =>
-      ipcRenderer.invoke("sessions:sendMessage", sessionId, text),
-    closeSession: (sessionId: string) =>
-      ipcRenderer.invoke("sessions:close", sessionId),
+    list: () => ipcRenderer.invoke('sessions:list'),
+    create: (projectDir: string, agentType?: string) => ipcRenderer.invoke('sessions:create', projectDir, agentType),
+    sendMessage: (sessionId: string, text: string) => ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
+    closeSession: (sessionId: string) => ipcRenderer.invoke('sessions:close', sessionId),
     onUpdate: (callback: (update: unknown) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, update: unknown): void =>
-        callback(update);
-      ipcRenderer.on("session-update", handler);
-      return () => ipcRenderer.removeListener("session-update", handler);
+      const handler = (_event: Electron.IpcRendererEvent, update: unknown): void => callback(update)
+      ipcRenderer.on('session-update', handler)
+      return () => ipcRenderer.removeListener('session-update', handler)
     },
   },
   dialog: {
-    selectDirectory: () => ipcRenderer.invoke("dialog:selectDirectory"),
+    selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
   },
-});
+})
 ```
 
 ### 5.4 Update renderer type declarations
@@ -998,24 +988,24 @@ contextBridge.exposeInMainWorld("glitterball", {
 ```typescript
 /// <reference types="vite/client" />
 
-import type { AgentType, SessionSummary, SessionUpdate } from "../../main/types";
+import type { AgentType, SessionSummary, SessionUpdate } from '../../main/types'
 
 interface GlitterballAPI {
   sessions: {
-    list(): Promise<SessionSummary[]>;
-    create(projectDir: string, agentType?: AgentType): Promise<SessionSummary>;
-    sendMessage(sessionId: string, text: string): Promise<void>;
-    closeSession(sessionId: string): Promise<void>;
-    onUpdate(callback: (update: SessionUpdate) => void): () => void;
-  };
+    list(): Promise<SessionSummary[]>
+    create(projectDir: string, agentType?: AgentType): Promise<SessionSummary>
+    sendMessage(sessionId: string, text: string): Promise<void>
+    closeSession(sessionId: string): Promise<void>
+    onUpdate(callback: (update: SessionUpdate) => void): () => void
+  }
   dialog: {
-    selectDirectory(): Promise<string | null>;
-  };
+    selectDirectory(): Promise<string | null>
+  }
 }
 
 declare global {
   interface Window {
-    glitterball: GlitterballAPI;
+    glitterball: GlitterballAPI
   }
 }
 ```
@@ -1028,10 +1018,8 @@ declare global {
 
 ```typescript
 // In SessionList, per session entry:
-const label = session.projectDir
-  ? session.projectDir.split("/").pop()
-  : `Session`;
-const agentLabel = session.agentType === "echo" ? " (echo)" : "";
+const label = session.projectDir ? session.projectDir.split('/').pop() : `Session`
+const agentLabel = session.agentType === 'echo' ? ' (echo)' : ''
 // Render: <span>{label}{agentLabel}</span>
 ```
 
@@ -1042,14 +1030,14 @@ const agentLabel = session.agentType === "echo" ? " (echo)" : "";
 ```typescript
 async function handleCreateSession() {
   try {
-    const projectDir = await window.glitterball.dialog.selectDirectory();
-    if (!projectDir) return; // User cancelled
+    const projectDir = await window.glitterball.dialog.selectDirectory()
+    if (!projectDir) return // User cancelled
 
-    const session = await window.glitterball.sessions.create(projectDir);
-    setSessions((prev) => [...prev, session]);
-    setActiveSessionId(session.id);
+    const session = await window.glitterball.sessions.create(projectDir)
+    setSessions((prev) => [...prev, session])
+    setActiveSessionId(session.id)
   } catch (err) {
-    console.error("Failed to create session:", err);
+    console.error('Failed to create session:', err)
     // TODO: show error in UI (e.g., "Not a git repository")
   }
 }
@@ -1130,12 +1118,12 @@ case "plan-update":
 
 ```typescript
 export interface Message {
-  id: string;
-  role: "user" | "agent";
-  text: string;
-  timestamp: number;
-  streaming?: boolean;
-  toolCalls?: ToolCallInfo[];  // New in M1
+  id: string
+  role: 'user' | 'agent'
+  text: string
+  timestamp: number
+  streaming?: boolean
+  toolCalls?: ToolCallInfo[] // New in M1
 }
 ```
 
@@ -1163,20 +1151,20 @@ export interface Message {
 - [ ] Parse stderr output from the agent process on early exit to surface the actual error message
 
 ```typescript
-agentProcess.on("exit", (code) => {
-  if (session.status === "initializing" && code !== 0) {
+agentProcess.on('exit', (code) => {
+  if (session.status === 'initializing' && code !== 0) {
     // Agent died during startup — likely auth or config issue
-    const stderr = collectedStderr; // Captured from stderr stream
-    session.status = "error";
-    session.errorMessage = stderr || `Agent exited with code ${code}`;
-    this.emit("session-update", {
+    const stderr = collectedStderr // Captured from stderr stream
+    session.status = 'error'
+    session.errorMessage = stderr || `Agent exited with code ${code}`
+    this.emit('session-update', {
       sessionId: id,
-      type: "status-change",
-      status: "error",
+      type: 'status-change',
+      status: 'error',
       error: session.errorMessage,
-    });
+    })
   }
-});
+})
 ```
 
 - [ ] Add optional `error?: string` field to the `status-change` update variant
@@ -1267,14 +1255,14 @@ Run through this manually before considering M1 complete:
 
 ## Sequencing Summary
 
-| Phase | Description | Depends On | Key Risk |
-|-------|-------------|------------|----------|
-| 1 | Worktree manager | — | Git edge cases (submodules, dirty state) |
-| 2 | Claude Code agent discovery | Phase 1 (for worktree CWD) | **Highest risk** — first contact with `claude-agent-acp` |
-| 3 | Terminal management | Phase 2 (to know terminal semantics) | PTY requirement, command execution model |
-| 4 | Session manager integration | Phase 1, 2, 3 | Wiring complexity, type alignment |
-| 5 | IPC and UI updates | Phase 4 | Directory picker UX, tool call rendering |
-| 6 | Edge cases and polish | Phase 5 | Cleanup reliability, error surface area |
+| Phase | Description                 | Depends On                           | Key Risk                                                 |
+| ----- | --------------------------- | ------------------------------------ | -------------------------------------------------------- |
+| 1     | Worktree manager            | —                                    | Git edge cases (submodules, dirty state)                 |
+| 2     | Claude Code agent discovery | Phase 1 (for worktree CWD)           | **Highest risk** — first contact with `claude-agent-acp` |
+| 3     | Terminal management         | Phase 2 (to know terminal semantics) | PTY requirement, command execution model                 |
+| 4     | Session manager integration | Phase 1, 2, 3                        | Wiring complexity, type alignment                        |
+| 5     | IPC and UI updates          | Phase 4                              | Directory picker UX, tool call rendering                 |
+| 6     | Edge cases and polish       | Phase 5                              | Cleanup reliability, error surface area                  |
 
 **The highest-risk phase is 2** (Claude Code agent discovery). Everything in Phases 3-6 depends on what we learn there. If the `claude-agent-acp` package works differently than expected — different spawn mechanism, different Client method requirements, different terminal model — we'll need to adjust the design before proceeding. Phase 2's standalone test script is specifically designed to absorb this risk before we modify the session manager.
 

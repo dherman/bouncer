@@ -28,7 +28,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
   - [x] 3.5 Write `scripts/test-sandbox-monitor.ts`
   - [x] 3.6 Smoke test: trigger a violation, verify monitor captures it
 - [x] **[Phase 4: UI Integration](#phase-4-ui-integration)**
-  - [x] 4.1 Add `SandboxViolationInfo` type and `sandbox-violation` SessionUpdate variant *(done in Phase 3)*
+  - [x] 4.1 Add `SandboxViolationInfo` type and `sandbox-violation` SessionUpdate variant _(done in Phase 3)_
   - [x] 4.2 Add IPC handler for violation history
   - [x] 4.3 Update preload bridge
   - [x] 4.4 Build `<SandboxLog />` component
@@ -60,6 +60,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 ### What was built
 
 **`src/main/sandbox.ts`** — Sandbox integration module with:
+
 - `SandboxConfig` interface — session-specific sandbox parameters
 - `defaultSandboxConfig()` — builds config with worktree write access, git common dir, env passthrough
 - `buildSafehouseArgs()` — constructs safehouse CLI arguments from config
@@ -67,6 +68,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 - `ensurePolicyDir()`, `cleanupPolicy()`, `cleanupOrphanPolicies()` — policy file lifecycle
 
 **`scripts/test-sandbox-profile.ts`** — Validation script testing 7 scenarios:
+
 1. Safehouse CLI availability
 2. `ls` in worktree via safehouse (allowed)
 3. Generated policy file inspection (rule counts)
@@ -76,6 +78,7 @@ This plan breaks the [design](design.md) into concrete, sequentially-executable 
 7. Stdio piping through safehouse (critical for ACP)
 
 **Key decisions:**
+
 - Safehouse is spawned as the command wrapper — it handles `sandbox-exec` internally
 - Policy files are persisted via `--output` so we control lifecycle (cleanup on session close)
 - `--workdir` enables safehouse's git root auto-detection and worktree handling
@@ -98,37 +101,28 @@ Wire the sandbox module into the session manager so that Claude Code sessions la
 - [ ] When sandbox is available, spawn via `safehouse` instead of bare `node`
 
 ```typescript
-function resolveClaudeCodeCommand(
-  cwd: string,
-  sandboxConfig: SandboxConfig | null,
-): SpawnConfig {
-  const require = createRequire(app.getAppPath() + "/");
-  const binPath = require.resolve(
-    "@zed-industries/claude-agent-acp/dist/index.js"
-  );
+function resolveClaudeCodeCommand(cwd: string, sandboxConfig: SandboxConfig | null): SpawnConfig {
+  const require = createRequire(app.getAppPath() + '/')
+  const binPath = require.resolve('@zed-industries/claude-agent-acp/dist/index.js')
 
   if (sandboxConfig) {
-    const args = buildSafehouseArgs(sandboxConfig, ["node", binPath]);
-    return { cmd: "safehouse", args, cwd };
+    const args = buildSafehouseArgs(sandboxConfig, ['node', binPath])
+    return { cmd: 'safehouse', args, cwd }
   }
 
   // Unsandboxed fallback
-  return { cmd: "node", args: [binPath], cwd };
+  return { cmd: 'node', args: [binPath], cwd }
 }
 ```
 
 - [ ] Update `resolveAgentCommand()` to pass sandbox config through
 
 ```typescript
-function resolveAgentCommand(
-  agentType: AgentType,
-  cwd: string,
-  sandboxConfig: SandboxConfig | null,
-): SpawnConfig {
-  if (agentType === "echo") {
-    return resolveEchoAgentCommand(); // unchanged — no sandbox for echo
+function resolveAgentCommand(agentType: AgentType, cwd: string, sandboxConfig: SandboxConfig | null): SpawnConfig {
+  if (agentType === 'echo') {
+    return resolveEchoAgentCommand() // unchanged — no sandbox for echo
   }
-  return resolveClaudeCodeCommand(cwd, sandboxConfig);
+  return resolveClaudeCodeCommand(cwd, sandboxConfig)
 }
 ```
 
@@ -145,22 +139,18 @@ Insert after the worktree creation block:
 
 ```typescript
 // Build sandbox config
-let sandboxConfig: SandboxConfig | null = null;
-if (agentType === "claude-code" && await isSafehouseAvailable()) {
-  await ensurePolicyDir();
+let sandboxConfig: SandboxConfig | null = null
+if (agentType === 'claude-code' && (await isSafehouseAvailable())) {
+  await ensurePolicyDir()
   sandboxConfig = defaultSandboxConfig({
     sessionId: id,
     worktreePath: workingDir,
     gitCommonDir: worktree?.gitCommonDir,
-  });
+  })
 }
 
 // Spawn agent (sandboxed if config present)
-const { cmd, args, env, cwd } = resolveAgentCommand(
-  agentType,
-  workingDir,
-  sandboxConfig,
-);
+const { cmd, args, env, cwd } = resolveAgentCommand(agentType, workingDir, sandboxConfig)
 ```
 
 - [ ] Store sandbox config on the session state
@@ -172,9 +162,9 @@ const { cmd, args, env, cwd } = resolveAgentCommand(
 ```typescript
 interface SessionState {
   // ... existing fields ...
-  sandboxConfig: SandboxConfig | null;
-  sandboxMonitor: SandboxMonitor | null;   // wired in Phase 3
-  sandboxViolations: SandboxViolation[];   // populated in Phase 3
+  sandboxConfig: SandboxConfig | null
+  sandboxMonitor: SandboxMonitor | null // wired in Phase 3
+  sandboxViolations: SandboxViolation[] // populated in Phase 3
 }
 ```
 
@@ -187,10 +177,10 @@ interface SessionState {
 
 ```typescript
 // In closeSession():
-session.sandboxMonitor?.stop();
+session.sandboxMonitor?.stop()
 
 if (session.sandboxConfig) {
-  await cleanupPolicy(session.sandboxConfig.policyOutputPath);
+  await cleanupPolicy(session.sandboxConfig.policyOutputPath)
 }
 ```
 
@@ -201,16 +191,13 @@ if (session.sandboxConfig) {
 
 ```typescript
 // In WorktreeManager.create():
-const { stdout: commonDir } = await execFileAsync(
-  "git", ["rev-parse", "--git-common-dir"],
-  { cwd: worktreePath }
-);
+const { stdout: commonDir } = await execFileAsync('git', ['rev-parse', '--git-common-dir'], { cwd: worktreePath })
 return {
   path: worktreePath,
   branch,
   projectDir,
   gitCommonDir: resolve(worktreePath, commonDir.trim()),
-};
+}
 ```
 
 This is critical: linked worktrees store refs and metadata in the parent repo's `.git` directory. Without write access to the git common dir, `git commit`, `git branch`, and other git operations fail from within the worktree.
@@ -234,123 +221,119 @@ This script replicates the structure of `scripts/test-claude-agent.ts` from M1, 
 //   - @zed-industries/claude-agent-acp installed
 //   - ANTHROPIC_API_KEY set or Claude Code OAuth active
 
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
-import { Writable, Readable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { randomUUID } from 'node:crypto'
+import { rm } from 'node:fs/promises'
+import { Writable, Readable } from 'node:stream'
+import * as acp from '@agentclientprotocol/sdk'
 import {
   defaultSandboxConfig,
   buildSafehouseArgs,
   isSafehouseAvailable,
   ensurePolicyDir,
   cleanupPolicy,
-} from "../src/main/sandbox.js";
+} from '../src/main/sandbox.js'
 
-const require = createRequire(import.meta.url);
-const worktreePath = process.argv[2] || process.cwd();
-const sessionId = randomUUID();
+const require = createRequire(import.meta.url)
+const worktreePath = process.argv[2] || process.cwd()
+const sessionId = randomUUID()
 
-console.log("=== Sandboxed Agent Test ===\n");
+console.log('=== Sandboxed Agent Test ===\n')
 
-if (!await isSafehouseAvailable()) {
-  console.log("safehouse not found. Install: brew install eugene1g/safehouse/agent-safehouse");
-  process.exit(1);
+if (!(await isSafehouseAvailable())) {
+  console.log('safehouse not found. Install: brew install eugene1g/safehouse/agent-safehouse')
+  process.exit(1)
 }
 
 // Build sandbox config
-await ensurePolicyDir();
-const config = defaultSandboxConfig({ sessionId, worktreePath });
-console.log(`Worktree: ${worktreePath}`);
-console.log(`Policy: ${config.policyOutputPath}`);
+await ensurePolicyDir()
+const config = defaultSandboxConfig({ sessionId, worktreePath })
+console.log(`Worktree: ${worktreePath}`)
+console.log(`Policy: ${config.policyOutputPath}`)
 
 // Resolve agent binary
-const agentBin = require.resolve(
-  "@zed-industries/claude-agent-acp/dist/index.js"
-);
+const agentBin = require.resolve('@zed-industries/claude-agent-acp/dist/index.js')
 
 // Spawn via safehouse
-const args = buildSafehouseArgs(config, ["node", agentBin]);
-console.log(`\nSpawning: safehouse ${args.join(" ")}\n`);
+const args = buildSafehouseArgs(config, ['node', agentBin])
+console.log(`\nSpawning: safehouse ${args.join(' ')}\n`)
 
-const agent = spawn("safehouse", args, {
-  stdio: ["pipe", "pipe", "pipe"],
+const agent = spawn('safehouse', args, {
+  stdio: ['pipe', 'pipe', 'pipe'],
   cwd: worktreePath,
-});
+})
 
-agent.stderr?.on("data", (d: Buffer) => process.stderr.write(d));
-agent.on("error", (err) => console.error("Spawn error:", err));
-agent.on("exit", (code) => console.log(`\nAgent exited: code ${code}`));
+agent.stderr?.on('data', (d: Buffer) => process.stderr.write(d))
+agent.on('error', (err) => console.error('Spawn error:', err))
+agent.on('exit', (code) => console.log(`\nAgent exited: code ${code}`))
 
 // ACP setup
-const output = Writable.toWeb(agent.stdin!) as WritableStream<Uint8Array>;
-const input = Readable.toWeb(agent.stdout!) as ReadableStream<Uint8Array>;
-const stream = acp.ndJsonStream(output, input);
+const output = Writable.toWeb(agent.stdin!) as WritableStream<Uint8Array>
+const input = Readable.toWeb(agent.stdout!) as ReadableStream<Uint8Array>
+const stream = acp.ndJsonStream(output, input)
 
 const connection = new acp.ClientSideConnection(
   (_agentInfo) => ({
     async sessionUpdate(params) {
-      const update = params.update;
-      if (
-        update.sessionUpdate === "agent_message_chunk" &&
-        update.content.type === "text"
-      ) {
-        process.stdout.write(update.content.text);
+      const update = params.update
+      if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
+        process.stdout.write(update.content.text)
       } else {
-        console.log(`\n  [${update.sessionUpdate}]`);
+        console.log(`\n  [${update.sessionUpdate}]`)
       }
     },
     async requestPermission(params) {
-      const opt = params.options.find((o) => o.kind === "allow_once");
+      const opt = params.options.find((o) => o.kind === 'allow_once')
       return {
         outcome: {
-          outcome: "selected" as const,
+          outcome: 'selected' as const,
           optionId: (opt ?? params.options[0]).optionId,
         },
-      };
+      }
     },
   }),
   stream,
-);
+)
 
 try {
-  console.log("Initializing ACP...");
+  console.log('Initializing ACP...')
   await connection.initialize({
     protocolVersion: acp.PROTOCOL_VERSION,
     clientCapabilities: {
       terminal: true,
       fs: { readTextFile: true, writeTextFile: true },
     },
-  });
-  console.log("✓ Initialize succeeded");
+  })
+  console.log('✓ Initialize succeeded')
 
   const sessionResp = await connection.newSession({
     cwd: worktreePath,
     mcpServers: [],
-  });
-  console.log(`✓ New session: ${sessionResp.sessionId}`);
+  })
+  console.log(`✓ New session: ${sessionResp.sessionId}`)
 
-  const prompt = "List the files in the current directory. Be brief.";
-  console.log(`\nPrompt: "${prompt}"\n--- Response ---`);
+  const prompt = 'List the files in the current directory. Be brief.'
+  console.log(`\nPrompt: "${prompt}"\n--- Response ---`)
   const resp = await connection.prompt({
     sessionId: sessionResp.sessionId,
-    prompt: [{ type: "text", text: prompt }],
-  });
-  console.log(`\n--- End (stop: ${resp.stopReason}) ---`);
-  console.log("\n✓ Sandboxed agent completed successfully");
+    prompt: [{ type: 'text', text: prompt }],
+  })
+  console.log(`\n--- End (stop: ${resp.stopReason}) ---`)
+  console.log('\n✓ Sandboxed agent completed successfully')
 } catch (err) {
-  console.error("\n✗ Error:", err);
-  process.exitCode = 1;
+  console.error('\n✗ Error:', err)
+  process.exitCode = 1
 } finally {
-  agent.kill();
-  await cleanupPolicy(config.policyOutputPath);
+  agent.kill()
+  await cleanupPolicy(config.policyOutputPath)
 }
 
-console.log("\n=== Done ===");
+console.log('\n=== Done ===')
 ```
 
 Add to `package.json` scripts:
+
 ```json
 "test:sandboxed-agent": "tsx scripts/test-sandboxed-agent.ts"
 ```
@@ -384,27 +367,31 @@ Build the log-stream-based violation monitor. This is informational infrastructu
 - [ ] Create the file with types and class skeleton
 
 ```typescript
-import { spawn, type ChildProcess } from "node:child_process";
-import { EventEmitter } from "node:events";
-import { createInterface } from "node:readline";
+import { spawn, type ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
+import { createInterface } from 'node:readline'
 
 export interface SandboxViolation {
-  timestamp: Date;
-  pid: number;
-  processName: string;
-  operation: string;
-  path?: string;
-  raw: string;
+  timestamp: Date
+  pid: number
+  processName: string
+  operation: string
+  path?: string
+  raw: string
 }
 
 export class SandboxMonitor extends EventEmitter {
-  private logProcess: ChildProcess | null = null;
-  private rootPid: number = 0;
-  private knownPids: Set<number> = new Set();
-  private pidRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private logProcess: ChildProcess | null = null
+  private rootPid: number = 0
+  private knownPids: Set<number> = new Set()
+  private pidRefreshTimer: ReturnType<typeof setInterval> | null = null
 
-  start(pid: number): void { /* ... */ }
-  stop(): void { /* ... */ }
+  start(pid: number): void {
+    /* ... */
+  }
+  stop(): void {
+    /* ... */
+  }
 }
 ```
 
@@ -436,6 +423,7 @@ export class SandboxMonitor extends EventEmitter {
 - [ ] Verify the monitor catches them
 
 Add to `package.json` scripts:
+
 ```json
 "test:sandbox-monitor": "tsx scripts/test-sandbox-monitor.ts"
 ```
@@ -610,32 +598,32 @@ Run these checks after all phases are complete:
 
 ### New files
 
-| File | Purpose |
-|------|---------|
-| `src/main/sandbox.ts` | Safehouse integration: config, arg building, availability check, cleanup |
-| `src/main/sandbox-monitor.ts` | Unified log monitoring for sandbox violations |
-| `src/renderer/src/components/SandboxLog.tsx` | UI component for violation log display |
-| `scripts/test-sandbox-profile.ts` | Test harness for safehouse integration |
-| `scripts/test-sandboxed-agent.ts` | Test harness for sandboxed agent spawning |
-| `scripts/test-sandbox-monitor.ts` | Test harness for violation monitoring |
-| `docs/milestones/seatbelt-sandbox/findings.md` | Empirical findings from sandbox testing |
+| File                                           | Purpose                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/main/sandbox.ts`                          | Safehouse integration: config, arg building, availability check, cleanup |
+| `src/main/sandbox-monitor.ts`                  | Unified log monitoring for sandbox violations                            |
+| `src/renderer/src/components/SandboxLog.tsx`   | UI component for violation log display                                   |
+| `scripts/test-sandbox-profile.ts`              | Test harness for safehouse integration                                   |
+| `scripts/test-sandboxed-agent.ts`              | Test harness for sandboxed agent spawning                                |
+| `scripts/test-sandbox-monitor.ts`              | Test harness for violation monitoring                                    |
+| `docs/milestones/seatbelt-sandbox/findings.md` | Empirical findings from sandbox testing                                  |
 
 ### Modified files
 
-| File | Changes |
-|------|---------|
-| `src/main/session-manager.ts` | Sandbox config, safehouse spawn, monitor lifecycle, violation tracking |
-| `src/main/worktree-manager.ts` | Add `gitCommonDir` to `WorktreeInfo` |
-| `src/main/types.ts` | `SandboxViolationInfo`, `sandbox-violation` SessionUpdate variant |
-| `src/preload/index.ts` | `getSandboxViolations` IPC bridge method |
-| `src/renderer/src/env.d.ts` | Type declarations for new IPC methods |
-| `src/renderer/src/App.tsx` | Violation state management, `sandbox-violation` update handling |
-| `src/renderer/src/components/ChatPanel.tsx` | `<SandboxLog />` integration |
-| `src/renderer/src/components/SessionList.tsx` | Sandbox status badge |
-| `package.json` | New test scripts |
+| File                                          | Changes                                                                |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| `src/main/session-manager.ts`                 | Sandbox config, safehouse spawn, monitor lifecycle, violation tracking |
+| `src/main/worktree-manager.ts`                | Add `gitCommonDir` to `WorktreeInfo`                                   |
+| `src/main/types.ts`                           | `SandboxViolationInfo`, `sandbox-violation` SessionUpdate variant      |
+| `src/preload/index.ts`                        | `getSandboxViolations` IPC bridge method                               |
+| `src/renderer/src/env.d.ts`                   | Type declarations for new IPC methods                                  |
+| `src/renderer/src/App.tsx`                    | Violation state management, `sandbox-violation` update handling        |
+| `src/renderer/src/components/ChatPanel.tsx`   | `<SandboxLog />` integration                                           |
+| `src/renderer/src/components/SessionList.tsx` | Sandbox status badge                                                   |
+| `package.json`                                | New test scripts                                                       |
 
 ### External dependencies
 
-| Dependency | Type | Install |
-|------------|------|---------|
+| Dependency        | Type                           | Install                                           |
+| ----------------- | ------------------------------ | ------------------------------------------------- |
 | `agent-safehouse` | CLI tool (runtime, macOS only) | `brew install eugene1g/safehouse/agent-safehouse` |

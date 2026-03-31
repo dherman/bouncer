@@ -1,4 +1,4 @@
-import type { PolicyTemplate } from "./types.js";
+import type { PolicyTemplate } from './types.js'
 
 /**
  * Standard PR implementation: read-write worktree, filtered network via proxy.
@@ -7,51 +7,48 @@ import type { PolicyTemplate } from "./types.js";
  * GitHub API/git push enforcement.
  */
 export const standardPrTemplate: PolicyTemplate = {
-  id: "standard-pr",
-  name: "Standard PR",
-  description: "Read-write worktree, filtered network via proxy, GitHub policy enforcement",
+  id: 'standard-pr',
+  name: 'Standard PR',
+  description: 'Read-write worktree, filtered network via proxy, GitHub policy enforcement',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "filtered",
+    access: 'filtered',
     allowedDomains: [
       // Claude Code API backend — required for the agent to function
-      "api.anthropic.com",
+      'api.anthropic.com',
       // Claude Code OAuth — required for token refresh / re-authentication
-      "platform.claude.com",
+      'platform.claude.com',
       // GitHub (code hosting, API, uploads)
-      "github.com",
-      "api.github.com",
-      "uploads.github.com",
+      'github.com',
+      'api.github.com',
+      'uploads.github.com',
       // Package registries
-      "registry.npmjs.org",
-      "crates.io",
-      "static.crates.io",
-      "index.crates.io",
-      "pypi.org",
-      "files.pythonhosted.org",
+      'registry.npmjs.org',
+      'crates.io',
+      'static.crates.io',
+      'index.crates.io',
+      'pypi.org',
+      'files.pythonhosted.org',
     ],
-    inspectedDomains: [
-      "api.github.com",
-      "github.com",
-    ],
+    inspectedDomains: ['api.github.com', 'github.com'],
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
+  safehouseIntegrations: ['all-agents'],
   github: {
-    repo: "",              // Populated per-session
-    allowedPushRefs: [],   // Populated per-session
+    repo: '', // Populated per-session
+    allowedPushRefs: [], // Populated per-session
     ownedPrNumber: null,
     canCreatePr: true,
   },
   container: {},
-};
+}
 
 /**
  * Research only: read-write worktree, full network.
@@ -60,23 +57,23 @@ export const standardPrTemplate: PolicyTemplate = {
  * due to safehouse agent profiles. See findings.md for details.
  */
 export const researchOnlyTemplate: PolicyTemplate = {
-  id: "research-only",
-  name: "Research Only",
-  description: "Read-write worktree, full network, no access outside sandbox",
+  id: 'research-only',
+  name: 'Research Only',
+  description: 'Read-write worktree, full network, no access outside sandbox',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "full",
+    access: 'full',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
-};
+  safehouseIntegrations: ['all-agents'],
+}
 
 /**
  * Permissive: read-write worktree, full network.
@@ -84,20 +81,20 @@ export const researchOnlyTemplate: PolicyTemplate = {
  * Equivalent to the M2 default safehouse configuration.
  */
 export const permissiveTemplate: PolicyTemplate = {
-  id: "permissive",
-  name: "Permissive",
-  description: "Read-write worktree, toolchains, full network access",
+  id: 'permissive',
+  name: 'Permissive',
+  description: 'Read-write worktree, toolchains, full network access',
   filesystem: {
-    worktreeAccess: "read-write",
+    worktreeAccess: 'read-write',
     additionalWritableDirs: [],
     additionalReadOnlyDirs: [],
   },
   network: {
-    access: "full",
+    access: 'full',
   },
   env: {
     additional: [],
     exclude: [],
   },
-  safehouseIntegrations: ["all-agents"],
-};
+  safehouseIntegrations: ['all-agents'],
+}

@@ -73,14 +73,14 @@ Milestone 0 established the `SessionManager → ChildProcess → ACP` pipeline w
 
 ### What Changes from Milestone 0
 
-| Component | M0 | M1 |
-|-----------|----|----|
-| Agent process | Echo agent (`src/agents/echo-agent.ts`) | Claude Code via `@zed-industries/claude-agent-acp` (echo agent kept as fallback) |
-| Agent working directory | `process.cwd()` | Per-session git worktree |
-| ACP Client methods | `sessionUpdate` only; `requestPermission` returns `cancelled` | `sessionUpdate`, `requestPermission`, `readTextFile`, `writeTextFile`, `createTerminal`, `terminalOutput`, `killTerminal`, `waitForTerminalExit`, `releaseTerminal` |
-| Session updates | Text chunks only | Text chunks, tool call events, plan events |
-| UI rendering | Plain text messages | Text + tool call indicators + plan display |
-| Session creation | Instant | User selects a project directory; worktree created from current branch |
+| Component               | M0                                                            | M1                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent process           | Echo agent (`src/agents/echo-agent.ts`)                       | Claude Code via `@zed-industries/claude-agent-acp` (echo agent kept as fallback)                                                                                    |
+| Agent working directory | `process.cwd()`                                               | Per-session git worktree                                                                                                                                            |
+| ACP Client methods      | `sessionUpdate` only; `requestPermission` returns `cancelled` | `sessionUpdate`, `requestPermission`, `readTextFile`, `writeTextFile`, `createTerminal`, `terminalOutput`, `killTerminal`, `waitForTerminalExit`, `releaseTerminal` |
+| Session updates         | Text chunks only                                              | Text chunks, tool call events, plan events                                                                                                                          |
+| UI rendering            | Plain text messages                                           | Text + tool call indicators + plan display                                                                                                                          |
+| Session creation        | Instant                                                       | User selects a project directory; worktree created from current branch                                                                                              |
 
 ---
 
@@ -91,6 +91,7 @@ Milestone 0 established the `SessionManager → ChildProcess → ACP` pipeline w
 The `@zed-industries/claude-agent-acp` package is an npm package that wraps Claude Code as an ACP-compliant agent. It is spawned as a subprocess, just like the echo agent.
 
 **Spawn command:**
+
 ```bash
 npx @zed-industries/claude-agent-acp
 ```
@@ -184,13 +185,13 @@ async requestPermission(params: RequestPermissionParams): Promise<RequestPermiss
 
 Claude Code sends richer `SessionNotification` updates than the echo agent. Beyond `agent_message_chunk` (text), we need to handle:
 
-| `sessionUpdate` variant | Content | How we handle it |
-|------------------------|---------|-----------------|
-| `agent_message_chunk` | `TextContent` | Append to streaming message (same as M0) |
-| `agent_message_chunk` | `ToolCallContent` | Track tool call status; emit UI update |
-| `plan_update` | Plan entries with status | Display plan progress in UI |
-| `agent_message_start` | New message boundary | Create new agent message in history |
-| `agent_message_end` | Message complete | Finalize message, mark streaming=false |
+| `sessionUpdate` variant | Content                  | How we handle it                         |
+| ----------------------- | ------------------------ | ---------------------------------------- |
+| `agent_message_chunk`   | `TextContent`            | Append to streaming message (same as M0) |
+| `agent_message_chunk`   | `ToolCallContent`        | Track tool call status; emit UI update   |
+| `plan_update`           | Plan entries with status | Display plan progress in UI              |
+| `agent_message_start`   | New message boundary     | Create new agent message in history      |
+| `agent_message_end`     | Message complete         | Finalize message, mark streaming=false   |
 
 The session manager's `sessionUpdate` handler in the `Client` implementation needs to dispatch on both the `sessionUpdate` discriminator and the `content.type` within it.
 
@@ -221,20 +222,20 @@ New module responsible for git worktree lifecycle. Extracted from the session ma
 
 ```typescript
 export interface WorktreeInfo {
-  path: string;           // Absolute path to the worktree
-  branch: string;         // Branch name (bouncer/<session-id>)
-  projectDir: string;     // Original project directory
+  path: string // Absolute path to the worktree
+  branch: string // Branch name (bouncer/<session-id>)
+  projectDir: string // Original project directory
 }
 
 export class WorktreeManager {
   /** Create a worktree for a session. */
-  async create(sessionId: string, projectDir: string): Promise<WorktreeInfo>;
+  async create(sessionId: string, projectDir: string): Promise<WorktreeInfo>
 
   /** Remove a worktree and optionally delete its branch. */
-  async remove(info: WorktreeInfo): Promise<void>;
+  async remove(info: WorktreeInfo): Promise<void>
 
   /** Validate that a directory is a git repository. */
-  async validateGitRepo(dir: string): Promise<boolean>;
+  async validateGitRepo(dir: string): Promise<boolean>
 }
 ```
 
@@ -251,13 +252,14 @@ export class WorktreeManager {
 The existing session manager gains:
 
 **New fields on `SessionState`:**
+
 ```typescript
 interface SessionState {
   // ... existing fields from M0 ...
-  agentType: "echo" | "claude-code";
-  projectDir: string;
-  worktree: WorktreeInfo | null;    // null for echo agent sessions
-  terminals: Map<string, ChildProcess>;
+  agentType: 'echo' | 'claude-code'
+  projectDir: string
+  worktree: WorktreeInfo | null // null for echo agent sessions
+  terminals: Map<string, ChildProcess>
 }
 ```
 
@@ -272,14 +274,14 @@ interface SessionState {
 ```typescript
 function resolveClaudeCodeCommand(worktreePath: string): SpawnConfig {
   // Resolve the claude-agent-acp binary from node_modules
-  const require = createRequire(app.getAppPath() + "/");
-  const binPath = require.resolve("@zed-industries/claude-agent-acp/bin");
+  const require = createRequire(app.getAppPath() + '/')
+  const binPath = require.resolve('@zed-industries/claude-agent-acp/bin')
   return {
     cmd: process.execPath,
     args: [binPath],
-    env: { ELECTRON_RUN_AS_NODE: "1" },
+    env: { ELECTRON_RUN_AS_NODE: '1' },
     cwd: worktreePath,
-  };
+  }
 }
 ```
 
@@ -291,10 +293,10 @@ Rather than a separate module, terminal management is implemented as part of the
 
 ```typescript
 interface TerminalState {
-  id: string;
-  process: ChildProcess;
-  output: string;           // Accumulated stdout+stderr
-  exitCode: number | null;
+  id: string
+  process: ChildProcess
+  output: string // Accumulated stdout+stderr
+  exitCode: number | null
 }
 ```
 
@@ -305,39 +307,39 @@ The terminal's `cwd` is set to the session's worktree path. stdout and stderr ar
 Extended to support richer session updates:
 
 ```typescript
-export type AgentType = "echo" | "claude-code";
+export type AgentType = 'echo' | 'claude-code'
 
 export interface SessionSummary {
-  id: string;
-  status: "initializing" | "ready" | "error" | "closed";
-  messageCount: number;
-  agentType: AgentType;
-  projectDir: string;
+  id: string
+  status: 'initializing' | 'ready' | 'error' | 'closed'
+  messageCount: number
+  agentType: AgentType
+  projectDir: string
 }
 
 export type SessionUpdate =
-  | { sessionId: string; type: "status-change"; status: SessionSummary["status"] }
-  | { sessionId: string; type: "message"; message: Message }
-  | { sessionId: string; type: "stream-chunk"; messageId: string; text: string }
-  | { sessionId: string; type: "stream-end"; messageId: string }
-  | { sessionId: string; type: "tool-call"; messageId: string; toolCall: ToolCallInfo }
-  | { sessionId: string; type: "plan-update"; plan: PlanInfo };
+  | { sessionId: string; type: 'status-change'; status: SessionSummary['status'] }
+  | { sessionId: string; type: 'message'; message: Message }
+  | { sessionId: string; type: 'stream-chunk'; messageId: string; text: string }
+  | { sessionId: string; type: 'stream-end'; messageId: string }
+  | { sessionId: string; type: 'tool-call'; messageId: string; toolCall: ToolCallInfo }
+  | { sessionId: string; type: 'plan-update'; plan: PlanInfo }
 
 export interface ToolCallInfo {
-  id: string;
-  name: string;
-  status: "pending" | "in_progress" | "completed" | "failed";
-  input?: Record<string, unknown>;
-  output?: string;
+  id: string
+  name: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  input?: Record<string, unknown>
+  output?: string
 }
 
 export interface PlanInfo {
-  entries: PlanEntry[];
+  entries: PlanEntry[]
 }
 
 export interface PlanEntry {
-  title: string;
-  status: "pending" | "in_progress" | "completed" | "failed";
+  title: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
 }
 ```
 
@@ -346,38 +348,35 @@ export interface PlanEntry {
 Extended with project selection:
 
 ```typescript
-contextBridge.exposeInMainWorld("glitterball", {
+contextBridge.exposeInMainWorld('glitterball', {
   sessions: {
-    list: () => ipcRenderer.invoke("sessions:list"),
-    create: (projectDir: string, agentType?: string) =>
-      ipcRenderer.invoke("sessions:create", projectDir, agentType),
-    sendMessage: (sessionId: string, text: string) =>
-      ipcRenderer.invoke("sessions:sendMessage", sessionId, text),
-    closeSession: (sessionId: string) =>
-      ipcRenderer.invoke("sessions:close", sessionId),
+    list: () => ipcRenderer.invoke('sessions:list'),
+    create: (projectDir: string, agentType?: string) => ipcRenderer.invoke('sessions:create', projectDir, agentType),
+    sendMessage: (sessionId: string, text: string) => ipcRenderer.invoke('sessions:sendMessage', sessionId, text),
+    closeSession: (sessionId: string) => ipcRenderer.invoke('sessions:close', sessionId),
     onUpdate: (callback: (update: any) => void) => {
-      const handler = (_event: any, update: any) => callback(update);
-      ipcRenderer.on("session-update", handler);
-      return () => ipcRenderer.removeListener("session-update", handler);
+      const handler = (_event: any, update: any) => callback(update)
+      ipcRenderer.on('session-update', handler)
+      return () => ipcRenderer.removeListener('session-update', handler)
     },
   },
   dialog: {
-    selectDirectory: () => ipcRenderer.invoke("dialog:selectDirectory"),
+    selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
   },
-});
+})
 ```
 
 The main process handler for `dialog:selectDirectory` uses Electron's dialog API:
 
 ```typescript
-ipcMain.handle("dialog:selectDirectory", async () => {
+ipcMain.handle('dialog:selectDirectory', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ["openDirectory"],
-    title: "Select project directory",
-  });
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
-});
+    properties: ['openDirectory'],
+    title: 'Select project directory',
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
 ```
 
 ### 6. React UI (updated: `src/renderer/`)
@@ -385,17 +384,20 @@ ipcMain.handle("dialog:selectDirectory", async () => {
 UI changes are minimal — the primary goal is getting the agent working, not UI polish:
 
 **Session creation flow:**
+
 1. User clicks "New Session"
 2. Directory picker dialog opens
 3. On selection, session is created with `claude-code` agent type
 4. Session appears in list with "initializing" status (worktree creation + ACP handshake may take a few seconds)
 
 **Chat rendering additions:**
+
 - **Tool call indicators**: When a `tool-call` update arrives, show a collapsed block: `🔧 Bash: git status [completed]`. Expand on click to show input/output. (Stretch goal — a simple one-line indicator is the minimum.)
 - **Plan display**: If `plan-update` arrives, show a checklist of plan entries with status indicators above the chat. (Stretch goal.)
 - **Text streaming**: Unchanged from M0.
 
 **Session list enhancement:**
+
 - Show project directory name (e.g., "bouncer") as the session label instead of a UUID
 - Show agent type indicator (echo vs. Claude Code)
 
@@ -405,17 +407,17 @@ UI changes are minimal — the primary goal is getting the agent working, not UI
 
 ### New npm packages
 
-| Package | Purpose |
-|---------|---------|
+| Package                            | Purpose                                                   |
+| ---------------------------------- | --------------------------------------------------------- |
 | `@zed-industries/claude-agent-acp` | Claude Code ACP adapter — spawned as the agent subprocess |
 
 ### Existing packages (no changes)
 
-| Package | Purpose |
-|---------|---------|
+| Package                    | Purpose                               |
+| -------------------------- | ------------------------------------- |
 | `@agentclientprotocol/sdk` | ACP client connection, protocol types |
-| `electron` | App shell |
-| `react`, `react-dom` | UI |
+| `electron`                 | App shell                             |
+| `react`, `react-dom`       | UI                                    |
 
 ### System requirements
 
