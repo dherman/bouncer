@@ -1808,18 +1808,22 @@ export class WorkspaceManager {
       await workspace.proxyHandle.stop().catch(() => {});
       workspace.proxyHandle = null;
     }
-    if (workspace.sessionNetwork) {
-      await workspace.sessionNetwork.cleanup().catch(() => {});
-      workspace.sessionNetwork = null;
-    }
-
-    // Kill old agent process before spawning a new one
+    // Kill old agent process before spawning a new one.
+    // Remove exit listeners first to prevent spurious error events during intentional restart.
     if (workspace.containerHandle) {
+      workspace.agentProcess?.removeAllListeners('exit');
       workspace.containerHandle.kill();
       await removeContainer(workspaceId).catch(() => {});
       workspace.containerHandle = null;
     } else if (workspace.agentProcess?.exitCode === null) {
+      workspace.agentProcess.removeAllListeners('exit');
       workspace.agentProcess.kill();
+    }
+
+    // Clean up session network after container is removed (network rm fails while container is attached)
+    if (workspace.sessionNetwork) {
+      await workspace.sessionNetwork.cleanup().catch(() => {});
+      workspace.sessionNetwork = null;
     }
 
     try {

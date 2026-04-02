@@ -199,12 +199,14 @@ app.whenReady().then(async () => {
     return workspaceManager.resumeWorkspace(sessionId);
   });
 
-  ipcMain.handle('workspaces:simulateAuthError', (_e, sessionId: unknown) => {
-    if (typeof sessionId !== 'string') {
-      throw new Error('Invalid argument: sessionId must be a string');
-    }
-    return workspaceManager.simulateAuthError(sessionId);
-  });
+  if (!app.isPackaged) {
+    ipcMain.handle('workspaces:simulateAuthError', (_e, sessionId: unknown) => {
+      if (typeof sessionId !== 'string') {
+        throw new Error('Invalid argument: sessionId must be a string');
+      }
+      return workspaceManager.simulateAuthError(sessionId);
+    });
+  }
 
   ipcMain.handle('workspaces:getSandboxViolations', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {

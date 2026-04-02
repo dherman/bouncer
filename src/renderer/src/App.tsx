@@ -380,7 +380,10 @@ function App() {
   // Debug: Ctrl+Shift+X simulates an auth error on the active workspace
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'X') {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable)
+        return;
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyX') {
         e.preventDefault();
         if (!activeWorkspaceId) return;
         window.bouncer.workspaces.simulateAuthError(activeWorkspaceId).catch((err) => {
