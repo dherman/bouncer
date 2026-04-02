@@ -46,8 +46,8 @@ function makeConnection(proc: ChildProcess): acp.ClientSideConnection {
       },
       async requestPermission(params) {
         // Auto-approve everything
-        const opt = params.permissions[0]?.options?.[0];
-        return { permission: opt?.id ?? 'allow_once' };
+        const opt = params.options[0];
+        return { outcome: { outcome: 'selected' as const, optionId: opt?.optionId ?? 'allow_once' } };
       },
     }),
     stream,
