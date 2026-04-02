@@ -237,6 +237,8 @@ interface WorkspaceState {
   /** Flush any batched stream-chunk events. Called before stream-end. */
   flushChunks: () => void;
   promptCount: number;
+  /** Serializes message persistence writes to guarantee ordering. */
+  messageWriteChain: Promise<void>;
   /** Message queued while workspace was still initializing. */
   pendingMessage: string | null;
   /** Periodic GH token refresh timer (cleared on close). */
@@ -326,6 +328,7 @@ export class WorkspaceManager {
       prUrl: null,
       flushChunks: () => {},
       promptCount: 0,
+      messageWriteChain: Promise.resolve(),
       pendingMessage: null,
       ghTokenRefreshTimer: null,
       ghTokenFilePath: null,
@@ -1265,7 +1268,7 @@ export class WorkspaceManager {
         type: 'message',
         message: userMsg,
       });
-      persistMessage(workspaceId, userMsg).catch(() => {});
+      this.queueMessagePersist(workspace, workspaceId, userMsg);
       return;
     }
 
@@ -1280,7 +1283,7 @@ export class WorkspaceManager {
     };
     workspace.messages.push(userMsg);
     this.emit('workspace-update', { workspaceId, type: 'message', message: userMsg });
-    persistMessage(workspaceId, userMsg).catch(() => {});
+    this.queueMessagePersist(workspace, workspaceId, userMsg);
 
     await this.sendPrompt(workspace, workspaceId, text);
   }
@@ -1335,6 +1338,7 @@ export class WorkspaceManager {
       });
     }
     workspace.promptCount++;
+    this.persistState(workspace);
 
     promptBlocks.push({ type: 'text', text });
 
@@ -1373,7 +1377,7 @@ export class WorkspaceManager {
     });
 
     // Persist the completed agent message
-    persistMessage(workspaceId, agentMsg).catch(() => {});
+    this.queueMessagePersist(workspace, workspaceId, agentMsg);
   }
 
   getMessages(workspaceId: string): Message[] {
@@ -1716,6 +1720,13 @@ export class WorkspaceManager {
     }).catch((err) => console.warn(`[workspace] Failed to persist state for ${workspace.id}:`, err));
   }
 
+  /** Queue a message write through the workspace's serialized write chain. */
+  private queueMessagePersist(workspace: WorkspaceState, workspaceId: string, message: Message): void {
+    workspace.messageWriteChain = workspace.messageWriteChain
+      .then(() => persistMessage(workspaceId, message))
+      .catch((err) => console.warn(`[workspace] Failed to persist message for ${workspaceId}:`, err));
+  }
+
   /**
    * Resume a workspace that's in error or suspended state.
    * Spawns a fresh agent process and calls resumeSession with the saved session ID.
@@ -1740,6 +1751,21 @@ export class WorkspaceManager {
       type: 'status-change',
       status: 'resuming',
     });
+
+    // Clean up any leftover runtime resources from the previous run
+    workspace.sandboxMonitor?.stop();
+    workspace.sandboxMonitor = null;
+    workspace.containerMonitor?.stop();
+    workspace.containerMonitor = null;
+    if (workspace.ghTokenRefreshTimer) {
+      clearInterval(workspace.ghTokenRefreshTimer);
+      workspace.ghTokenRefreshTimer = null;
+    }
+    if (workspace.proxyHandle) {
+      await workspace.proxyHandle.stop().catch(() => {});
+      workspace.proxyHandle = null;
+    }
+    workspace.containerHandle = null;
 
     try {
       // For container sessions, refresh credentials before spawning
@@ -1793,7 +1819,7 @@ export class WorkspaceManager {
       let containerConfig: ContainerConfig | null = null;
       let shimEnv: Record<string, string> = {};
 
-      if (dockerAvailable && template && (workspace.agentType === 'claude-code' || workspace.agentType === 'replay')) {
+      if (workspace.sandboxBackend === 'container' && dockerAvailable && template && (workspace.agentType === 'claude-code' || workspace.agentType === 'replay')) {
         // Reconstruct container config — reuse the same initialization logic
         const appRequire = createRequire(app.getAppPath() + '/');
         const agentPkgDir = join(
@@ -2152,7 +2178,7 @@ export class WorkspaceManager {
       };
       workspace.messages.push(systemMsg);
       this.emit('workspace-update', { workspaceId, type: 'message', message: systemMsg });
-      persistMessage(workspaceId, systemMsg).catch(() => {});
+      this.queueMessagePersist(workspace, workspaceId, systemMsg);
 
       workspace.status = 'ready';
       const readySummary = await this.summarize(workspace);
@@ -2215,6 +2241,7 @@ export class WorkspaceManager {
         prUrl: pw.prUrl,
         flushChunks: () => {},
         promptCount: pw.promptCount,
+        messageWriteChain: Promise.resolve(),
         pendingMessage: null,
         ghTokenRefreshTimer: null,
         ghTokenFilePath: null,

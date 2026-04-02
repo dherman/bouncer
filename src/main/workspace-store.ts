@@ -8,7 +8,9 @@ import type {
   WorkspacePhase,
 } from './types.js';
 
-const WORKSPACES_DIR = join(app.getPath('userData'), 'workspaces');
+function getWorkspacesDir(): string {
+  return join(app.getPath('userData'), 'workspaces');
+}
 
 export interface PersistedWorkspace {
   id: string;
@@ -29,15 +31,15 @@ export interface PersistedWorkspace {
 }
 
 export async function persistWorkspace(ws: PersistedWorkspace): Promise<void> {
-  await mkdir(WORKSPACES_DIR, { recursive: true });
-  const filePath = join(WORKSPACES_DIR, `${ws.id}.json`);
+  await mkdir(getWorkspacesDir(), { recursive: true });
+  const filePath = join(getWorkspacesDir(), `${ws.id}.json`);
   await writeFile(filePath, JSON.stringify(ws, null, 2), 'utf-8');
 }
 
 export async function loadPersistedWorkspaces(): Promise<PersistedWorkspace[]> {
   let entries: string[];
   try {
-    entries = await readdir(WORKSPACES_DIR);
+    entries = await readdir(getWorkspacesDir());
   } catch {
     return [];
   }
@@ -45,7 +47,7 @@ export async function loadPersistedWorkspaces(): Promise<PersistedWorkspace[]> {
   for (const entry of entries) {
     if (!entry.endsWith('.json') || entry.endsWith('-messages.jsonl')) continue;
     try {
-      const data = await readFile(join(WORKSPACES_DIR, entry), 'utf-8');
+      const data = await readFile(join(getWorkspacesDir(), entry), 'utf-8');
       workspaces.push(JSON.parse(data) as PersistedWorkspace);
     } catch {
       // Skip corrupt files
@@ -55,5 +57,5 @@ export async function loadPersistedWorkspaces(): Promise<PersistedWorkspace[]> {
 }
 
 export async function removePersistedWorkspace(id: string): Promise<void> {
-  await rm(join(WORKSPACES_DIR, `${id}.json`), { force: true });
+  await rm(join(getWorkspacesDir(), `${id}.json`), { force: true });
 }

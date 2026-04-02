@@ -3,14 +3,16 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import type { Message } from './types.js';
 
-const WORKSPACES_DIR = join(app.getPath('userData'), 'workspaces');
+function getWorkspacesDir(): string {
+  return join(app.getPath('userData'), 'workspaces');
+}
 
 function messagesPath(workspaceId: string): string {
-  return join(WORKSPACES_DIR, `${workspaceId}-messages.jsonl`);
+  return join(getWorkspacesDir(), `${workspaceId}-messages.jsonl`);
 }
 
 export async function appendMessage(workspaceId: string, message: Message): Promise<void> {
-  await mkdir(WORKSPACES_DIR, { recursive: true });
+  await mkdir(getWorkspacesDir(), { recursive: true });
   await appendFile(messagesPath(workspaceId), JSON.stringify(message) + '\n', 'utf-8');
 }
 

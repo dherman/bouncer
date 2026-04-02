@@ -420,7 +420,7 @@ export function ChatPanel({
         {sessionStatus === 'suspended' && (
           <div className="workspace-state-banner suspended">
             Session suspended
-            {onResumeSession && (
+            {canResume && onResumeSession && (
               <button type="button" onClick={onResumeSession}>Resume</button>
             )}
             <button type="button" onClick={onCloseSession}>Close</button>
