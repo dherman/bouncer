@@ -12,8 +12,42 @@ The core mechanism has been validated: a standalone script (`scripts/test-resume
 
 - Session JSONL files are written by Claude Code to `~/.claude/projects/` (host) or `/root/.claude/projects/` (container). These files are the source of truth for session state.
 - `resumeSession` is sufficient for all recovery scenarios. The `loadSession` fallback (full history replay) is deferred unless testing reveals `resumeSession` to be unreliable.
-- The workspace's git worktree survives across resume — it's a directory on disk, not in-process state. Only the worktree metadata (`~/.cache/bouncer/worktrees/{id}`) needs to exist for the worktree manager to find it.
+- The workspace's git worktree survives across resume — it's a directory on disk, not in-process state. Worktrees are stored in durable app storage (not `/tmp`) so they survive reboots and macOS periodic cleanup.
 - Container sessions use a new container (same image + volumes), not Docker stop/start. This avoids Docker state issues and matches the existing `--rm` flag convention.
+
+## Step 0: Move Worktrees to Durable Storage
+
+**Goal**: Ensure git worktrees survive app restarts and macOS `/tmp` cleanup by storing them in the app's persistent data directory.
+
+### Background
+
+Worktrees are currently created under `/tmp/bouncer-worktrees/` (via `tmpdir()` in `worktree-manager.ts`). This is fine for ephemeral sessions, but `/tmp` on macOS can be cleaned after ~3 days of disuse, which would silently destroy a suspended workspace's code changes. Moving to durable storage is a prerequisite for app restart recovery.
+
+### Changes
+
+**`src/main/worktree-manager.ts`** — Change the default base path:
+
+```typescript
+// Before:
+this.basePath = resolve(basePath ?? join(tmpdir(), 'bouncer-worktrees'));
+
+// After:
+this.basePath = resolve(basePath ?? join(app.getPath('userData'), 'worktrees'));
+```
+
+This moves worktrees to `~/Library/Application Support/bouncer/worktrees/` on macOS.
+
+**`src/main/workspace-manager.ts`** — Update orphan cleanup to scan the new location. The existing `cleanupOrphans` already uses `this.worktreeManager` which will pick up the new path automatically.
+
+### Migration
+
+No migration needed. Existing worktrees in `/tmp` belong to running workspaces that will be closed before the update takes effect. The old `/tmp/bouncer-worktrees/` directory can be cleaned up by the existing orphan cleanup on next startup (it won't find any active session IDs there).
+
+### Testing
+
+- Create a workspace → worktree appears under `~/Library/Application Support/bouncer/worktrees/{id}`
+- Close workspace → worktree removed
+- Reboot → worktree directory still exists (unlike `/tmp`)
 
 ## Step 1: Workspace Metadata Persistence
 
@@ -380,6 +414,8 @@ if (workspace.sandboxBackend === 'container') {
 ## Dependency Graph
 
 ```
+Step 0 (durable worktrees) ←── prerequisite for app restart recovery
+  ↓
 Step 1 (workspace metadata)
   ↓
 Step 2 (message persistence) ←── independent of 1, but uses same directory
@@ -388,19 +424,20 @@ Step 3 (container session volume) ←── independent of 1-2
   ↓
 Step 4 (resume flow) ←── depends on 1 (reads metadata), 2 (loads messages), 3 (session files exist)
   ↓
-Step 5 (app restart) ←── depends on 1 (loads persisted workspaces), 4 (resume method)
+Step 5 (app restart) ←── depends on 0 (durable worktrees), 1 (loads persisted workspaces), 4 (resume method)
   ↓
 Step 6 (graceful close) ←── depends on 1 (deletes metadata), 2 (deletes messages)
   ↓
 Step 7 (UI) ←── depends on 4-5 (suspended/resuming states), 6 (close semantics)
 ```
 
-Steps 1, 2, and 3 are independent and can be done in parallel. Step 4 is the core integration point. Steps 5-7 build on top.
+Step 0 is a one-line change that can land independently. Steps 1, 2, and 3 are independent and can be done in parallel. Step 4 is the core integration point. Steps 5-7 build on top.
 
 ## Files Changed Summary
 
 | File | Steps | Nature of Change |
 |------|-------|------------------|
+| `src/main/worktree-manager.ts` | 0 | Change default base path from `/tmp` to app data dir |
 | `src/main/workspace-store.ts` | 1 | **New**: persist/load/remove workspace metadata |
 | `src/main/message-store.ts` | 2 | **New**: append/load/remove message JSONL |
 | `src/main/workspace-manager.ts` | 1-6 | Persist metadata at lifecycle points; refactor `initializeWorkspace` into phases; add `resumeWorkspace` and `restorePersistedWorkspaces`; graceful close; new status values |
