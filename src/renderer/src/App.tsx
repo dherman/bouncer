@@ -368,6 +368,15 @@ function App() {
     }
   }
 
+  async function handleResumeWorkspace() {
+    if (!activeWorkspaceId) return;
+    try {
+      await window.bouncer.workspaces.resume(activeWorkspaceId);
+    } catch (err) {
+      console.error('Failed to resume workspace:', err);
+    }
+  }
+
   async function handleRemoveRepo(id: string) {
     // Close active workspaces for this repo first
     const repoWorkspaces = workspaces.filter((w) => w.repositoryId === id && w.status !== 'closed');
@@ -490,6 +499,8 @@ function App() {
           onCloseSession={() => handleCloseWorkspace(activeWorkspace.id)}
           sessionErrorKind={workspaceErrorKinds.get(activeWorkspace.id)}
           onRefreshCredentials={handleRefreshCredentials}
+          canResume={activeWorkspace.canResume}
+          onResumeSession={handleResumeWorkspace}
         />
       ) : (
         <div className="chat-panel">

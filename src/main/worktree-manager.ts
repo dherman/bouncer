@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, resolve } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 
 const execFileAsync = promisify(execFile);
@@ -20,7 +20,10 @@ export class WorktreeManager {
   private metadataPath: string;
 
   constructor(basePath?: string) {
-    this.basePath = resolve(basePath ?? join(tmpdir(), 'bouncer-worktrees'));
+    // Store worktrees in durable app storage so they survive reboots and
+    // macOS /tmp cleanup — required for session resume across app restarts.
+    const defaultBase = join(homedir(), 'Library', 'Application Support', 'bouncer', 'worktrees');
+    this.basePath = resolve(basePath ?? defaultBase);
     this.metadataPath = join(homedir(), '.cache', 'bouncer', 'worktrees');
   }
 
