@@ -30,6 +30,8 @@ interface Props {
   onSendMessage: (text: string) => void;
   onCloseSession: () => void;
   onRefreshCredentials: () => void;
+  canResume?: boolean;
+  onResumeSession?: () => void;
 }
 
 function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
@@ -233,6 +235,8 @@ export function ChatPanel({
   onSendMessage,
   onCloseSession,
   onRefreshCredentials,
+  canResume,
+  onResumeSession,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastScrollTime = useRef(0);
@@ -393,16 +397,37 @@ export function ChatPanel({
         {sessionStatus === 'error' && sessionErrorKind === 'auth' && (
           <div className="workspace-state-banner auth-error">
             Authentication expired. Run <code>claude auth login</code> in your terminal, then:
-            <button type="button" onClick={onRefreshCredentials}>
-              Retry
-            </button>
+            {canResume && onResumeSession ? (
+              <button type="button" onClick={onResumeSession}>Reconnect</button>
+            ) : (
+              <button type="button" onClick={onRefreshCredentials}>Retry</button>
+            )}
           </div>
         )}
         {sessionStatus === 'error' && sessionErrorKind !== 'auth' && (
           <div className="workspace-state-banner error">
             {sessionError ?? 'Workspace disconnected'}
-            <button onClick={onCloseSession}>Close workspace</button>
+            {canResume && onResumeSession ? (
+              <>
+                <button type="button" onClick={onResumeSession}>Reconnect</button>
+                <button type="button" onClick={onCloseSession}>Close</button>
+              </>
+            ) : (
+              <button type="button" onClick={onCloseSession}>Close workspace</button>
+            )}
           </div>
+        )}
+        {sessionStatus === 'suspended' && (
+          <div className="workspace-state-banner suspended">
+            Session suspended
+            {canResume && onResumeSession && (
+              <button type="button" onClick={onResumeSession}>Resume</button>
+            )}
+            <button type="button" onClick={onCloseSession}>Close</button>
+          </div>
+        )}
+        {sessionStatus === 'resuming' && (
+          <div className="workspace-state-banner resuming">Reconnecting...</div>
         )}
         {sessionStatus === 'closed' && (
           <div className="workspace-state-banner closed">Workspace closed</div>
@@ -421,9 +446,13 @@ export function ChatPanel({
             ? 'Workspace disconnected'
             : sessionStatus === 'closed'
               ? 'Workspace closed'
-              : sessionStatus === 'initializing' && hasPendingMessage
-                ? 'Starting workspace...'
-                : undefined
+              : sessionStatus === 'suspended'
+                ? 'Session suspended — click Resume to continue'
+                : sessionStatus === 'resuming'
+                  ? 'Reconnecting...'
+                  : sessionStatus === 'initializing' && hasPendingMessage
+                    ? 'Starting workspace...'
+                    : undefined
         }
       />
     </div>

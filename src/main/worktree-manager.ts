@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, resolve } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
 import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { app } from 'electron';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,8 +20,12 @@ export class WorktreeManager {
   private metadataPath: string;
 
   constructor(basePath?: string) {
-    this.basePath = resolve(basePath ?? join(tmpdir(), 'bouncer-worktrees'));
-    this.metadataPath = join(homedir(), '.cache', 'bouncer', 'worktrees');
+    // Store worktrees in durable app storage so they survive reboots and
+    // /tmp cleanup — required for session resume across app restarts.
+    // Derive from Electron's userData path for cross-platform correctness.
+    const defaultBase = join(app.getPath('userData'), 'worktrees');
+    this.basePath = resolve(basePath ?? defaultBase);
+    this.metadataPath = join(app.getPath('userData'), 'worktree-metadata');
   }
 
   /** Validate that a directory is a git repository. */

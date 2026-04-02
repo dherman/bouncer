@@ -45,7 +45,8 @@ export type WorkspacePhase =
 export interface WorkspaceSummary {
   id: string;
   repositoryId: string | null;
-  status: 'initializing' | 'ready' | 'error' | 'closed';
+  status: 'initializing' | 'ready' | 'error' | 'suspended' | 'resuming' | 'closed';
+  canResume: boolean;
   messageCount: number;
   agentType: AgentType;
   projectDir: string;

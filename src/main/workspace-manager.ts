@@ -45,8 +45,18 @@ import {
   generateGitconfig,
   type ContainerSessionContext,
 } from './policy-container.js';
-import { writeFile, mkdir, rm, chmod } from 'node:fs/promises';
+import { writeFile, mkdir, rm, chmod, stat } from 'node:fs/promises';
 import { POLICY_DIR } from './sandbox.js';
+import {
+  persistWorkspace,
+  removePersistedWorkspace,
+  loadPersistedWorkspaces,
+} from './workspace-store.js';
+import {
+  appendMessage as persistMessage,
+  loadMessages,
+  removeMessages,
+} from './message-store.js';
 import type {
   AgentType,
   GitHubPolicy,
@@ -206,7 +216,7 @@ interface WorkspaceState {
   agentProcess: ChildProcess;
   connection: acp.ClientSideConnection;
   messages: Message[];
-  status: 'initializing' | 'ready' | 'error' | 'closed';
+  status: 'initializing' | 'ready' | 'error' | 'suspended' | 'resuming' | 'closed';
   errorMessage?: string;
   errorKind?: 'auth';
   agentType: AgentType;
@@ -227,6 +237,8 @@ interface WorkspaceState {
   /** Flush any batched stream-chunk events. Called before stream-end. */
   flushChunks: () => void;
   promptCount: number;
+  /** Serializes message persistence writes to guarantee ordering. */
+  messageWriteChain: Promise<void>;
   /** Message queued while workspace was still initializing. */
   pendingMessage: string | null;
   /** Periodic GH token refresh timer (cleared on close). */
@@ -316,6 +328,7 @@ export class WorkspaceManager {
       prUrl: null,
       flushChunks: () => {},
       promptCount: 0,
+      messageWriteChain: Promise.resolve(),
       pendingMessage: null,
       ghTokenRefreshTimer: null,
       ghTokenFilePath: null,
@@ -586,6 +599,12 @@ export class WorkspaceManager {
           // from ~/.claude/.credentials.json (not the macOS keychain).
           // Extract from macOS keychain and write a credentials file for the container.
           const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
+          // Create a per-workspace session directory that gets bind-mounted as
+          // the container's ~/.claude. This makes session JSONL files survive
+          // container restarts, enabling session resume.
+          const sessionDir = join(app.getPath('userData'), 'sessions', id);
+          await mkdir(sessionDir, { recursive: true });
+
           let claudeCredentialsPath: string | undefined;
           if (!anthropicKey && process.platform === 'darwin') {
             try {
@@ -598,7 +617,9 @@ export class WorkspaceManager {
                 'Claude Code-credentials',
                 '-w',
               ]);
-              claudeCredentialsPath = join(POLICY_DIR, `${id}-claude-credentials.json`);
+              // Write credentials into the session dir so they persist with
+              // the bind mount and don't need a separate mount point.
+              claudeCredentialsPath = join(sessionDir, '.credentials.json');
               await writeFile(claudeCredentialsPath, credJson.trim(), { mode: 0o600 });
               console.log('[container] Wrote Claude credentials file from macOS keychain');
             } catch (err) {
@@ -666,6 +687,7 @@ export class WorkspaceManager {
                   if (event.operation.startsWith('branch-ratchet:')) {
                     writePolicyState(id, workspace.githubPolicy).catch(() => {});
                     updateAllowedRefs(id, workspace.githubPolicy.allowedPushRefs).catch(() => {});
+                    this.persistState(workspace);
                   }
                   if (event.operation.startsWith('captured PR')) {
                     writePolicyState(id, workspace.githubPolicy).catch(() => {});
@@ -675,6 +697,7 @@ export class WorkspaceManager {
                       workspace.prUrl = urlMatch[0];
                     }
                     workspace.phase = 'pr-open';
+                    this.persistState(workspace);
                     // Emit a summary update so the UI picks up the phase/prUrl change
                     this.summarize(workspace)
                       .then((summary) => {
@@ -775,7 +798,9 @@ export class WorkspaceManager {
                 return undefined;
               }
             })(),
-            claudeConfigDir: join((await import('node:os')).homedir(), '.claude'),
+            // Use per-workspace session dir so session JSONL files survive
+            // container restarts, enabling session resume.
+            claudeConfigDir: sessionDir,
             claudeCredentialsPath,
             ghTokenFilePath,
           };
@@ -1180,6 +1205,9 @@ export class WorkspaceManager {
         summary: readySummary,
       });
 
+      // Persist workspace metadata for session resume
+      await this.persistState(workspace);
+
       // Drain any message queued while the workspace was initializing
       if (workspace.pendingMessage !== null) {
         const pending = workspace.pendingMessage;
@@ -1240,6 +1268,7 @@ export class WorkspaceManager {
         type: 'message',
         message: userMsg,
       });
+      this.queueMessagePersist(workspace, workspaceId, userMsg);
       return;
     }
 
@@ -1254,6 +1283,7 @@ export class WorkspaceManager {
     };
     workspace.messages.push(userMsg);
     this.emit('workspace-update', { workspaceId, type: 'message', message: userMsg });
+    this.queueMessagePersist(workspace, workspaceId, userMsg);
 
     await this.sendPrompt(workspace, workspaceId, text);
   }
@@ -1308,6 +1338,7 @@ export class WorkspaceManager {
       });
     }
     workspace.promptCount++;
+    this.persistState(workspace);
 
     promptBlocks.push({ type: 'text', text });
 
@@ -1344,6 +1375,9 @@ export class WorkspaceManager {
       textSegments: agentMsg.textSegments ?? [agentMsg.text],
       parts: agentMsg.parts ?? [{ type: 'text', index: 0 }],
     });
+
+    // Persist the completed agent message
+    this.queueMessagePersist(workspace, workspaceId, agentMsg);
   }
 
   getMessages(workspaceId: string): Message[] {
@@ -1386,7 +1420,8 @@ export class WorkspaceManager {
         'Claude Code-credentials',
         '-w',
       ]);
-      const credPath = join(POLICY_DIR, `${workspaceId}-claude-credentials.json`);
+      // Write to session volume (bind-mounted as container's ~/.claude)
+      const credPath = join(app.getPath('userData'), 'sessions', workspaceId, '.credentials.json');
       await writeFile(credPath, credJson.trim(), { mode: 0o600 });
       console.log(`[workspace ${workspaceId}] Refreshed Claude credentials from keychain`);
     }
@@ -1406,6 +1441,18 @@ export class WorkspaceManager {
   async closeWorkspace(workspaceId: string): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    // Graceful ACP close — best-effort, don't block on failure
+    if (workspace.connection && workspace.status !== 'error' && workspace.status !== 'suspended') {
+      try {
+        await Promise.race([
+          workspace.connection.unstable_closeSession({ sessionId: workspace.acpSessionId }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+        ]);
+      } catch {
+        // Agent may already be dead — proceed with cleanup
+      }
+    }
 
     workspace.status = 'closed';
     workspace.flushChunks();
@@ -1443,6 +1490,11 @@ export class WorkspaceManager {
       );
       await rm(join(POLICY_DIR, `${workspaceId}-user-gitconfig`), { force: true }).catch(() => {});
       await rm(join(POLICY_DIR, `${workspaceId}-gh-token`), { force: true }).catch(() => {});
+      // Clean up per-workspace session volume (Claude Code session JSONL files)
+      await rm(join(app.getPath('userData'), 'sessions', workspaceId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
     }
 
     // Stop proxy and remove workspace network (M7)
@@ -1488,6 +1540,10 @@ export class WorkspaceManager {
       await cleanupPolicy(workspace.sandboxConfig.policyOutputPath);
     }
 
+    // Remove persisted workspace metadata and messages
+    await removePersistedWorkspace(workspaceId);
+    await removeMessages(workspaceId);
+
     this.emit('workspace-update', {
       workspaceId,
       type: 'status-change',
@@ -1495,12 +1551,44 @@ export class WorkspaceManager {
     });
   }
 
-  /** Close all active workspaces. Called on app quit. */
+  /** Gracefully shut down all active workspaces on app quit.
+   *  Unlike closeWorkspace(), this preserves persisted data and worktrees
+   *  so sessions can be resumed on next launch. */
   async closeAllWorkspaces(): Promise<void> {
     const activeWorkspaces = Array.from(this.workspaces.values()).filter(
       (s) => s.status !== 'closed',
     );
-    await Promise.all(activeWorkspaces.map((s) => this.closeWorkspace(s.id).catch(() => {})));
+    await Promise.all(
+      activeWorkspaces.map(async (ws) => {
+        // Graceful ACP close — best-effort
+        if (ws.connection && ws.status !== 'error' && ws.status !== 'suspended') {
+          try {
+            await Promise.race([
+              ws.connection.unstable_closeSession({ sessionId: ws.acpSessionId }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+            ]);
+          } catch {
+            // Agent may already be dead
+          }
+        }
+        // Kill processes but don't remove persisted state or worktrees
+        ws.sandboxMonitor?.stop();
+        ws.containerMonitor?.stop();
+        if (ws.ghTokenRefreshTimer) {
+          clearInterval(ws.ghTokenRefreshTimer);
+          ws.ghTokenRefreshTimer = null;
+        }
+        if (ws.containerHandle) {
+          ws.containerHandle.kill();
+        } else {
+          ws.agentProcess?.kill();
+        }
+        if (ws.proxyHandle) {
+          await ws.proxyHandle.stop().catch(() => {});
+        }
+        ws.status = 'closed';
+      }),
+    );
   }
 
   /** Remove orphan worktree directories, sandbox policies, containers, and container artifacts left behind by a previous crash. */
@@ -1605,6 +1693,561 @@ export class WorkspaceManager {
       prUrl: workspace.prUrl,
       phase: workspace.phase,
       networkAccess: workspace.proxyHandle ? 'filtered' : 'full',
+      canResume:
+        workspace.acpSessionId !== '' &&
+        (workspace.status === 'error' || workspace.status === 'suspended'),
     };
+  }
+
+  /** Persist workspace metadata to disk for session resume. */
+  private async persistState(workspace: WorkspaceState): Promise<void> {
+    await persistWorkspace({
+      id: workspace.id,
+      repositoryId: workspace.repositoryId,
+      acpSessionId: workspace.acpSessionId,
+      projectDir: workspace.projectDir,
+      agentType: workspace.agentType,
+      sandboxBackend: workspace.sandboxBackend,
+      worktreePath: workspace.worktree?.path ?? null,
+      worktreeGitCommonDir: workspace.worktree?.gitCommonDir ?? null,
+      worktreeBranch: workspace.worktree?.branch ?? null,
+      policyId: workspace.policyId,
+      containerImage: null,
+      githubPolicy: workspace.githubPolicy,
+      phase: workspace.phase,
+      prUrl: workspace.prUrl,
+      promptCount: workspace.promptCount,
+    }).catch((err) => console.warn(`[workspace] Failed to persist state for ${workspace.id}:`, err));
+  }
+
+  /** Queue a message write through the workspace's serialized write chain. */
+  private queueMessagePersist(workspace: WorkspaceState, workspaceId: string, message: Message): void {
+    workspace.messageWriteChain = workspace.messageWriteChain
+      .then(() => persistMessage(workspaceId, message))
+      .catch((err) => console.warn(`[workspace] Failed to persist message for ${workspaceId}:`, err));
+  }
+
+  /**
+   * Resume a workspace that's in error or suspended state.
+   * Spawns a fresh agent process and calls resumeSession with the saved session ID.
+   */
+  async resumeWorkspace(workspaceId: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    if (workspace.status !== 'error' && workspace.status !== 'suspended') {
+      throw new Error(`Cannot resume workspace in status: ${workspace.status}`);
+    }
+
+    const savedSessionId = workspace.acpSessionId;
+    if (!savedSessionId) {
+      throw new Error('No session ID available for resume');
+    }
+
+    workspace.status = 'resuming';
+    workspace.errorMessage = undefined;
+    workspace.errorKind = undefined;
+    this.emit('workspace-update', {
+      workspaceId,
+      type: 'status-change',
+      status: 'resuming',
+    });
+
+    // Clean up any leftover runtime resources from the previous run
+    workspace.sandboxMonitor?.stop();
+    workspace.sandboxMonitor = null;
+    workspace.containerMonitor?.stop();
+    workspace.containerMonitor = null;
+    if (workspace.ghTokenRefreshTimer) {
+      clearInterval(workspace.ghTokenRefreshTimer);
+      workspace.ghTokenRefreshTimer = null;
+    }
+    if (workspace.proxyHandle) {
+      await workspace.proxyHandle.stop().catch(() => {});
+      workspace.proxyHandle = null;
+    }
+    workspace.containerHandle = null;
+
+    try {
+      // For container sessions, refresh credentials before spawning
+      if (workspace.sandboxBackend === 'container' && process.platform === 'darwin') {
+        const sessionDir = join(app.getPath('userData'), 'sessions', workspaceId);
+        await mkdir(sessionDir, { recursive: true });
+        try {
+          const { execFile: ef } = await import('node:child_process');
+          const { promisify: p } = await import('node:util');
+          const { stdout: credJson } = await p(ef)('security', [
+            'find-generic-password',
+            '-s',
+            'Claude Code-credentials',
+            '-w',
+          ]);
+          await writeFile(join(sessionDir, '.credentials.json'), credJson.trim(), { mode: 0o600 });
+        } catch (err) {
+          console.warn('[resume] Could not refresh credentials:', err);
+        }
+      }
+
+      // Resolve policy template for container/sandbox config reconstruction
+      const resolvedPolicyId =
+        workspace.agentType === 'claude-code' || workspace.agentType === 'replay'
+          ? (workspace.policyId ?? this.policyRegistry.defaultId)
+          : null;
+      const template = resolvedPolicyId ? this.policyRegistry.get(resolvedPolicyId) : null;
+
+      const workingDir = workspace.worktree?.path ?? workspace.projectDir;
+
+      // Rebuild sandbox config
+      let sandboxConfig: SandboxConfig | null = null;
+      if (template && (await isSafehouseAvailable())) {
+        const appNodeModules = join(app.getAppPath(), 'node_modules');
+        const readOnlyDirs = [appNodeModules];
+        if (workspace.agentType === 'replay') {
+          readOnlyDirs.push(app.getAppPath());
+        }
+        sandboxConfig = policyToSandboxConfig(template, {
+          sessionId: workspaceId,
+          worktreePath: workingDir,
+          gitCommonDir: workspace.worktree?.gitCommonDir,
+          readOnlyDirs,
+        });
+        workspace.sandboxConfig = sandboxConfig;
+        await writeAppendProfile(sandboxConfig);
+      }
+
+      // Rebuild container config or spawn agent directly
+      const dockerAvailable = await isDockerAvailable();
+      let containerConfig: ContainerConfig | null = null;
+      let shimEnv: Record<string, string> = {};
+
+      if (workspace.sandboxBackend === 'container' && dockerAvailable && template && (workspace.agentType === 'claude-code' || workspace.agentType === 'replay')) {
+        // Reconstruct container config — reuse the same initialization logic
+        const appRequire = createRequire(app.getAppPath() + '/');
+        const agentPkgDir = join(
+          appRequire.resolve('@zed-industries/claude-agent-acp/package.json'),
+          '..',
+        );
+        const appNodeModules = join(app.getAppPath(), 'node_modules');
+        await mkdir(POLICY_DIR, { recursive: true });
+
+        // Rebuild container artifacts
+        let containerShimScript: string | undefined;
+        let containerGitconfigFile: string | undefined;
+        let containerHooksDir: string | undefined;
+        let containerCredHelper: string | undefined;
+
+        if (template.github && workspace.githubPolicy) {
+          const wrapperPath = join(POLICY_DIR, `${workspaceId}-container-gh-wrapper`);
+          await writeFile(
+            wrapperPath,
+            `#!/bin/bash\nexec node /usr/local/lib/bouncer/gh-shim.js "$@"\n`,
+            'utf-8',
+          );
+          await chmod(wrapperPath, 0o755);
+          containerShimScript = wrapperPath;
+
+          containerHooksDir = join(POLICY_DIR, `${workspaceId}-container-hooks`);
+          await mkdir(containerHooksDir, { recursive: true });
+          const hookContent = generatePrePushHookForContainer();
+          const hookPath = join(containerHooksDir, 'pre-push');
+          await writeFile(hookPath, hookContent, 'utf-8');
+          await chmod(hookPath, 0o755);
+
+          const gitconfigContent = generateGitconfig({
+            hooksPath: '/etc/bouncer/hooks',
+            credentialHelperPath: '/usr/local/lib/bouncer/gh-credential-helper.js',
+            userName: process.env.GIT_AUTHOR_NAME,
+            userEmail: process.env.GIT_AUTHOR_EMAIL,
+          });
+          containerGitconfigFile = join(POLICY_DIR, `${workspaceId}-gitconfig`);
+          await writeFile(containerGitconfigFile, gitconfigContent, 'utf-8');
+
+          const { generateCredentialHelperJs } = await import('./policy-container.js');
+          containerCredHelper = join(POLICY_DIR, `${workspaceId}-credential-helper.js`);
+          await writeFile(containerCredHelper, generateCredentialHelperJs(), { mode: 0o755 });
+        }
+
+        const shimBundlePath =
+          template.github && workspace.githubPolicy
+            ? join(POLICY_DIR, 'gh-shim-bundle.js')
+            : undefined;
+
+        const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
+        const sessionDir = join(app.getPath('userData'), 'sessions', workspaceId);
+
+        const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
+        let ghTokenFilePath: string | undefined;
+        if (ghToken) {
+          ghTokenFilePath = join(POLICY_DIR, `${workspaceId}-gh-token`);
+          await writeFile(ghTokenFilePath, ghToken, { mode: 0o600 });
+          workspace.ghTokenFilePath = ghTokenFilePath;
+        }
+
+        const containerEnv: Record<string, string> = {
+          ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
+          ...(ghToken ? { GH_TOKEN: ghToken } : {}),
+          ...(process.env.GIT_AUTHOR_NAME ? { GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME } : {}),
+          ...(process.env.GIT_AUTHOR_EMAIL ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL } : {}),
+          ...(process.env.GIT_COMMITTER_NAME ? { GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME } : {}),
+          ...(process.env.GIT_COMMITTER_EMAIL ? { GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL } : {}),
+        };
+
+        // Rebuild proxy if template uses filtered network
+        let proxyCaCertPath: string | undefined;
+        if (template.network.access === 'filtered') {
+          const ca = await ensureCA();
+          proxyCaCertPath = ca.certPath;
+          const inspectedDomains =
+            template.network.access === 'filtered' ? template.network.inspectedDomains : [];
+          const proxyConfig: ProxyConfig = {
+            sessionId: workspaceId,
+            port: 0,
+            allowedDomains: template.network.allowedDomains,
+            inspectedDomains,
+            githubPolicy: workspace.githubPolicy,
+            ca,
+            onPolicyEvent: (event: PolicyEvent) => {
+              this.emit('workspace-update', { workspaceId, type: 'policy-event', event });
+              if (workspace.githubPolicy) {
+                if (event.operation.startsWith('branch-ratchet:')) {
+                  writePolicyState(workspaceId, workspace.githubPolicy).catch(() => {});
+                  updateAllowedRefs(workspaceId, workspace.githubPolicy.allowedPushRefs).catch(() => {});
+                  this.persistState(workspace);
+                }
+                if (event.operation.startsWith('captured PR')) {
+                  writePolicyState(workspaceId, workspace.githubPolicy).catch(() => {});
+                  const urlMatch = event.operation.match(/https:\/\/\S+/);
+                  if (urlMatch) workspace.prUrl = urlMatch[0];
+                  workspace.phase = 'pr-open';
+                  this.persistState(workspace);
+                  this.summarize(workspace).then((summary) => {
+                    this.emit('workspace-update', { workspaceId, type: 'status-change', status: workspace.status, summary });
+                  }).catch(() => {});
+                }
+              }
+            },
+          };
+          if (workspace.githubPolicy) {
+            proxyConfig.onMitmRequest = createGitHubMitmHandler(proxyConfig);
+          }
+          const proxyHandle = await startProxy(proxyConfig);
+          workspace.proxyHandle = proxyHandle;
+          const sessionNetwork = await createSessionNetwork(workspaceId);
+          workspace.sessionNetwork = sessionNetwork;
+
+          const proxyEnvUrl = `http://host.docker.internal:${proxyHandle.port}`;
+          containerEnv.HTTP_PROXY = proxyEnvUrl;
+          containerEnv.HTTPS_PROXY = proxyEnvUrl;
+          containerEnv.http_proxy = proxyEnvUrl;
+          containerEnv.https_proxy = proxyEnvUrl;
+          containerEnv.NO_PROXY = 'localhost,127.0.0.1,::1';
+          containerEnv.no_proxy = 'localhost,127.0.0.1,::1';
+          containerEnv.BOUNCER_PROXY_HOST = 'host.docker.internal';
+          containerEnv.BOUNCER_PROXY_PORT = String(proxyHandle.port);
+
+          if (containerGitconfigFile) {
+            const gitconfigContent = generateGitconfig({
+              hooksPath: '/etc/bouncer/hooks',
+              credentialHelperPath: '/usr/local/lib/bouncer/gh-credential-helper.js',
+              userName: process.env.GIT_AUTHOR_NAME,
+              userEmail: process.env.GIT_AUTHOR_EMAIL,
+              proxyUrl: proxyEnvUrl,
+            });
+            await writeFile(containerGitconfigFile, gitconfigContent, 'utf-8');
+          }
+        }
+
+        const imageTag = await ensureAgentImage();
+        const ctx: ContainerSessionContext = {
+          sessionId: workspaceId,
+          worktreePath: workingDir,
+          gitCommonDir: workspace.worktree?.gitCommonDir,
+          agentBinPath: agentPkgDir,
+          nodeModulesPath: appNodeModules,
+          shimBundlePath: shimBundlePath && containerShimScript ? shimBundlePath : undefined,
+          shimScriptPath: containerShimScript,
+          hooksDir: containerHooksDir,
+          allowedRefsPath: allowedRefsPath(workspaceId),
+          policyStatePath: workspace.githubPolicy ? policyStatePath(workspaceId) : undefined,
+          gitconfigPath: containerGitconfigFile,
+          credentialHelperPath: containerCredHelper,
+          caCertPath: proxyCaCertPath,
+          claudeConfigDir: sessionDir,
+          claudeCredentialsPath: undefined, // Already in sessionDir
+          ghTokenFilePath,
+        };
+
+        containerConfig = policyToContainerConfig(template, ctx, containerEnv, imageTag, [
+          'node',
+          '/usr/local/lib/agent/dist/index.js',
+        ]);
+
+        if (workspace.proxyHandle && workspace.sessionNetwork) {
+          containerConfig.networkMode = 'proxy';
+          containerConfig.networkName = workspace.sessionNetwork.networkName;
+        }
+      }
+
+      // Spawn the agent
+      let agentProcess: ChildProcess;
+      if (containerConfig) {
+        workspace.sandboxBackend = 'container';
+        const handle = spawnContainer(containerConfig);
+        workspace.containerHandle = handle;
+        agentProcess = handle.process;
+      } else {
+        const { cmd, args, env, cwd } = resolveAgentCommand(
+          workspace.agentType,
+          workingDir,
+          sandboxConfig,
+          workspace.worktree?.path,
+        );
+        agentProcess = spawn(cmd, args, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, ...env, ...shimEnv },
+          cwd,
+        });
+      }
+      workspace.agentProcess = agentProcess;
+
+      // Start GH token refresh for container sessions
+      if (workspace.ghTokenFilePath && containerConfig) {
+        const GH_TOKEN_REFRESH_MS = 30 * 60 * 1000;
+        const tokenFilePath = workspace.ghTokenFilePath;
+        workspace.ghTokenRefreshTimer = setInterval(async () => {
+          try {
+            const { execFile: ef } = await import('node:child_process');
+            const { promisify: p } = await import('node:util');
+            const { stdout } = await p(ef)('gh', ['auth', 'token']);
+            const newToken = stdout.trim();
+            if (newToken) {
+              await writeFile(tokenFilePath, newToken, { mode: 0o644 });
+            }
+          } catch { /* best effort */ }
+        }, GH_TOKEN_REFRESH_MS);
+      }
+
+      // Capture stderr
+      let collectedStderr = '';
+      const stderrDecoder = new StringDecoder('utf8');
+      agentProcess.stderr?.on('data', (data: Buffer) => {
+        const chunk = stderrDecoder.write(data);
+        collectedStderr += chunk;
+        process.stderr.write(data);
+      });
+
+      // Handle agent crashes
+      agentProcess.on('exit', (code) => {
+        const remaining = stderrDecoder.end();
+        if (remaining) collectedStderr += remaining;
+        if (workspace.status !== 'closed') {
+          const errorKind = isAuthError(collectedStderr) ? ('auth' as const) : undefined;
+          workspace.status = 'error';
+          workspace.errorMessage = errorKind
+            ? 'Authentication expired. Please re-authenticate and retry.'
+            : `Agent exited with code ${code}`;
+          workspace.errorKind = errorKind;
+          this.emit('workspace-update', {
+            workspaceId,
+            type: 'status-change',
+            status: 'error',
+            error: workspace.errorMessage,
+            errorKind,
+          });
+        }
+      });
+      agentProcess.on('error', (err) => {
+        if (workspace.status !== 'closed') {
+          workspace.status = 'error';
+          workspace.errorMessage = err.message;
+          this.emit('workspace-update', { workspaceId, type: 'status-change', status: 'error', error: err.message });
+        }
+      });
+
+      // Set up ACP connection
+      const output = Writable.toWeb(agentProcess.stdin!) as WritableStream<Uint8Array>;
+      const input = Readable.toWeb(agentProcess.stdout!) as ReadableStream<Uint8Array>;
+      const stream = acp.ndJsonStream(output, input);
+
+      const emitUpdate = this.emit.bind(this);
+      const pendingChunks = new Map<string, { messageId: string; text: string; segmentIndex: number }>();
+      let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushChunks = (): void => {
+        if (chunkFlushTimer) { clearTimeout(chunkFlushTimer); chunkFlushTimer = null; }
+        for (const [, chunk] of pendingChunks) {
+          emitUpdate('workspace-update', { workspaceId, type: 'stream-chunk', messageId: chunk.messageId, text: chunk.text, segmentIndex: chunk.segmentIndex });
+        }
+        pendingChunks.clear();
+      };
+      workspace.flushChunks = flushChunks;
+      const scheduleChunkFlush = (): void => { if (!chunkFlushTimer) chunkFlushTimer = setTimeout(flushChunks, 50); };
+
+      let sawToolCallSinceLastText = false;
+
+      const connection = new acp.ClientSideConnection(
+        (_agent) => ({
+          async sessionUpdate(params) {
+            const update = params.update;
+            if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
+              const agentMsg = workspace.messages.findLast((m) => m.role === 'agent' && m.streaming);
+              if (agentMsg) {
+                const segments = agentMsg.textSegments!;
+                const parts = agentMsg.parts!;
+                if (sawToolCallSinceLastText) {
+                  segments.push('');
+                  parts.push({ type: 'text', index: segments.length - 1 });
+                  sawToolCallSinceLastText = false;
+                }
+                const segIdx = segments.length - 1;
+                segments[segIdx] += update.content.text;
+                agentMsg.text = segments.join('\n\n');
+                const chunkKey = `${agentMsg.id}:${segIdx}`;
+                const pending = pendingChunks.get(chunkKey);
+                if (pending) { pending.text += update.content.text; }
+                else { pendingChunks.set(chunkKey, { messageId: agentMsg.id, text: update.content.text, segmentIndex: segIdx }); }
+                scheduleChunkFlush();
+              }
+            } else if (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') {
+              sawToolCallSinceLastText = true;
+              const agentMsg = workspace.messages.findLast((m) => m.role === 'agent');
+              if (agentMsg) {
+                const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
+                const rawInput = 'rawInput' in update && update.rawInput != null
+                  ? (update.rawInput as Record<string, unknown>) : undefined;
+                const toolCall: ToolCallInfo = {
+                  id: update.toolCallId,
+                  name: meta?.claudeCode?.toolName ?? 'Tool',
+                  status: 'status' in update ? (update.status as ToolCallInfo['status']) : 'in_progress',
+                  title: 'title' in update ? (update.title as string) : undefined,
+                  description: rawInput?.description && typeof rawInput.description === 'string' ? rawInput.description : undefined,
+                  input: rawInput,
+                  output: 'rawOutput' in update ? (typeof update.rawOutput === 'string' ? update.rawOutput : JSON.stringify(update.rawOutput)) : undefined,
+                };
+                agentMsg.toolCalls = agentMsg.toolCalls ?? [];
+                const existing = agentMsg.toolCalls.find((tc) => tc.id === toolCall.id);
+                if (!existing && agentMsg.parts) { agentMsg.parts.push({ type: 'tool', toolCallId: toolCall.id }); }
+                if (existing) {
+                  for (const [k, v] of Object.entries(toolCall)) { if (v !== undefined) (existing as unknown as Record<string, unknown>)[k] = v; }
+                } else { agentMsg.toolCalls.push(toolCall); }
+                emitUpdate('workspace-update', { workspaceId, type: 'tool-call', messageId: agentMsg.id, toolCall });
+              }
+            }
+          },
+          async requestPermission(params) {
+            const allowOption = params.options.find((o) => o.kind === 'allow_once');
+            if (allowOption) return { outcome: { outcome: 'selected' as const, optionId: allowOption.optionId } };
+            return { outcome: { outcome: 'selected' as const, optionId: params.options[0].optionId } };
+          },
+        }),
+        stream,
+      );
+      workspace.connection = connection;
+
+      // ACP handshake
+      await connection.initialize({
+        protocolVersion: acp.PROTOCOL_VERSION,
+        clientCapabilities: { terminal: true, fs: { readTextFile: true, writeTextFile: true } },
+      });
+
+      // Resume the session
+      const cwd = containerConfig ? '/workspace' : workingDir;
+      await connection.unstable_resumeSession({ sessionId: savedSessionId, cwd });
+
+      // Start container monitor
+      if (workspace.containerHandle) {
+        const cMonitor = new ContainerMonitor();
+        cMonitor.on('violation', (violation) => {
+          const info: SandboxViolationInfo = {
+            timestamp: violation.timestamp.getTime(),
+            operation: violation.operation,
+            path: violation.path,
+            processName: violation.processName,
+          };
+          workspace.sandboxViolations.push(info);
+          this.emit('workspace-update', { workspaceId, type: 'sandbox-violation', violation: info });
+        });
+        cMonitor.start(workspace.containerHandle.containerName);
+        workspace.containerMonitor = cMonitor;
+      }
+
+      // Add system message to mark the resume point
+      const systemMsg: Message = {
+        id: randomUUID(),
+        role: 'agent',
+        text: `_Session resumed at ${new Date().toLocaleTimeString()}_`,
+        timestamp: Date.now(),
+      };
+      workspace.messages.push(systemMsg);
+      this.emit('workspace-update', { workspaceId, type: 'message', message: systemMsg });
+      this.queueMessagePersist(workspace, workspaceId, systemMsg);
+
+      workspace.status = 'ready';
+      const readySummary = await this.summarize(workspace);
+      this.emit('workspace-update', { workspaceId, type: 'status-change', status: 'ready', summary: readySummary });
+    } catch (err) {
+      console.error(`[resume] Failed to resume workspace ${workspaceId}:`, err);
+      workspace.status = 'error';
+      workspace.errorMessage = `Resume failed: ${err instanceof Error ? err.message : String(err)}`;
+      this.emit('workspace-update', { workspaceId, type: 'status-change', status: 'error', error: workspace.errorMessage });
+    }
+  }
+
+  /**
+   * Restore persisted workspaces from disk as suspended.
+   * Called on app startup before the window is shown.
+   */
+  async restorePersistedWorkspaces(): Promise<void> {
+    const persisted = await loadPersistedWorkspaces();
+    for (const pw of persisted) {
+      // Skip if already loaded (shouldn't happen, but be safe)
+      if (this.workspaces.has(pw.id)) continue;
+
+      // Validate worktree still exists
+      if (pw.worktreePath) {
+        const exists = await stat(pw.worktreePath).then(() => true, () => false);
+        if (!exists) {
+          console.log(`[restore] Worktree missing for workspace ${pw.id}, removing persisted state`);
+          await removePersistedWorkspace(pw.id);
+          await removeMessages(pw.id);
+          continue;
+        }
+      }
+
+      const messages = await loadMessages(pw.id);
+
+      const workspace: WorkspaceState = {
+        id: pw.id,
+        repositoryId: pw.repositoryId,
+        acpSessionId: pw.acpSessionId,
+        agentProcess: null!,
+        connection: null!,
+        messages,
+        status: 'suspended',
+        agentType: pw.agentType,
+        projectDir: pw.projectDir,
+        worktree: pw.worktreePath
+          ? { path: pw.worktreePath, branch: pw.worktreeBranch!, projectDir: pw.projectDir, gitCommonDir: pw.worktreeGitCommonDir ?? undefined }
+          : null,
+        sandboxBackend: pw.sandboxBackend,
+        sandboxConfig: null,
+        sandboxMonitor: null,
+        containerMonitor: null,
+        sandboxViolations: [],
+        containerHandle: null,
+        proxyHandle: null,
+        sessionNetwork: null,
+        policyId: pw.policyId,
+        githubPolicy: pw.githubPolicy,
+        phase: pw.phase,
+        prUrl: pw.prUrl,
+        flushChunks: () => {},
+        promptCount: pw.promptCount,
+        messageWriteChain: Promise.resolve(),
+        pendingMessage: null,
+        ghTokenRefreshTimer: null,
+        ghTokenFilePath: null,
+      };
+      this.workspaces.set(pw.id, workspace);
+      console.log(`[restore] Restored workspace ${pw.id} as suspended (${messages.length} messages)`);
+    }
   }
 }

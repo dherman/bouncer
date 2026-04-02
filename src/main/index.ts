@@ -100,6 +100,12 @@ app.whenReady().then(async () => {
     mainWindow?.webContents.send(channel, data);
   });
 
+  // Restore persisted workspaces from previous sessions as "suspended".
+  // Must happen before orphan cleanup so their worktrees/artifacts aren't removed.
+  await workspaceManager.restorePersistedWorkspaces().catch((err) => {
+    console.warn('Failed to restore persisted workspaces:', err);
+  });
+
   // Clean up orphan worktrees, containers, and policies from previous crashes.
   // Awaited so no workspace can be created before cleanup finishes.
   await workspaceManager.cleanupOrphans().catch((err) => {
@@ -185,6 +191,12 @@ app.whenReady().then(async () => {
       throw new Error('Invalid argument: sessionId must be a string');
     }
     return workspaceManager.refreshCredentials(sessionId);
+  });
+  ipcMain.handle('workspaces:resume', (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') {
+      throw new Error('Invalid argument: sessionId must be a string');
+    }
+    return workspaceManager.resumeWorkspace(sessionId);
   });
 
   ipcMain.handle('workspaces:getSandboxViolations', (_e, sessionId: unknown) => {
