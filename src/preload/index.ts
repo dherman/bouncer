@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('bouncer', {
     refreshCredentials: (workspaceId: string) =>
       ipcRenderer.invoke('workspaces:refreshCredentials', workspaceId),
     resume: (workspaceId: string) => ipcRenderer.invoke('workspaces:resume', workspaceId),
+    simulateAuthError: (workspaceId: string) =>
+      ipcRenderer.invoke('workspaces:simulateAuthError', workspaceId),
     getSandboxViolations: (workspaceId: string) =>
       ipcRenderer.invoke('workspaces:getSandboxViolations', workspaceId),
     loadReplayData: (datasetSessionId: string) =>

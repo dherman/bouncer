@@ -377,6 +377,24 @@ function App() {
     }
   }
 
+  // Debug: Ctrl+Shift+X simulates an auth error on the active workspace
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable)
+        return;
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyX') {
+        e.preventDefault();
+        if (!activeWorkspaceId) return;
+        window.bouncer.workspaces.simulateAuthError(activeWorkspaceId).catch((err) => {
+          console.error('simulateAuthError:', err);
+        });
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [activeWorkspaceId]);
+
   async function handleRemoveRepo(id: string) {
     // Close active workspaces for this repo first
     const repoWorkspaces = workspaces.filter((w) => w.repositoryId === id && w.status !== 'closed');
