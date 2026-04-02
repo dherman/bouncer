@@ -25,6 +25,7 @@ interface BouncerAPI {
     close(workspaceId: string): Promise<void>;
     refreshCredentials(workspaceId: string): Promise<void>;
     resume(workspaceId: string): Promise<void>;
+    simulateAuthError(workspaceId: string): Promise<void>;
     getSandboxViolations(workspaceId: string): Promise<SandboxViolationInfo[]>;
     loadReplayData(datasetSessionId: string): Promise<unknown[]>;
     onUpdate(callback: (update: WorkspaceUpdate) => void): () => void;

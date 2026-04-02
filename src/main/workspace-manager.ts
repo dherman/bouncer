@@ -52,11 +52,7 @@ import {
   removePersistedWorkspace,
   loadPersistedWorkspaces,
 } from './workspace-store.js';
-import {
-  appendMessage as persistMessage,
-  loadMessages,
-  removeMessages,
-} from './message-store.js';
+import { appendMessage as persistMessage, loadMessages, removeMessages } from './message-store.js';
 import type {
   AgentType,
   GitHubPolicy,
@@ -945,6 +941,8 @@ export class WorkspaceManager {
           stderrBuffer = '';
         }
 
+        // Don't overwrite an existing auth error (e.g. set before killing the process)
+        if (workspace.status === 'error' && workspace.errorKind === 'auth') return;
         if (workspace.status !== 'closed') {
           const errorMessage =
             workspace.status === 'initializing'
@@ -1240,11 +1238,18 @@ export class WorkspaceManager {
       if (worktree) {
         await cleanupHooks(id, worktree.path).catch(() => {});
       }
+      const errorKind = isAuthError(err) ? ('auth' as const) : undefined;
       workspace.status = 'error';
+      workspace.errorMessage = errorKind
+        ? 'Authentication expired. Please re-authenticate and retry.'
+        : `Workspace creation failed: ${err instanceof Error ? err.message : String(err)}`;
+      workspace.errorKind = errorKind;
       this.emit('workspace-update', {
         workspaceId: id,
         type: 'status-change',
         status: 'error',
+        error: workspace.errorMessage,
+        errorKind,
       });
     }
   }
@@ -1435,6 +1440,36 @@ export class WorkspaceManager {
       workspaceId,
       type: 'status-change',
       status: 'ready',
+    });
+  }
+
+  /**
+   * Force a workspace into auth-error state for testing the re-auth flow.
+   * Kills the agent process to simulate a real auth expiration crash.
+   */
+  async simulateAuthError(workspaceId: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+    if (workspace.status !== 'ready') {
+      throw new Error(`Workspace not in ready state: ${workspace.status}`);
+    }
+
+    // Kill the agent to simulate a real auth crash
+    if (workspace.containerHandle) {
+      workspace.containerHandle.kill();
+    } else {
+      workspace.agentProcess?.kill();
+    }
+
+    workspace.status = 'error';
+    workspace.errorMessage = 'Authentication expired. Please re-authenticate and retry.';
+    workspace.errorKind = 'auth';
+    this.emit('workspace-update', {
+      workspaceId,
+      type: 'status-change',
+      status: 'error',
+      error: workspace.errorMessage,
+      errorKind: 'auth',
     });
   }
 
@@ -1717,14 +1752,22 @@ export class WorkspaceManager {
       phase: workspace.phase,
       prUrl: workspace.prUrl,
       promptCount: workspace.promptCount,
-    }).catch((err) => console.warn(`[workspace] Failed to persist state for ${workspace.id}:`, err));
+    }).catch((err) =>
+      console.warn(`[workspace] Failed to persist state for ${workspace.id}:`, err),
+    );
   }
 
   /** Queue a message write through the workspace's serialized write chain. */
-  private queueMessagePersist(workspace: WorkspaceState, workspaceId: string, message: Message): void {
+  private queueMessagePersist(
+    workspace: WorkspaceState,
+    workspaceId: string,
+    message: Message,
+  ): void {
     workspace.messageWriteChain = workspace.messageWriteChain
       .then(() => persistMessage(workspaceId, message))
-      .catch((err) => console.warn(`[workspace] Failed to persist message for ${workspaceId}:`, err));
+      .catch((err) =>
+        console.warn(`[workspace] Failed to persist message for ${workspaceId}:`, err),
+      );
   }
 
   /**
@@ -1765,7 +1808,19 @@ export class WorkspaceManager {
       await workspace.proxyHandle.stop().catch(() => {});
       workspace.proxyHandle = null;
     }
-    workspace.containerHandle = null;
+    if (workspace.sessionNetwork) {
+      await workspace.sessionNetwork.cleanup().catch(() => {});
+      workspace.sessionNetwork = null;
+    }
+
+    // Kill old agent process before spawning a new one
+    if (workspace.containerHandle) {
+      workspace.containerHandle.kill();
+      await removeContainer(workspaceId).catch(() => {});
+      workspace.containerHandle = null;
+    } else if (workspace.agentProcess?.exitCode === null) {
+      workspace.agentProcess.kill();
+    }
 
     try {
       // For container sessions, refresh credentials before spawning
@@ -1819,7 +1874,12 @@ export class WorkspaceManager {
       let containerConfig: ContainerConfig | null = null;
       let shimEnv: Record<string, string> = {};
 
-      if (workspace.sandboxBackend === 'container' && dockerAvailable && template && (workspace.agentType === 'claude-code' || workspace.agentType === 'replay')) {
+      if (
+        workspace.sandboxBackend === 'container' &&
+        dockerAvailable &&
+        template &&
+        (workspace.agentType === 'claude-code' || workspace.agentType === 'replay')
+      ) {
         // Reconstruct container config — reuse the same initialization logic
         const appRequire = createRequire(app.getAppPath() + '/');
         const agentPkgDir = join(
@@ -1886,9 +1946,15 @@ export class WorkspaceManager {
           ...(anthropicKey ? { ANTHROPIC_API_KEY: anthropicKey } : {}),
           ...(ghToken ? { GH_TOKEN: ghToken } : {}),
           ...(process.env.GIT_AUTHOR_NAME ? { GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME } : {}),
-          ...(process.env.GIT_AUTHOR_EMAIL ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL } : {}),
-          ...(process.env.GIT_COMMITTER_NAME ? { GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME } : {}),
-          ...(process.env.GIT_COMMITTER_EMAIL ? { GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL } : {}),
+          ...(process.env.GIT_AUTHOR_EMAIL
+            ? { GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL }
+            : {}),
+          ...(process.env.GIT_COMMITTER_NAME
+            ? { GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME }
+            : {}),
+          ...(process.env.GIT_COMMITTER_EMAIL
+            ? { GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL }
+            : {}),
         };
 
         // Rebuild proxy if template uses filtered network
@@ -1910,7 +1976,9 @@ export class WorkspaceManager {
               if (workspace.githubPolicy) {
                 if (event.operation.startsWith('branch-ratchet:')) {
                   writePolicyState(workspaceId, workspace.githubPolicy).catch(() => {});
-                  updateAllowedRefs(workspaceId, workspace.githubPolicy.allowedPushRefs).catch(() => {});
+                  updateAllowedRefs(workspaceId, workspace.githubPolicy.allowedPushRefs).catch(
+                    () => {},
+                  );
                   this.persistState(workspace);
                 }
                 if (event.operation.startsWith('captured PR')) {
@@ -1919,9 +1987,16 @@ export class WorkspaceManager {
                   if (urlMatch) workspace.prUrl = urlMatch[0];
                   workspace.phase = 'pr-open';
                   this.persistState(workspace);
-                  this.summarize(workspace).then((summary) => {
-                    this.emit('workspace-update', { workspaceId, type: 'status-change', status: workspace.status, summary });
-                  }).catch(() => {});
+                  this.summarize(workspace)
+                    .then((summary) => {
+                      this.emit('workspace-update', {
+                        workspaceId,
+                        type: 'status-change',
+                        status: workspace.status,
+                        summary,
+                      });
+                    })
+                    .catch(() => {});
                 }
               }
             },
@@ -2022,7 +2097,9 @@ export class WorkspaceManager {
             if (newToken) {
               await writeFile(tokenFilePath, newToken, { mode: 0o644 });
             }
-          } catch { /* best effort */ }
+          } catch {
+            /* best effort */
+          }
         }, GH_TOKEN_REFRESH_MS);
       }
 
@@ -2039,6 +2116,8 @@ export class WorkspaceManager {
       agentProcess.on('exit', (code) => {
         const remaining = stderrDecoder.end();
         if (remaining) collectedStderr += remaining;
+        // Don't overwrite an existing auth error (e.g. set before killing the process)
+        if (workspace.status === 'error' && workspace.errorKind === 'auth') return;
         if (workspace.status !== 'closed') {
           const errorKind = isAuthError(collectedStderr) ? ('auth' as const) : undefined;
           workspace.status = 'error';
@@ -2059,7 +2138,12 @@ export class WorkspaceManager {
         if (workspace.status !== 'closed') {
           workspace.status = 'error';
           workspace.errorMessage = err.message;
-          this.emit('workspace-update', { workspaceId, type: 'status-change', status: 'error', error: err.message });
+          this.emit('workspace-update', {
+            workspaceId,
+            type: 'status-change',
+            status: 'error',
+            error: err.message,
+          });
         }
       });
 
@@ -2069,17 +2153,31 @@ export class WorkspaceManager {
       const stream = acp.ndJsonStream(output, input);
 
       const emitUpdate = this.emit.bind(this);
-      const pendingChunks = new Map<string, { messageId: string; text: string; segmentIndex: number }>();
+      const pendingChunks = new Map<
+        string,
+        { messageId: string; text: string; segmentIndex: number }
+      >();
       let chunkFlushTimer: ReturnType<typeof setTimeout> | null = null;
       const flushChunks = (): void => {
-        if (chunkFlushTimer) { clearTimeout(chunkFlushTimer); chunkFlushTimer = null; }
+        if (chunkFlushTimer) {
+          clearTimeout(chunkFlushTimer);
+          chunkFlushTimer = null;
+        }
         for (const [, chunk] of pendingChunks) {
-          emitUpdate('workspace-update', { workspaceId, type: 'stream-chunk', messageId: chunk.messageId, text: chunk.text, segmentIndex: chunk.segmentIndex });
+          emitUpdate('workspace-update', {
+            workspaceId,
+            type: 'stream-chunk',
+            messageId: chunk.messageId,
+            text: chunk.text,
+            segmentIndex: chunk.segmentIndex,
+          });
         }
         pendingChunks.clear();
       };
       workspace.flushChunks = flushChunks;
-      const scheduleChunkFlush = (): void => { if (!chunkFlushTimer) chunkFlushTimer = setTimeout(flushChunks, 50); };
+      const scheduleChunkFlush = (): void => {
+        if (!chunkFlushTimer) chunkFlushTimer = setTimeout(flushChunks, 50);
+      };
 
       let sawToolCallSinceLastText = false;
 
@@ -2088,7 +2186,9 @@ export class WorkspaceManager {
           async sessionUpdate(params) {
             const update = params.update;
             if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
-              const agentMsg = workspace.messages.findLast((m) => m.role === 'agent' && m.streaming);
+              const agentMsg = workspace.messages.findLast(
+                (m) => m.role === 'agent' && m.streaming,
+              );
               if (agentMsg) {
                 const segments = agentMsg.textSegments!;
                 const parts = agentMsg.parts!;
@@ -2102,40 +2202,75 @@ export class WorkspaceManager {
                 agentMsg.text = segments.join('\n\n');
                 const chunkKey = `${agentMsg.id}:${segIdx}`;
                 const pending = pendingChunks.get(chunkKey);
-                if (pending) { pending.text += update.content.text; }
-                else { pendingChunks.set(chunkKey, { messageId: agentMsg.id, text: update.content.text, segmentIndex: segIdx }); }
+                if (pending) {
+                  pending.text += update.content.text;
+                } else {
+                  pendingChunks.set(chunkKey, {
+                    messageId: agentMsg.id,
+                    text: update.content.text,
+                    segmentIndex: segIdx,
+                  });
+                }
                 scheduleChunkFlush();
               }
-            } else if (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') {
+            } else if (
+              update.sessionUpdate === 'tool_call' ||
+              update.sessionUpdate === 'tool_call_update'
+            ) {
               sawToolCallSinceLastText = true;
               const agentMsg = workspace.messages.findLast((m) => m.role === 'agent');
               if (agentMsg) {
                 const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
-                const rawInput = 'rawInput' in update && update.rawInput != null
-                  ? (update.rawInput as Record<string, unknown>) : undefined;
+                const rawInput =
+                  'rawInput' in update && update.rawInput != null
+                    ? (update.rawInput as Record<string, unknown>)
+                    : undefined;
                 const toolCall: ToolCallInfo = {
                   id: update.toolCallId,
                   name: meta?.claudeCode?.toolName ?? 'Tool',
-                  status: 'status' in update ? (update.status as ToolCallInfo['status']) : 'in_progress',
+                  status:
+                    'status' in update ? (update.status as ToolCallInfo['status']) : 'in_progress',
                   title: 'title' in update ? (update.title as string) : undefined,
-                  description: rawInput?.description && typeof rawInput.description === 'string' ? rawInput.description : undefined,
+                  description:
+                    rawInput?.description && typeof rawInput.description === 'string'
+                      ? rawInput.description
+                      : undefined,
                   input: rawInput,
-                  output: 'rawOutput' in update ? (typeof update.rawOutput === 'string' ? update.rawOutput : JSON.stringify(update.rawOutput)) : undefined,
+                  output:
+                    'rawOutput' in update
+                      ? typeof update.rawOutput === 'string'
+                        ? update.rawOutput
+                        : JSON.stringify(update.rawOutput)
+                      : undefined,
                 };
                 agentMsg.toolCalls = agentMsg.toolCalls ?? [];
                 const existing = agentMsg.toolCalls.find((tc) => tc.id === toolCall.id);
-                if (!existing && agentMsg.parts) { agentMsg.parts.push({ type: 'tool', toolCallId: toolCall.id }); }
+                if (!existing && agentMsg.parts) {
+                  agentMsg.parts.push({ type: 'tool', toolCallId: toolCall.id });
+                }
                 if (existing) {
-                  for (const [k, v] of Object.entries(toolCall)) { if (v !== undefined) (existing as unknown as Record<string, unknown>)[k] = v; }
-                } else { agentMsg.toolCalls.push(toolCall); }
-                emitUpdate('workspace-update', { workspaceId, type: 'tool-call', messageId: agentMsg.id, toolCall });
+                  for (const [k, v] of Object.entries(toolCall)) {
+                    if (v !== undefined) (existing as unknown as Record<string, unknown>)[k] = v;
+                  }
+                } else {
+                  agentMsg.toolCalls.push(toolCall);
+                }
+                emitUpdate('workspace-update', {
+                  workspaceId,
+                  type: 'tool-call',
+                  messageId: agentMsg.id,
+                  toolCall,
+                });
               }
             }
           },
           async requestPermission(params) {
             const allowOption = params.options.find((o) => o.kind === 'allow_once');
-            if (allowOption) return { outcome: { outcome: 'selected' as const, optionId: allowOption.optionId } };
-            return { outcome: { outcome: 'selected' as const, optionId: params.options[0].optionId } };
+            if (allowOption)
+              return { outcome: { outcome: 'selected' as const, optionId: allowOption.optionId } };
+            return {
+              outcome: { outcome: 'selected' as const, optionId: params.options[0].optionId },
+            };
           },
         }),
         stream,
@@ -2163,7 +2298,11 @@ export class WorkspaceManager {
             processName: violation.processName,
           };
           workspace.sandboxViolations.push(info);
-          this.emit('workspace-update', { workspaceId, type: 'sandbox-violation', violation: info });
+          this.emit('workspace-update', {
+            workspaceId,
+            type: 'sandbox-violation',
+            violation: info,
+          });
         });
         cMonitor.start(workspace.containerHandle.containerName);
         workspace.containerMonitor = cMonitor;
@@ -2182,12 +2321,27 @@ export class WorkspaceManager {
 
       workspace.status = 'ready';
       const readySummary = await this.summarize(workspace);
-      this.emit('workspace-update', { workspaceId, type: 'status-change', status: 'ready', summary: readySummary });
+      this.emit('workspace-update', {
+        workspaceId,
+        type: 'status-change',
+        status: 'ready',
+        summary: readySummary,
+      });
     } catch (err) {
       console.error(`[resume] Failed to resume workspace ${workspaceId}:`, err);
+      const errorKind = isAuthError(err) ? ('auth' as const) : undefined;
       workspace.status = 'error';
-      workspace.errorMessage = `Resume failed: ${err instanceof Error ? err.message : String(err)}`;
-      this.emit('workspace-update', { workspaceId, type: 'status-change', status: 'error', error: workspace.errorMessage });
+      workspace.errorMessage = errorKind
+        ? 'Authentication expired. Please re-authenticate and retry.'
+        : `Resume failed: ${err instanceof Error ? err.message : String(err)}`;
+      workspace.errorKind = errorKind;
+      this.emit('workspace-update', {
+        workspaceId,
+        type: 'status-change',
+        status: 'error',
+        error: workspace.errorMessage,
+        errorKind,
+      });
     }
   }
 
@@ -2203,9 +2357,14 @@ export class WorkspaceManager {
 
       // Validate worktree still exists
       if (pw.worktreePath) {
-        const exists = await stat(pw.worktreePath).then(() => true, () => false);
+        const exists = await stat(pw.worktreePath).then(
+          () => true,
+          () => false,
+        );
         if (!exists) {
-          console.log(`[restore] Worktree missing for workspace ${pw.id}, removing persisted state`);
+          console.log(
+            `[restore] Worktree missing for workspace ${pw.id}, removing persisted state`,
+          );
           await removePersistedWorkspace(pw.id);
           await removeMessages(pw.id);
           continue;
@@ -2225,7 +2384,12 @@ export class WorkspaceManager {
         agentType: pw.agentType,
         projectDir: pw.projectDir,
         worktree: pw.worktreePath
-          ? { path: pw.worktreePath, branch: pw.worktreeBranch!, projectDir: pw.projectDir, gitCommonDir: pw.worktreeGitCommonDir ?? undefined }
+          ? {
+              path: pw.worktreePath,
+              branch: pw.worktreeBranch!,
+              projectDir: pw.projectDir,
+              gitCommonDir: pw.worktreeGitCommonDir ?? undefined,
+            }
           : null,
         sandboxBackend: pw.sandboxBackend,
         sandboxConfig: null,
@@ -2247,7 +2411,9 @@ export class WorkspaceManager {
         ghTokenFilePath: null,
       };
       this.workspaces.set(pw.id, workspace);
-      console.log(`[restore] Restored workspace ${pw.id} as suspended (${messages.length} messages)`);
+      console.log(
+        `[restore] Restored workspace ${pw.id} as suspended (${messages.length} messages)`,
+      );
     }
   }
 }
