@@ -61,15 +61,20 @@ Close permanently deletes all workspace data. It is accessed via right-click con
 
 ## Archive Filesystem Format
 
-All workspace data lives under the Electron `userData` directory:
+All workspace data lives under the Electron `userData` directory. A typical layout with two archived workspaces and one active:
 
 ```
-~/Library/Application Support/bouncer/workspaces/
-  {workspaceId}.json           # workspace metadata
-  {workspaceId}-messages.jsonl # chat message history
+~/Library/Application Support/bouncer/
+└── workspaces/
+    ├── a1b2c3d4-5678-9abc-def0-111111111111.json            # archived workspace metadata
+    ├── a1b2c3d4-5678-9abc-def0-111111111111-messages.jsonl   # archived message history
+    ├── b2c3d4e5-6789-abcd-ef01-222222222222.json            # archived workspace metadata
+    ├── b2c3d4e5-6789-abcd-ef01-222222222222-messages.jsonl   # archived message history
+    ├── c3d4e5f6-789a-bcde-f012-333333333333.json            # active workspace metadata
+    └── c3d4e5f6-789a-bcde-f012-333333333333-messages.jsonl   # active message history
 ```
 
-Both files use the workspace UUID as their filename stem. An archived workspace retains both files; a closed (permanently deleted) workspace has both removed.
+Both files use the workspace UUID as their filename stem. An archived workspace retains both files; a closed (permanently deleted) workspace has both removed. Active and archived workspaces share the same directory and file format — the `archived` flag inside the metadata JSON is the only distinction.
 
 ### Metadata file (`{workspaceId}.json`)
 
