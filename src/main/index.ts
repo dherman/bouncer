@@ -186,6 +186,12 @@ app.whenReady().then(async () => {
     }
     return workspaceManager.closeWorkspace(sessionId);
   });
+  ipcMain.handle('workspaces:archive', (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') {
+      throw new Error('Invalid argument: sessionId must be a string');
+    }
+    return workspaceManager.archiveWorkspace(sessionId);
+  });
   ipcMain.handle('workspaces:refreshCredentials', (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');

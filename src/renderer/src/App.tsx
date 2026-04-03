@@ -60,6 +60,13 @@ function App() {
               pendingStatusUpdates.current.set(update.workspaceId, update);
               return prev;
             }
+            // Remove closed/archived workspaces from state immediately
+            if (update.status === 'closed' || update.status === 'archived') {
+              setActiveWorkspaceId((activeId) =>
+                activeId === update.workspaceId ? null : activeId,
+              );
+              return prev.filter((s) => s.id !== update.workspaceId);
+            }
             return prev.map((s) =>
               s.id === update.workspaceId
                 ? update.summary
@@ -359,6 +366,22 @@ function App() {
     }
   }
 
+  async function handleArchiveWorkspace(id: string) {
+    try {
+      await window.bouncer.workspaces.archive(id);
+    } catch (err) {
+      console.error('Failed to archive workspace:', err);
+    }
+  }
+
+  async function handleResumeWorkspaceById(id: string) {
+    try {
+      await window.bouncer.workspaces.resume(id);
+    } catch (err) {
+      console.error('Failed to resume workspace:', err);
+    }
+  }
+
   async function handleRefreshCredentials() {
     if (!activeWorkspaceId) return;
     try {
@@ -496,6 +519,8 @@ function App() {
         onSelectWorkspace={setActiveWorkspaceId}
         onCreateWorkspace={handleCreateWorkspace}
         onCloseWorkspace={handleCloseWorkspace}
+        onArchiveWorkspace={handleArchiveWorkspace}
+        onResumeWorkspace={handleResumeWorkspaceById}
         onAddRepo={handleAddRepo}
         onRemoveRepo={handleRemoveRepo}
         onUpdateRepo={handleUpdateRepo}

@@ -380,19 +380,45 @@ body {
   flex-shrink: 0;
 }
 
-.close-btn {
+.workspace-item.suspended {
+  opacity: 0.6;
+}
+
+.archive-btn {
   background: none;
   border: none;
-  color: #888;
-  font-size: 16px;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
   flex-shrink: 0;
+  opacity: 0.4;
+  display: flex;
+  align-items: center;
 }
 
-.close-btn:hover {
-  color: #d9534f;
+.archive-btn:hover {
+  opacity: 0.9;
+}
+
+.archive-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.resume-btn {
+  background: none;
+  border: none;
+  color: #4ec9b0;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.resume-btn:hover {
+  opacity: 1;
 }
 
 /* Chat panel */
