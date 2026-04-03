@@ -384,6 +384,21 @@ body {
   opacity: 0.6;
 }
 
+.close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.close-btn:hover {
+  color: #d9534f;
+}
+
 .archive-btn {
   background: none;
   border: none;

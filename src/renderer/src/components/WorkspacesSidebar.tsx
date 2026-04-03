@@ -196,7 +196,7 @@ function RepoGroup({
                 <span className="violation-count">{violationCounts.get(ws.id)}</span>
               )}
             </span>
-            {ws.status === 'suspended' ? (
+            {ws.status === 'suspended' && ws.canResume ? (
               <button
                 type="button"
                 className="resume-btn"
@@ -210,8 +210,14 @@ function RepoGroup({
                 ▶
               </button>
             ) : (
-              <span className={`workspace-status${ws.status === 'error' ? ' error' : ''}`}>
-                {ws.status === 'resuming' ? '⟳ resuming' : ws.status}
+              <span
+                className={`workspace-status${ws.status === 'suspended' ? ' suspended' : ws.status === 'error' ? ' error' : ''}`}
+              >
+                {ws.status === 'suspended'
+                  ? '⏸ suspended'
+                  : ws.status === 'resuming'
+                    ? '⟳ resuming'
+                    : ws.status}
               </span>
             )}
             {ws.status !== 'closed' && ws.status !== 'archived' && (

@@ -943,7 +943,7 @@ export class WorkspaceManager {
 
         // Don't overwrite an existing auth error (e.g. set before killing the process)
         if (workspace.status === 'error' && workspace.errorKind === 'auth') return;
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           const errorMessage =
             workspace.status === 'initializing'
               ? collectedStderr.trim() || `Agent exited with code ${code}`
@@ -964,7 +964,7 @@ export class WorkspaceManager {
         }
       });
       agentProcess.on('error', (err) => {
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           const errorMessage = err.message;
           workspace.status = 'error';
           workspace.errorMessage = errorMessage;
@@ -1354,7 +1354,7 @@ export class WorkspaceManager {
       });
     } catch (err) {
       console.error(`Prompt failed for workspace ${workspaceId}:`, err);
-      if (isAuthError(err) && workspace.status !== 'closed') {
+      if (isAuthError(err) && workspace.status !== 'closed' && workspace.status !== 'archived') {
         workspace.status = 'error';
         workspace.errorMessage = 'Authentication expired. Please re-authenticate and retry.';
         workspace.errorKind = 'auth';
@@ -2253,7 +2253,7 @@ export class WorkspaceManager {
         if (remaining) collectedStderr += remaining;
         // Don't overwrite an existing auth error (e.g. set before killing the process)
         if (workspace.status === 'error' && workspace.errorKind === 'auth') return;
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           const errorKind = isAuthError(collectedStderr) ? ('auth' as const) : undefined;
           workspace.status = 'error';
           workspace.errorMessage = errorKind
@@ -2270,7 +2270,7 @@ export class WorkspaceManager {
         }
       });
       agentProcess.on('error', (err) => {
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           workspace.status = 'error';
           workspace.errorMessage = err.message;
           this.emit('workspace-update', {
