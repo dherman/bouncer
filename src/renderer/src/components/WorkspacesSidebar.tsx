@@ -4,6 +4,7 @@ import branchIcon from '../assets/icon-branch.png';
 import newFolderIcon from '../assets/icon-new-folder.png';
 import newFolderHoverIcon from '../assets/icon-new-folder-hover.png';
 import archiveIcon from '../assets/icon-archive.png';
+import cancelledIcon from '../assets/icon-cancelled.png';
 
 function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
   const [hovered, setHovered] = useState(false);
@@ -209,15 +210,16 @@ function RepoGroup({
               >
                 ▶
               </button>
+            ) : ws.status === 'suspended' ? (
+              <img
+                src={cancelledIcon}
+                alt="Suspended"
+                className="cancelled-icon"
+                title="Suspended (cannot resume)"
+              />
             ) : (
-              <span
-                className={`workspace-status${ws.status === 'suspended' ? ' suspended' : ws.status === 'error' ? ' error' : ''}`}
-              >
-                {ws.status === 'suspended'
-                  ? '⏸ suspended'
-                  : ws.status === 'resuming'
-                    ? '⟳ resuming'
-                    : ws.status}
+              <span className={`workspace-status${ws.status === 'error' ? ' error' : ''}`}>
+                {ws.status === 'resuming' ? '⟳ resuming' : ws.status}
               </span>
             )}
             {ws.status !== 'closed' && ws.status !== 'archived' && (

@@ -420,6 +420,13 @@ body {
   height: 14px;
 }
 
+.cancelled-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
 .resume-btn {
   background: none;
   border: none;
