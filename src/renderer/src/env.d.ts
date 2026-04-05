@@ -23,6 +23,7 @@ interface BouncerAPI {
     getMessages(workspaceId: string): Promise<Message[]>;
     sendMessage(workspaceId: string, text: string): Promise<void>;
     close(workspaceId: string): Promise<void>;
+    archive(workspaceId: string): Promise<void>;
     refreshCredentials(workspaceId: string): Promise<void>;
     resume(workspaceId: string): Promise<void>;
     simulateAuthError(workspaceId: string): Promise<void>;

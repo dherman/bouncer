@@ -3,6 +3,8 @@ import type { Repository, WorkspaceSummary } from '../../../main/types';
 import branchIcon from '../assets/icon-branch.png';
 import newFolderIcon from '../assets/icon-new-folder.png';
 import newFolderHoverIcon from '../assets/icon-new-folder-hover.png';
+import archiveIcon from '../assets/icon-archive.png';
+import cancelledIcon from '../assets/icon-cancelled.png';
 
 function AddRepoButton({ onAddRepo }: { onAddRepo: () => void }) {
   const [hovered, setHovered] = useState(false);
@@ -34,6 +36,8 @@ interface Props {
   onSelectWorkspace: (id: string) => void;
   onCreateWorkspace: (repositoryId: string) => void;
   onCloseWorkspace: (id: string) => void;
+  onArchiveWorkspace: (id: string) => void;
+  onResumeWorkspace: (id: string) => void;
   onAddRepo: () => void;
   onRemoveRepo: (id: string) => void;
   onUpdateRepo: (id: string, changes: Partial<Repository>) => void;
@@ -58,6 +62,8 @@ function RepoGroup({
   onSelectWorkspace,
   onCreateWorkspace,
   onCloseWorkspace,
+  onArchiveWorkspace,
+  onResumeWorkspace,
   onRemoveRepo,
   onOpenSettings,
 }: {
@@ -70,28 +76,53 @@ function RepoGroup({
   onSelectWorkspace: (id: string) => void;
   onCreateWorkspace: (repositoryId: string) => void;
   onCloseWorkspace: (id: string) => void;
+  onArchiveWorkspace: (id: string) => void;
+  onResumeWorkspace: (id: string) => void;
   onRemoveRepo: (id: string) => void;
   onOpenSettings: (repoId: string) => void;
 }) {
-  const hasActive = workspaces.some((w) => w.status !== 'closed');
+  const hasActive = workspaces.some((w) => w.status !== 'closed' && w.status !== 'archived');
   const [expanded, setExpanded] = useState(true);
-  const [showContextMenu, setShowContextMenu] = useState(false);
-  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
+  const [showRepoContextMenu, setShowRepoContextMenu] = useState(false);
+  const [repoContextMenuPos, setRepoContextMenuPos] = useState({ x: 0, y: 0 });
+  const [wsContextMenu, setWsContextMenu] = useState<{
+    workspaceId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Auto-expand when active workspaces appear
   useEffect(() => {
     if (hasActive) setExpanded(true);
   }, [hasActive]);
 
-  function handleContextMenu(e: React.MouseEvent) {
+  function handleRepoContextMenu(e: React.MouseEvent) {
     e.preventDefault();
-    setShowContextMenu(true);
-    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    setShowRepoContextMenu(true);
+    setRepoContextMenuPos({ x: e.clientX, y: e.clientY });
   }
+
+  function handleWsContextMenu(e: React.MouseEvent, workspaceId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setWsContextMenu({ workspaceId, x: e.clientX, y: e.clientY });
+  }
+
+  function handleCloseWithConfirm(workspaceId: string) {
+    setWsContextMenu(null);
+    if (window.confirm('Close this workspace? All data will be permanently deleted.')) {
+      onCloseWorkspace(workspaceId);
+    }
+  }
+
+  // Filter out closed/archived workspaces from display
+  const visibleWorkspaces = workspaces.filter(
+    (w) => w.status !== 'closed' && w.status !== 'archived',
+  );
 
   return (
     <div className="repo-group">
-      <div className="repo-row" onContextMenu={handleContextMenu}>
+      <div className="repo-row" onContextMenu={handleRepoContextMenu}>
         <button
           type="button"
           className="repo-toggle"
@@ -118,11 +149,12 @@ function RepoGroup({
         </button>
       </div>
       {expanded &&
-        workspaces.map((ws) => (
+        visibleWorkspaces.map((ws) => (
           <div
             key={ws.id}
-            className={`workspace-item ${ws.id === activeWorkspaceId ? 'active' : ''}`}
+            className={`workspace-item${ws.id === activeWorkspaceId ? ' active' : ''}${ws.status === 'suspended' ? ' suspended' : ''}`}
             onClick={() => onSelectWorkspace(ws.id)}
+            onContextMenu={(e) => handleWsContextMenu(e, ws.id)}
           >
             <img className="workspace-branch-icon" src={branchIcon} alt="Branch" />
             <span className="workspace-label">
@@ -165,33 +197,61 @@ function RepoGroup({
                 <span className="violation-count">{violationCounts.get(ws.id)}</span>
               )}
             </span>
-            <span className={`workspace-status${ws.status === 'suspended' ? ' suspended' : ws.status === 'error' ? ' error' : ''}`}>
-              {ws.status === 'suspended' ? '⏸ suspended' : ws.status === 'resuming' ? '⟳ resuming' : ws.status}
-            </span>
-            {ws.status !== 'closed' && (
+            {ws.status === 'suspended' && ws.canResume ? (
               <button
                 type="button"
-                className="close-btn"
+                className="resume-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onCloseWorkspace(ws.id);
+                  onResumeWorkspace(ws.id);
                 }}
-                aria-label="Close workspace"
+                aria-label="Resume workspace"
+                title="Resume"
               >
-                ×
+                ▶
+              </button>
+            ) : ws.status === 'suspended' ? (
+              <img
+                src={cancelledIcon}
+                alt="Suspended"
+                className="cancelled-icon"
+                title="Suspended (cannot resume)"
+              />
+            ) : (
+              <span className={`workspace-status${ws.status === 'error' ? ' error' : ''}`}>
+                {ws.status === 'resuming' ? '⟳ resuming' : ws.status}
+              </span>
+            )}
+            {ws.status !== 'closed' && ws.status !== 'archived' && (
+              <button
+                type="button"
+                className="archive-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchiveWorkspace(ws.id);
+                }}
+                aria-label="Archive workspace"
+                title="Archive"
+              >
+                <img src={archiveIcon} alt="Archive" className="archive-icon" />
               </button>
             )}
           </div>
         ))}
-      {expanded && workspaces.length === 0 && <div className="repo-empty">No workspaces</div>}
-      {showContextMenu && (
+      {expanded && visibleWorkspaces.length === 0 && (
+        <div className="repo-empty">No workspaces</div>
+      )}
+      {showRepoContextMenu && (
         <>
-          <div className="context-menu-overlay" onClick={() => setShowContextMenu(false)} />
-          <div className="context-menu" style={{ left: contextMenuPos.x, top: contextMenuPos.y }}>
+          <div className="context-menu-overlay" onClick={() => setShowRepoContextMenu(false)} />
+          <div
+            className="context-menu"
+            style={{ left: repoContextMenuPos.x, top: repoContextMenuPos.y }}
+          >
             <button
               type="button"
               onClick={() => {
-                setShowContextMenu(false);
+                setShowRepoContextMenu(false);
                 onOpenSettings(repo.id);
               }}
             >
@@ -200,11 +260,21 @@ function RepoGroup({
             <button
               type="button"
               onClick={() => {
-                setShowContextMenu(false);
+                setShowRepoContextMenu(false);
                 onRemoveRepo(repo.id);
               }}
             >
               Remove
+            </button>
+          </div>
+        </>
+      )}
+      {wsContextMenu && (
+        <>
+          <div className="context-menu-overlay" onClick={() => setWsContextMenu(null)} />
+          <div className="context-menu" style={{ left: wsContextMenu.x, top: wsContextMenu.y }}>
+            <button type="button" onClick={() => handleCloseWithConfirm(wsContextMenu.workspaceId)}>
+              Close (delete permanently)
             </button>
           </div>
         </>
@@ -222,6 +292,8 @@ export function WorkspacesSidebar({
   onSelectWorkspace,
   onCreateWorkspace,
   onCloseWorkspace,
+  onArchiveWorkspace,
+  onResumeWorkspace,
   onAddRepo,
   onRemoveRepo,
   onUpdateRepo,
@@ -272,6 +344,8 @@ export function WorkspacesSidebar({
           onSelectWorkspace={onSelectWorkspace}
           onCreateWorkspace={onCreateWorkspace}
           onCloseWorkspace={onCloseWorkspace}
+          onArchiveWorkspace={onArchiveWorkspace}
+          onResumeWorkspace={onResumeWorkspace}
           onRemoveRepo={onRemoveRepo}
           onOpenSettings={onOpenRepoSettings}
         />

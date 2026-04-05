@@ -212,7 +212,7 @@ interface WorkspaceState {
   agentProcess: ChildProcess;
   connection: acp.ClientSideConnection;
   messages: Message[];
-  status: 'initializing' | 'ready' | 'error' | 'suspended' | 'resuming' | 'closed';
+  status: 'initializing' | 'ready' | 'error' | 'suspended' | 'resuming' | 'closed' | 'archived';
   errorMessage?: string;
   errorKind?: 'auth';
   agentType: AgentType;
@@ -943,7 +943,7 @@ export class WorkspaceManager {
 
         // Don't overwrite an existing auth error (e.g. set before killing the process)
         if (workspace.status === 'error' && workspace.errorKind === 'auth') return;
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           const errorMessage =
             workspace.status === 'initializing'
               ? collectedStderr.trim() || `Agent exited with code ${code}`
@@ -964,7 +964,7 @@ export class WorkspaceManager {
         }
       });
       agentProcess.on('error', (err) => {
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           const errorMessage = err.message;
           workspace.status = 'error';
           workspace.errorMessage = errorMessage;
@@ -1354,7 +1354,7 @@ export class WorkspaceManager {
       });
     } catch (err) {
       console.error(`Prompt failed for workspace ${workspaceId}:`, err);
-      if (isAuthError(err) && workspace.status !== 'closed') {
+      if (isAuthError(err) && workspace.status !== 'closed' && workspace.status !== 'archived') {
         workspace.status = 'error';
         workspace.errorMessage = 'Authentication expired. Please re-authenticate and retry.';
         workspace.errorKind = 'auth';
@@ -1583,6 +1583,137 @@ export class WorkspaceManager {
       workspaceId,
       type: 'status-change',
       status: 'closed',
+    });
+  }
+
+  /** Archive a workspace: clean up runtime resources but preserve metadata and messages on disk. */
+  async archiveWorkspace(workspaceId: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
+
+    // Graceful ACP close — best-effort, don't block on failure
+    if (workspace.connection && workspace.status !== 'error' && workspace.status !== 'suspended') {
+      try {
+        await Promise.race([
+          workspace.connection.unstable_closeSession({ sessionId: workspace.acpSessionId }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+        ]);
+      } catch {
+        // Agent may already be dead — proceed with cleanup
+      }
+    }
+
+    workspace.status = 'archived';
+    workspace.flushChunks();
+    workspace.sandboxMonitor?.stop();
+    workspace.containerMonitor?.stop();
+    if (workspace.ghTokenRefreshTimer) {
+      clearInterval(workspace.ghTokenRefreshTimer);
+      workspace.ghTokenRefreshTimer = null;
+    }
+    if (workspace.containerHandle) {
+      workspace.containerHandle.kill();
+    } else {
+      workspace.agentProcess?.kill();
+    }
+
+    // Clean up container and container-specific host artifacts
+    if (workspace.sandboxBackend === 'container') {
+      await removeContainer(workspaceId).catch((err) =>
+        console.warn(`Failed to remove container for workspace ${workspaceId}:`, err),
+      );
+      await rm(join(POLICY_DIR, `${workspaceId}-container-gh-wrapper`), { force: true }).catch(
+        () => {},
+      );
+      await rm(join(POLICY_DIR, `${workspaceId}-container-hooks`), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-claude-credentials.json`), { force: true }).catch(
+        () => {},
+      );
+      await rm(join(POLICY_DIR, `${workspaceId}-credential-helper.js`), { force: true }).catch(
+        () => {},
+      );
+      await rm(join(POLICY_DIR, `${workspaceId}-user-gitconfig`), { force: true }).catch(() => {});
+      await rm(join(POLICY_DIR, `${workspaceId}-gh-token`), { force: true }).catch(() => {});
+      await rm(join(app.getPath('userData'), 'sessions', workspaceId), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    }
+
+    // Stop proxy and remove workspace network
+    if (workspace.proxyHandle) {
+      await workspace.proxyHandle
+        .stop()
+        .catch((err) => console.warn(`Failed to stop proxy for workspace ${workspaceId}:`, err));
+    }
+    if (workspace.sessionNetwork) {
+      await workspace.sessionNetwork
+        .cleanup()
+        .catch((err) =>
+          console.warn(`Failed to remove network for workspace ${workspaceId}:`, err),
+        );
+    }
+
+    // Clean up application-layer policy artifacts
+    if (workspace.githubPolicy) {
+      if (workspace.worktree) {
+        await cleanupHooks(workspaceId, workspace.worktree.path).catch((err) =>
+          console.warn(`Failed to clean up hooks for workspace ${workspaceId}:`, err),
+        );
+      }
+      await cleanupPolicyState(workspaceId).catch((err) =>
+        console.warn(`Failed to clean up policy state for workspace ${workspaceId}:`, err),
+      );
+      await cleanupGhShim(workspaceId).catch((err) =>
+        console.warn(`Failed to clean up gh shim for workspace ${workspaceId}:`, err),
+      );
+    }
+
+    // Tear down worktree
+    if (workspace.worktree) {
+      try {
+        await this.worktreeManager.remove(workspace.worktree);
+      } catch (err) {
+        console.warn(`Failed to remove worktree for workspace ${workspaceId}:`, err);
+      }
+    }
+
+    // Clean up sandbox policy file
+    if (workspace.sandboxConfig) {
+      await cleanupPolicy(workspace.sandboxConfig.policyOutputPath);
+    }
+
+    // Mark persisted metadata as archived (but do NOT delete metadata or messages)
+    await persistWorkspace({
+      id: workspace.id,
+      repositoryId: workspace.repositoryId,
+      acpSessionId: workspace.acpSessionId,
+      projectDir: workspace.projectDir,
+      agentType: workspace.agentType,
+      sandboxBackend: workspace.sandboxBackend,
+      worktreePath: null,
+      worktreeGitCommonDir: null,
+      worktreeBranch: workspace.worktree?.branch ?? null,
+      policyId: workspace.policyId,
+      containerImage: null,
+      githubPolicy: workspace.githubPolicy,
+      phase: workspace.phase,
+      prUrl: workspace.prUrl,
+      promptCount: workspace.promptCount,
+      archived: true,
+    });
+
+    // Remove from in-memory map so it no longer appears in listWorkspaces
+    this.workspaces.delete(workspaceId);
+
+    this.emit('workspace-update', {
+      workspaceId,
+      type: 'status-change',
+      status: 'archived',
     });
   }
 
@@ -2122,7 +2253,7 @@ export class WorkspaceManager {
         if (remaining) collectedStderr += remaining;
         // Don't overwrite an existing auth error (e.g. set before killing the process)
         if (workspace.status === 'error' && workspace.errorKind === 'auth') return;
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           const errorKind = isAuthError(collectedStderr) ? ('auth' as const) : undefined;
           workspace.status = 'error';
           workspace.errorMessage = errorKind
@@ -2139,7 +2270,7 @@ export class WorkspaceManager {
         }
       });
       agentProcess.on('error', (err) => {
-        if (workspace.status !== 'closed') {
+        if (workspace.status !== 'closed' && workspace.status !== 'archived') {
           workspace.status = 'error';
           workspace.errorMessage = err.message;
           this.emit('workspace-update', {
@@ -2358,6 +2489,9 @@ export class WorkspaceManager {
     for (const pw of persisted) {
       // Skip if already loaded (shouldn't happen, but be safe)
       if (this.workspaces.has(pw.id)) continue;
+
+      // Skip archived workspaces — they have no worktree and shouldn't be restored
+      if (pw.archived) continue;
 
       // Validate worktree still exists
       if (pw.worktreePath) {

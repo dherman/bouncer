@@ -60,6 +60,44 @@ function App() {
               pendingStatusUpdates.current.set(update.workspaceId, update);
               return prev;
             }
+            // Remove closed/archived workspaces from state immediately
+            if (update.status === 'closed' || update.status === 'archived') {
+              pendingStatusUpdates.current.delete(update.workspaceId);
+              setActiveWorkspaceId((activeId) =>
+                activeId === update.workspaceId ? null : activeId,
+              );
+              setWorkspaceErrors((prevErrors) => {
+                if (!prevErrors.has(update.workspaceId)) return prevErrors;
+                const next = new Map(prevErrors);
+                next.delete(update.workspaceId);
+                return next;
+              });
+              setWorkspaceErrorKinds((prevKinds) => {
+                if (!prevKinds.has(update.workspaceId)) return prevKinds;
+                const next = new Map(prevKinds);
+                next.delete(update.workspaceId);
+                return next;
+              });
+              setMessagesByWorkspace((prevMsgs) => {
+                if (!prevMsgs.has(update.workspaceId)) return prevMsgs;
+                const next = new Map(prevMsgs);
+                next.delete(update.workspaceId);
+                return next;
+              });
+              setViolationsByWorkspace((prevViolations) => {
+                if (!prevViolations.has(update.workspaceId)) return prevViolations;
+                const next = new Map(prevViolations);
+                next.delete(update.workspaceId);
+                return next;
+              });
+              setPolicyEventsByWorkspace((prevEvents) => {
+                if (!prevEvents.has(update.workspaceId)) return prevEvents;
+                const next = new Map(prevEvents);
+                next.delete(update.workspaceId);
+                return next;
+              });
+              return prev.filter((s) => s.id !== update.workspaceId);
+            }
             return prev.map((s) =>
               s.id === update.workspaceId
                 ? update.summary
@@ -359,6 +397,22 @@ function App() {
     }
   }
 
+  async function handleArchiveWorkspace(id: string) {
+    try {
+      await window.bouncer.workspaces.archive(id);
+    } catch (err) {
+      console.error('Failed to archive workspace:', err);
+    }
+  }
+
+  async function handleResumeWorkspaceById(id: string) {
+    try {
+      await window.bouncer.workspaces.resume(id);
+    } catch (err) {
+      console.error('Failed to resume workspace:', err);
+    }
+  }
+
   async function handleRefreshCredentials() {
     if (!activeWorkspaceId) return;
     try {
@@ -496,6 +550,8 @@ function App() {
         onSelectWorkspace={setActiveWorkspaceId}
         onCreateWorkspace={handleCreateWorkspace}
         onCloseWorkspace={handleCloseWorkspace}
+        onArchiveWorkspace={handleArchiveWorkspace}
+        onResumeWorkspace={handleResumeWorkspaceById}
         onAddRepo={handleAddRepo}
         onRemoveRepo={handleRemoveRepo}
         onUpdateRepo={handleUpdateRepo}

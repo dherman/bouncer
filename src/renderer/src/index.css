@@ -380,6 +380,10 @@ body {
   flex-shrink: 0;
 }
 
+.workspace-item.suspended {
+  opacity: 0.6;
+}
+
 .close-btn {
   background: none;
   border: none;
@@ -393,6 +397,50 @@ body {
 
 .close-btn:hover {
   color: #d9534f;
+}
+
+.archive-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.4;
+  display: flex;
+  align-items: center;
+}
+
+.archive-btn:hover {
+  opacity: 0.9;
+}
+
+.archive-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.cancelled-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
+.resume-btn {
+  background: none;
+  border: none;
+  color: #4ec9b0;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.resume-btn:hover {
+  opacity: 1;
 }
 
 /* Chat panel */

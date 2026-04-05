@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('bouncer', {
     sendMessage: (workspaceId: string, text: string) =>
       ipcRenderer.invoke('workspaces:sendMessage', workspaceId, text),
     close: (workspaceId: string) => ipcRenderer.invoke('workspaces:close', workspaceId),
+    archive: (workspaceId: string) => ipcRenderer.invoke('workspaces:archive', workspaceId),
     refreshCredentials: (workspaceId: string) =>
       ipcRenderer.invoke('workspaces:refreshCredentials', workspaceId),
     resume: (workspaceId: string) => ipcRenderer.invoke('workspaces:resume', workspaceId),
