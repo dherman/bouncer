@@ -207,10 +207,15 @@ function isAuthError(err: unknown): boolean {
   );
 }
 
-/** Derive a human-readable topic from a git branch name. */
-function topicFromBranch(branch: string): string {
-  // Strip "user/" prefix (everything before and including first slash)
+/**
+ * Derive a human-readable topic from a git branch name.
+ * Returns null if the branch name is a machine-generated nonce (e.g. bouncer/<uuid>).
+ */
+function topicFromBranch(branch: string): string | null {
+  // Strip "prefix/" (everything before and including first slash)
   const stripped = branch.includes('/') ? branch.slice(branch.indexOf('/') + 1) : branch;
+  // Skip UUID-like nonce strings (auto-generated worktree branches)
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(stripped)) return null;
   // Replace hyphens and underscores with spaces
   const spaced = stripped.replace(/[-_]/g, ' ');
   // Truncate to 30 chars at word boundary
@@ -348,7 +353,7 @@ export class WorkspaceManager {
       ghTokenRefreshTimer: null,
       ghTokenFilePath: null,
       topic: worktree ? topicFromBranch(worktree.branch) : null,
-      topicSource: worktree ? 'branch' : 'placeholder',
+      topicSource: worktree && topicFromBranch(worktree.branch) ? 'branch' : 'placeholder',
     };
     this.workspaces.set(id, workspace);
     this.emit('workspace-update', {
@@ -2615,7 +2620,9 @@ export class WorkspaceManager {
         ghTokenRefreshTimer: null,
         ghTokenFilePath: null,
         topic: pw.topic ?? (pw.worktreeBranch ? topicFromBranch(pw.worktreeBranch) : null),
-        topicSource: pw.topicSource ?? (pw.worktreeBranch ? 'branch' : 'placeholder'),
+        topicSource:
+          pw.topicSource ??
+          (pw.worktreeBranch && topicFromBranch(pw.worktreeBranch) ? 'branch' : 'placeholder'),
       };
       this.workspaces.set(pw.id, workspace);
       console.log(
