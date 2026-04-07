@@ -65,8 +65,10 @@ import type {
   WorkspacePhase,
   WorkspaceUpdate,
   ToolCallInfo,
+  TopicSource,
 } from './types.js';
 import type { RepositoryStore } from './repository-store.js';
+import { TOPIC_PROMPT, inferTopicHeuristic, truncateTopic } from './topic-inference.js';
 import {
   isDockerAvailable,
   ensureAgentImage,
@@ -205,6 +207,24 @@ function isAuthError(err: unknown): boolean {
   );
 }
 
+/**
+ * Derive a human-readable topic from a git branch name.
+ * Returns null if the branch name is a machine-generated nonce (e.g. bouncer/<uuid>).
+ */
+function topicFromBranch(branch: string): string | null {
+  // Strip "prefix/" (everything before and including first slash)
+  const stripped = branch.includes('/') ? branch.slice(branch.indexOf('/') + 1) : branch;
+  // Skip UUID-like nonce strings (auto-generated worktree branches)
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(stripped)) return null;
+  // Replace hyphens and underscores with spaces
+  const spaced = stripped.replace(/[-_]/g, ' ');
+  // Truncate to 30 chars at word boundary
+  if (spaced.length <= 30) return spaced;
+  const truncated = spaced.slice(0, 30);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > 10 ? truncated.slice(0, lastSpace) : truncated;
+}
+
 interface WorkspaceState {
   id: string;
   repositoryId: string | null;
@@ -241,6 +261,14 @@ interface WorkspaceState {
   ghTokenRefreshTimer: ReturnType<typeof setInterval> | null;
   /** Host-side path to the GH token file (for cleanup). */
   ghTokenFilePath: string | null;
+  /** Inferred topic label for sidebar display. */
+  topic: string | null;
+  /** How the topic was derived (controls overwrite precedence). */
+  topicSource: TopicSource;
+  /** ACP session ID used for topic inference (text from this session is not shown to the user). */
+  topicSessionId: string | null;
+  /** Accumulated text from the topic inference session. */
+  topicSessionText: string;
 }
 
 export class WorkspaceManager {
@@ -328,6 +356,10 @@ export class WorkspaceManager {
       pendingMessage: null,
       ghTokenRefreshTimer: null,
       ghTokenFilePath: null,
+      topic: worktree ? topicFromBranch(worktree.branch) : null,
+      topicSource: worktree && topicFromBranch(worktree.branch) ? 'branch' : 'placeholder',
+      topicSessionId: null,
+      topicSessionText: '',
     };
     this.workspaces.set(id, workspace);
     this.emit('workspace-update', {
@@ -692,9 +724,20 @@ export class WorkspaceManager {
                     if (urlMatch) {
                       workspace.prUrl = urlMatch[0];
                     }
+                    // Extract PR title and use as topic (higher quality than inferred)
+                    const titleMatch = event.operation.match(/title:(.+)$/);
+                    if (titleMatch && workspace.topicSource !== 'user') {
+                      let title = titleMatch[1];
+                      if (title.length > 30) {
+                        const lastSpace = title.slice(0, 30).lastIndexOf(' ');
+                        title = lastSpace > 10 ? title.slice(0, lastSpace) : title.slice(0, 30);
+                      }
+                      workspace.topic = title;
+                      workspace.topicSource = 'pr-title';
+                    }
                     workspace.phase = 'pr-open';
                     this.persistState(workspace);
-                    // Emit a summary update so the UI picks up the phase/prUrl change
+                    // Emit a summary update so the UI picks up the phase/prUrl/topic change
                     this.summarize(workspace)
                       .then((summary) => {
                         this.emit('workspace-update', {
@@ -1019,6 +1062,19 @@ export class WorkspaceManager {
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
           async sessionUpdate(params) {
+            // Route topic-session updates to a separate text buffer
+            if (workspace.topicSessionId && params.sessionId === workspace.topicSessionId) {
+              const update = params.update;
+              if (
+                update.sessionUpdate === 'agent_message_chunk' &&
+                update.content.type === 'text'
+              ) {
+                workspace.topicSessionText += update.content.text;
+              }
+              // Ignore all other update types (tool calls, etc.) for topic sessions
+              return;
+            }
+
             const update = params.update;
             if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
               const agentMsg = workspace.messages.findLast(
@@ -1342,6 +1398,12 @@ export class WorkspaceManager {
         text: `<system-instruction>\n${systemParts.join('\n')}\n</system-instruction>`,
       });
     }
+    // Fire topic inference on first prompt (async, best-effort)
+    if (workspace.promptCount === 0 && workspace.topicSource !== 'user') {
+      console.log(`[topic] Firing inference for workspace ${workspaceId}`);
+      this.inferTopicForWorkspace(workspace, workspaceId, text);
+    }
+
     workspace.promptCount++;
     this.persistState(workspace);
 
@@ -1704,6 +1766,8 @@ export class WorkspaceManager {
       phase: workspace.phase,
       prUrl: workspace.prUrl,
       promptCount: workspace.promptCount,
+      topic: workspace.topic,
+      topicSource: workspace.topicSource,
       archived: true,
     });
 
@@ -1862,7 +1926,78 @@ export class WorkspaceManager {
       canResume:
         workspace.acpSessionId !== '' &&
         (workspace.status === 'error' || workspace.status === 'suspended'),
+      topic: workspace.topic,
     };
+  }
+
+  /**
+   * Infer a topic for a workspace using a side ACP session on the same agent.
+   * Falls back to heuristic extraction if the ACP call fails.
+   * Fire-and-forget — updates the workspace and emits a summary when done.
+   */
+  private inferTopicForWorkspace(
+    workspace: WorkspaceState,
+    workspaceId: string,
+    userMessage: string,
+  ): void {
+    const applyTopic = (topic: string) => {
+      if (workspace.topicSource === 'user' || workspace.topicSource === 'pr-title') return;
+      console.log(`[topic] Updating workspace ${workspaceId} topic to: "${topic}"`);
+      workspace.topic = topic;
+      workspace.topicSource = 'inferred';
+      this.persistState(workspace);
+      this.summarize(workspace).then((summary) => {
+        this.emit('workspace-update', {
+          workspaceId,
+          type: 'status-change',
+          status: workspace.status,
+          summary,
+        });
+      });
+    };
+
+    // Apply heuristic immediately so there's a label right away
+    const heuristic = inferTopicHeuristic(userMessage);
+    if (heuristic) applyTopic(heuristic);
+
+    // Then try ACP-based inference for a better label (async)
+    const cwd = workspace.worktree?.path ?? workspace.projectDir;
+    workspace.topicSessionText = '';
+    let topicSessionId: string | null = null;
+    workspace.connection
+      .newSession({ cwd, mcpServers: [] })
+      .then((resp) => {
+        topicSessionId = resp.sessionId;
+        workspace.topicSessionId = resp.sessionId;
+        console.log(`[topic] Created topic session: ${resp.sessionId}`);
+        const truncatedMessage = userMessage.slice(0, 500);
+        return workspace.connection.prompt({
+          sessionId: resp.sessionId,
+          prompt: [{ type: 'text', text: TOPIC_PROMPT + truncatedMessage }],
+        });
+      })
+      .then(() => {
+        // prompt() resolved — the sessionUpdate handler accumulated the text
+        const raw = workspace.topicSessionText.trim();
+        workspace.topicSessionId = null;
+        workspace.topicSessionText = '';
+        if (raw) {
+          const topic = truncateTopic(raw);
+          console.log(`[topic] ACP inferred: "${topic}"`);
+          applyTopic(topic);
+        }
+      })
+      .catch((err) => {
+        console.warn('[topic] ACP inference failed:', err);
+        workspace.topicSessionId = null;
+        workspace.topicSessionText = '';
+      })
+      .finally(() => {
+        // Clean up the side session to avoid resource leaks
+        if (topicSessionId) {
+          workspace.connection.unstable_closeSession({ sessionId: topicSessionId }).catch(() => {});
+        }
+      });
   }
 
   /** Persist workspace metadata to disk for session resume. */
@@ -1883,6 +2018,8 @@ export class WorkspaceManager {
       phase: workspace.phase,
       prUrl: workspace.prUrl,
       promptCount: workspace.promptCount,
+      topic: workspace.topic,
+      topicSource: workspace.topicSource,
     }).catch((err) =>
       console.warn(`[workspace] Failed to persist state for ${workspace.id}:`, err),
     );
@@ -2120,6 +2257,17 @@ export class WorkspaceManager {
                   writePolicyState(workspaceId, workspace.githubPolicy).catch(() => {});
                   const urlMatch = event.operation.match(/https:\/\/\S+/);
                   if (urlMatch) workspace.prUrl = urlMatch[0];
+                  // Extract PR title and use as topic
+                  const titleMatch = event.operation.match(/title:(.+)$/);
+                  if (titleMatch && workspace.topicSource !== 'user') {
+                    let title = titleMatch[1];
+                    if (title.length > 30) {
+                      const lastSpace = title.slice(0, 30).lastIndexOf(' ');
+                      title = lastSpace > 10 ? title.slice(0, lastSpace) : title.slice(0, 30);
+                    }
+                    workspace.topic = title;
+                    workspace.topicSource = 'pr-title';
+                  }
                   workspace.phase = 'pr-open';
                   this.persistState(workspace);
                   this.summarize(workspace)
@@ -2319,6 +2467,18 @@ export class WorkspaceManager {
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
           async sessionUpdate(params) {
+            // Route topic-session updates to a separate text buffer
+            if (workspace.topicSessionId && params.sessionId === workspace.topicSessionId) {
+              const update = params.update;
+              if (
+                update.sessionUpdate === 'agent_message_chunk' &&
+                update.content.type === 'text'
+              ) {
+                workspace.topicSessionText += update.content.text;
+              }
+              return;
+            }
+
             const update = params.update;
             if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
               const agentMsg = workspace.messages.findLast(
@@ -2547,6 +2707,12 @@ export class WorkspaceManager {
         pendingMessage: null,
         ghTokenRefreshTimer: null,
         ghTokenFilePath: null,
+        topic: pw.topic ?? (pw.worktreeBranch ? topicFromBranch(pw.worktreeBranch) : null),
+        topicSource:
+          pw.topicSource ??
+          (pw.worktreeBranch && topicFromBranch(pw.worktreeBranch) ? 'branch' : 'placeholder'),
+        topicSessionId: null,
+        topicSessionText: '',
       };
       this.workspaces.set(pw.id, workspace);
       console.log(

@@ -149,95 +149,107 @@ function RepoGroup({
         </button>
       </div>
       {expanded &&
-        visibleWorkspaces.map((ws) => (
-          <div
-            key={ws.id}
-            className={`workspace-item${ws.id === activeWorkspaceId ? ' active' : ''}${ws.status === 'suspended' ? ' suspended' : ''}`}
-            onClick={() => onSelectWorkspace(ws.id)}
-            onContextMenu={(e) => handleWsContextMenu(e, ws.id)}
-          >
-            <img className="workspace-branch-icon" src={branchIcon} alt="Branch" />
-            <span className="workspace-label">
-              {workspaceLabel(ws)}
-              {ws.agentType === 'echo' && <span className="agent-type-badge"> echo</span>}
-              {ws.policyName && (
+        visibleWorkspaces.map((ws) => {
+          const isNewWorkspace = !ws.topic && ws.messageCount === 0;
+          const topicText = ws.topic || (isNewWorkspace ? 'New workspace' : 'Untitled workspace');
+          const isPlaceholder = isNewWorkspace;
+          return (
+            <div
+              key={ws.id}
+              className={`workspace-item${ws.id === activeWorkspaceId ? ' active' : ''}${ws.status === 'suspended' ? ' suspended' : ''}`}
+              onClick={() => onSelectWorkspace(ws.id)}
+              onContextMenu={(e) => handleWsContextMenu(e, ws.id)}
+            >
+              <div className="workspace-row-top">
+                <img className="workspace-branch-icon" src={branchIcon} alt="Branch" />
                 <span
-                  className={`policy-badge policy-${ws.policyId ?? 'default'}`}
-                  title={ws.policyId ? (policyDescriptions.get(ws.policyId) ?? ws.policyId) : ''}
+                  className={`workspace-topic${isPlaceholder ? ' placeholder' : ''}`}
+                  title={topicText}
                 >
-                  {ws.policyName}
+                  {topicText}
                 </span>
-              )}
-              {ws.phase && (
-                <span className={`phase-badge phase-${ws.phase}`}>
-                  {ws.phase === 'implementing' ? 'Impl' : ws.phase === 'pr-open' ? 'PR' : 'Ready'}
-                </span>
-              )}
-              {ws.prUrl ? (
-                <a
-                  className="github-badge pr-link"
-                  href={ws.prUrl}
-                  title={ws.prUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    window.open(ws.prUrl!, '_blank');
-                  }}
-                >
-                  #{ws.ownedPrNumber}
-                </a>
-              ) : ws.githubRepo && ws.ownedPrNumber != null ? (
-                <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
-                  #{ws.ownedPrNumber}
-                </span>
-              ) : null}
-              {(violationCounts.get(ws.id) ?? 0) > 0 && (
-                <span className="violation-count">{violationCounts.get(ws.id)}</span>
-              )}
-            </span>
-            {ws.status === 'suspended' && ws.canResume ? (
-              <button
-                type="button"
-                className="resume-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onResumeWorkspace(ws.id);
-                }}
-                aria-label="Resume workspace"
-                title="Resume"
-              >
-                ▶
-              </button>
-            ) : ws.status === 'suspended' ? (
-              <img
-                src={cancelledIcon}
-                alt="Suspended"
-                className="cancelled-icon"
-                title="Suspended (cannot resume)"
-              />
-            ) : (
-              <span className={`workspace-status${ws.status === 'error' ? ' error' : ''}`}>
-                {ws.status === 'resuming' ? '⟳ resuming' : ws.status}
-              </span>
-            )}
-            {ws.status !== 'closed' && ws.status !== 'archived' && (
-              <button
-                type="button"
-                className="archive-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onArchiveWorkspace(ws.id);
-                }}
-                aria-label="Archive workspace"
-                title="Archive"
-              >
-                <img src={archiveIcon} alt="Archive" className="archive-icon" />
-              </button>
-            )}
-          </div>
-        ))}
+                {ws.status === 'suspended' && ws.canResume ? (
+                  <button
+                    type="button"
+                    className="resume-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onResumeWorkspace(ws.id);
+                    }}
+                    aria-label="Resume workspace"
+                    title="Resume"
+                  >
+                    ▶
+                  </button>
+                ) : ws.status === 'suspended' ? (
+                  <img
+                    src={cancelledIcon}
+                    alt="Suspended"
+                    className="cancelled-icon"
+                    title="Suspended (cannot resume)"
+                  />
+                ) : (
+                  <span className={`workspace-status${ws.status === 'error' ? ' error' : ''}`}>
+                    {ws.status === 'resuming' ? '⟳ resuming' : ws.status}
+                  </span>
+                )}
+                {ws.status !== 'closed' && ws.status !== 'archived' && (
+                  <button
+                    type="button"
+                    className="archive-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onArchiveWorkspace(ws.id);
+                    }}
+                    aria-label="Archive workspace"
+                    title="Archive"
+                  >
+                    <img src={archiveIcon} alt="Archive" className="archive-icon" />
+                  </button>
+                )}
+              </div>
+              <div className="workspace-row-bottom">
+                {ws.agentType === 'echo' && <span className="agent-type-badge">echo</span>}
+                {ws.policyName && (
+                  <span
+                    className={`policy-badge policy-${ws.policyId ?? 'default'}`}
+                    title={ws.policyId ? (policyDescriptions.get(ws.policyId) ?? ws.policyId) : ''}
+                  >
+                    {ws.policyName}
+                  </span>
+                )}
+                {ws.phase && (
+                  <span className={`phase-badge phase-${ws.phase}`}>
+                    {ws.phase === 'implementing' ? 'Impl' : ws.phase === 'pr-open' ? 'PR' : 'Ready'}
+                  </span>
+                )}
+                {ws.prUrl ? (
+                  <a
+                    className="github-badge pr-link"
+                    href={ws.prUrl}
+                    title={ws.prUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      window.open(ws.prUrl!, '_blank');
+                    }}
+                  >
+                    #{ws.ownedPrNumber}
+                  </a>
+                ) : ws.githubRepo && ws.ownedPrNumber != null ? (
+                  <span className="github-badge" title={`GitHub: ${ws.githubRepo}`}>
+                    #{ws.ownedPrNumber}
+                  </span>
+                ) : null}
+                {(violationCounts.get(ws.id) ?? 0) > 0 && (
+                  <span className="violation-count">{violationCounts.get(ws.id)}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       {expanded && visibleWorkspaces.length === 0 && (
         <div className="repo-empty">No workspaces</div>
       )}

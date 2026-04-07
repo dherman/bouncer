@@ -1,7 +1,13 @@
 import { readFile, writeFile, readdir, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { app } from 'electron';
-import type { AgentType, GitHubPolicy, SandboxBackend, WorkspacePhase } from './types.js';
+import type {
+  AgentType,
+  GitHubPolicy,
+  SandboxBackend,
+  TopicSource,
+  WorkspacePhase,
+} from './types.js';
 
 function getWorkspacesDir(): string {
   return join(app.getPath('userData'), 'workspaces');
@@ -23,6 +29,8 @@ export interface PersistedWorkspace {
   phase: WorkspacePhase | null;
   prUrl: string | null;
   promptCount: number;
+  topic?: string | null;
+  topicSource?: TopicSource;
   archived?: boolean;
 }
 

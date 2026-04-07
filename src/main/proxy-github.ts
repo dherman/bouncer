@@ -442,11 +442,15 @@ function capturePrFromResponse(body: string, config: ProxyConfig): void {
       config.githubPolicy.canCreatePr = false;
       config.githubPolicy.ownedPrNumber = data.number;
       const prUrl = typeof data.html_url === 'string' ? data.html_url : null;
+      const prTitle = typeof data.title === 'string' ? data.title : null;
       console.log(`[proxy] PR captured: #${data.number}${prUrl ? ` ${prUrl}` : ''}`);
+      let operation = `captured PR #${data.number}`;
+      if (prUrl) operation += ` ${prUrl}`;
+      if (prTitle) operation += ` title:${prTitle}`;
       config.onPolicyEvent({
         timestamp: Date.now(),
         tool: 'proxy',
-        operation: `captured PR #${data.number}${prUrl ? ` ${prUrl}` : ''}`,
+        operation,
         decision: 'allow',
       });
     } else {
