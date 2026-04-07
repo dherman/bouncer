@@ -1724,6 +1724,8 @@ export class WorkspaceManager {
       phase: workspace.phase,
       prUrl: workspace.prUrl,
       promptCount: workspace.promptCount,
+      topic: workspace.topic,
+      topicSource: workspace.topicSource,
       archived: true,
     });
 
