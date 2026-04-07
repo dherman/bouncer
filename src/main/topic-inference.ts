@@ -1,12 +1,10 @@
 /**
- * Lightweight topic inference via Anthropic Messages API (Haiku).
- * Used to generate short sidebar labels from the first user prompt.
+ * Lightweight topic inference for workspace sidebar labels.
+ *
+ * Strategy:
+ * 1. If ANTHROPIC_API_KEY is set, use Haiku for high-quality 3-5 word summaries
+ * 2. Otherwise, extract a topic heuristically from the first user message
  */
-
-import { execFile as execFileCb } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFileCb);
 
 const TOPIC_PROMPT = `Summarize this task request in 3-5 words for use as a sidebar label in a coding workspace manager. Output ONLY the label, nothing else. Be specific — prefer concrete nouns and verbs over abstract descriptions.
 
@@ -18,66 +16,53 @@ Examples:
 
 Task: `;
 
-/** Cached auth header to avoid repeated keychain lookups. */
-let cachedAuth: { header: string; expiresAt: number } | null = null;
+const MAX_TOPIC_LENGTH = 30;
 
-/**
- * Get auth credentials for the Anthropic API.
- * Tries ANTHROPIC_API_KEY first, then falls back to macOS keychain OAuth token.
- */
-async function getAuthHeader(): Promise<{ key: string; value: string } | null> {
-  // Prefer explicit API key
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
-    return { key: 'x-api-key', value: apiKey };
-  }
-
-  // Check cached OAuth token
-  if (cachedAuth && Date.now() < cachedAuth.expiresAt) {
-    return { key: 'Authorization', value: cachedAuth.header };
-  }
-
-  // Extract from macOS keychain
-  if (process.platform !== 'darwin') return null;
-
-  try {
-    const { stdout } = await execFileAsync('security', [
-      'find-generic-password',
-      '-s',
-      'Claude Code-credentials',
-      '-w',
-    ]);
-    const creds = JSON.parse(stdout.trim());
-    const accessToken = creds?.claudeAiOauth?.accessToken;
-    const expiresAt = creds?.claudeAiOauth?.expiresAt;
-    if (!accessToken) {
-      console.warn('[topic] Keychain credentials missing accessToken');
-      return null;
-    }
-    const header = `Bearer ${accessToken}`;
-    // Cache until token expires (with 60s buffer), or 5 minutes if no expiry
-    cachedAuth = {
-      header,
-      expiresAt: expiresAt ? expiresAt - 60_000 : Date.now() + 5 * 60_000,
-    };
-    return { key: 'Authorization', value: header };
-  } catch (err) {
-    console.warn('[topic] Could not extract credentials from keychain:', err);
-    return null;
-  }
+/** Truncate text to MAX_TOPIC_LENGTH at a word boundary. */
+function truncateTopic(text: string): string {
+  if (text.length <= MAX_TOPIC_LENGTH) return text;
+  const truncated = text.slice(0, MAX_TOPIC_LENGTH);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > 10 ? truncated.slice(0, lastSpace) : truncated;
 }
 
 /**
- * Infer a short topic label from a user message using Claude Haiku.
- * Returns null on any failure (missing key, timeout, API error) — callers
- * should treat this as best-effort and keep the existing label.
+ * Extract a topic heuristically from the user's message.
+ * Takes the first sentence/line (whichever is shorter), strips filler,
+ * and truncates to fit the sidebar.
  */
-export async function inferTopic(userMessage: string): Promise<string | null> {
-  const auth = await getAuthHeader();
-  if (!auth) {
-    console.log('[topic] No API credentials available — skipping topic inference');
-    return null;
+function heuristicTopic(message: string): string | null {
+  // Take the first line
+  let text = message.split('\n')[0].trim();
+  if (!text) return null;
+
+  // Strip common conversational prefixes
+  text = text.replace(
+    /^(hey,?\s+|hi,?\s+|please\s+|can you\s+|could you\s+|i need you to\s+|i'd like you to\s+|let's\s+)/i,
+    '',
+  );
+
+  // Take up to the first sentence-ending punctuation
+  const sentenceEnd = text.search(/[.!?]/);
+  if (sentenceEnd > 0) {
+    text = text.slice(0, sentenceEnd);
   }
+
+  text = text.trim();
+  if (!text || text.length < 3) return null;
+
+  // Capitalize first letter
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+
+  return truncateTopic(text);
+}
+
+/**
+ * Try Haiku API for topic inference (requires ANTHROPIC_API_KEY).
+ */
+async function inferTopicViaApi(userMessage: string): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
 
   const truncatedMessage = userMessage.slice(0, 500);
 
@@ -89,7 +74,7 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        [auth.key]: auth.value,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -105,8 +90,6 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
     if (!resp.ok) {
       const body = await resp.text().catch(() => '');
       console.warn(`[topic] API returned ${resp.status}: ${body.slice(0, 200)}`);
-      // Clear cached auth on auth failure so next attempt re-reads keychain
-      if (resp.status === 401 || resp.status === 403) cachedAuth = null;
       return null;
     }
 
@@ -116,17 +99,27 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
     const text = data.content?.[0]?.type === 'text' ? data.content[0].text?.trim() : null;
     if (!text) return null;
 
-    // Enforce 30-char limit
-    if (text.length <= 30) {
-      console.log(`[topic] Inferred: "${text}"`);
-      return text;
-    }
-    const lastSpace = text.slice(0, 30).lastIndexOf(' ');
-    const truncated = lastSpace > 10 ? text.slice(0, lastSpace) : text.slice(0, 30);
-    console.log(`[topic] Inferred (truncated): "${truncated}"`);
-    return truncated;
+    console.log(`[topic] Haiku inferred: "${text}"`);
+    return truncateTopic(text);
   } catch (err) {
-    console.warn('[topic] Inference failed:', err);
+    console.warn('[topic] API inference failed:', err);
     return null;
   }
+}
+
+/**
+ * Infer a short topic label from a user message.
+ * Tries Haiku API first, falls back to heuristic extraction.
+ */
+export async function inferTopic(userMessage: string): Promise<string | null> {
+  // Try LLM inference if API key is available
+  const apiResult = await inferTopicViaApi(userMessage);
+  if (apiResult) return apiResult;
+
+  // Fall back to heuristic extraction
+  const heuristic = heuristicTopic(userMessage);
+  if (heuristic) {
+    console.log(`[topic] Heuristic: "${heuristic}"`);
+  }
+  return heuristic;
 }
