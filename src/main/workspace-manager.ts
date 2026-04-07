@@ -68,7 +68,7 @@ import type {
   TopicSource,
 } from './types.js';
 import type { RepositoryStore } from './repository-store.js';
-import { inferTopic } from './topic-inference.js';
+import { TOPIC_PROMPT, inferTopicHeuristic, truncateTopic } from './topic-inference.js';
 import {
   isDockerAvailable,
   ensureAgentImage,
@@ -265,6 +265,10 @@ interface WorkspaceState {
   topic: string | null;
   /** How the topic was derived (controls overwrite precedence). */
   topicSource: TopicSource;
+  /** ACP session ID used for topic inference (text from this session is not shown to the user). */
+  topicSessionId: string | null;
+  /** Accumulated text from the topic inference session. */
+  topicSessionText: string;
 }
 
 export class WorkspaceManager {
@@ -354,6 +358,8 @@ export class WorkspaceManager {
       ghTokenFilePath: null,
       topic: worktree ? topicFromBranch(worktree.branch) : null,
       topicSource: worktree && topicFromBranch(worktree.branch) ? 'branch' : 'placeholder',
+      topicSessionId: null,
+      topicSessionText: '',
     };
     this.workspaces.set(id, workspace);
     this.emit('workspace-update', {
@@ -1056,6 +1062,19 @@ export class WorkspaceManager {
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
           async sessionUpdate(params) {
+            // Route topic-session updates to a separate text buffer
+            if (workspace.topicSessionId && params.sessionId === workspace.topicSessionId) {
+              const update = params.update;
+              if (
+                update.sessionUpdate === 'agent_message_chunk' &&
+                update.content.type === 'text'
+              ) {
+                workspace.topicSessionText += update.content.text;
+              }
+              // Ignore all other update types (tool calls, etc.) for topic sessions
+              return;
+            }
+
             const update = params.update;
             if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
               const agentMsg = workspace.messages.findLast(
@@ -1382,24 +1401,7 @@ export class WorkspaceManager {
     // Fire topic inference on first prompt (async, best-effort)
     if (workspace.promptCount === 0 && workspace.topicSource !== 'user') {
       console.log(`[topic] Firing inference for workspace ${workspaceId}`);
-      inferTopic(text)
-        .then((topic) => {
-          if (topic && workspace.topicSource !== 'user' && workspace.topicSource !== 'pr-title') {
-            console.log(`[topic] Updating workspace ${workspaceId} topic to: "${topic}"`);
-            workspace.topic = topic;
-            workspace.topicSource = 'inferred';
-            this.persistState(workspace);
-            this.summarize(workspace).then((summary) => {
-              this.emit('workspace-update', {
-                workspaceId,
-                type: 'status-change',
-                status: workspace.status,
-                summary,
-              });
-            });
-          }
-        })
-        .catch((err) => console.warn('[topic] Inference error:', err));
+      this.inferTopicForWorkspace(workspace, workspaceId, text);
     }
 
     workspace.promptCount++;
@@ -1928,6 +1930,69 @@ export class WorkspaceManager {
     };
   }
 
+  /**
+   * Infer a topic for a workspace using a side ACP session on the same agent.
+   * Falls back to heuristic extraction if the ACP call fails.
+   * Fire-and-forget — updates the workspace and emits a summary when done.
+   */
+  private inferTopicForWorkspace(
+    workspace: WorkspaceState,
+    workspaceId: string,
+    userMessage: string,
+  ): void {
+    const applyTopic = (topic: string) => {
+      if (workspace.topicSource === 'user' || workspace.topicSource === 'pr-title') return;
+      console.log(`[topic] Updating workspace ${workspaceId} topic to: "${topic}"`);
+      workspace.topic = topic;
+      workspace.topicSource = 'inferred';
+      this.persistState(workspace);
+      this.summarize(workspace).then((summary) => {
+        this.emit('workspace-update', {
+          workspaceId,
+          type: 'status-change',
+          status: workspace.status,
+          summary,
+        });
+      });
+    };
+
+    // Apply heuristic immediately so there's a label right away
+    const heuristic = inferTopicHeuristic(userMessage);
+    if (heuristic) applyTopic(heuristic);
+
+    // Then try ACP-based inference for a better label (async)
+    const cwd = workspace.projectDir;
+    workspace.topicSessionText = '';
+    workspace.connection
+      .newSession({ cwd, mcpServers: [] })
+      .then((resp) => {
+        workspace.topicSessionId = resp.sessionId;
+        console.log(`[topic] Created topic session: ${resp.sessionId}`);
+        const truncatedMessage = userMessage.slice(0, 500);
+        return workspace.connection.prompt({
+          sessionId: resp.sessionId,
+          prompt: [{ type: 'text', text: TOPIC_PROMPT + truncatedMessage }],
+        });
+      })
+      .then(() => {
+        // prompt() resolved — the sessionUpdate handler accumulated the text
+        const raw = workspace.topicSessionText.trim();
+        workspace.topicSessionId = null;
+        workspace.topicSessionText = '';
+        if (raw) {
+          const topic = truncateTopic(raw);
+          console.log(`[topic] ACP inferred: "${topic}"`);
+          applyTopic(topic);
+        }
+      })
+      .catch((err) => {
+        console.warn('[topic] ACP inference failed:', err);
+        workspace.topicSessionId = null;
+        workspace.topicSessionText = '';
+        // Heuristic was already applied above — nothing more to do
+      });
+  }
+
   /** Persist workspace metadata to disk for session resume. */
   private async persistState(workspace: WorkspaceState): Promise<void> {
     await persistWorkspace({
@@ -2395,6 +2460,18 @@ export class WorkspaceManager {
       const connection = new acp.ClientSideConnection(
         (_agent) => ({
           async sessionUpdate(params) {
+            // Route topic-session updates to a separate text buffer
+            if (workspace.topicSessionId && params.sessionId === workspace.topicSessionId) {
+              const update = params.update;
+              if (
+                update.sessionUpdate === 'agent_message_chunk' &&
+                update.content.type === 'text'
+              ) {
+                workspace.topicSessionText += update.content.text;
+              }
+              return;
+            }
+
             const update = params.update;
             if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
               const agentMsg = workspace.messages.findLast(
@@ -2627,6 +2704,8 @@ export class WorkspaceManager {
         topicSource:
           pw.topicSource ??
           (pw.worktreeBranch && topicFromBranch(pw.worktreeBranch) ? 'branch' : 'placeholder'),
+        topicSessionId: null,
+        topicSessionText: '',
       };
       this.workspaces.set(pw.id, workspace);
       console.log(
