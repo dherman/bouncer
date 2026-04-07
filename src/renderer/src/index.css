@@ -325,8 +325,8 @@ body {
 
 .workspace-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   padding: 6px 12px 6px 28px;
   cursor: pointer;
 }
@@ -337,6 +337,26 @@ body {
 
 .workspace-item.active {
   background-color: #37373d;
+}
+
+.workspace-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 24px;
+  font-size: 11px;
+  color: #888;
+  min-height: 16px;
+}
+
+.workspace-row-bottom:empty {
+  display: none;
 }
 
 .status-dot {
@@ -363,14 +383,19 @@ body {
   }
 }
 
-.workspace-label {
+.workspace-topic {
   font-size: 13px;
-  font-family: monospace;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   flex: 1;
+}
+
+.workspace-topic.placeholder {
+  font-style: italic;
+  opacity: 0.5;
 }
 
 .workspace-status {

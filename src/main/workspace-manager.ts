@@ -65,6 +65,7 @@ import type {
   WorkspacePhase,
   WorkspaceUpdate,
   ToolCallInfo,
+  TopicSource,
 } from './types.js';
 import type { RepositoryStore } from './repository-store.js';
 import {
@@ -205,6 +206,19 @@ function isAuthError(err: unknown): boolean {
   );
 }
 
+/** Derive a human-readable topic from a git branch name. */
+function topicFromBranch(branch: string): string {
+  // Strip "user/" prefix (everything before and including first slash)
+  const stripped = branch.includes('/') ? branch.slice(branch.indexOf('/') + 1) : branch;
+  // Replace hyphens and underscores with spaces
+  const spaced = stripped.replace(/[-_]/g, ' ');
+  // Truncate to 30 chars at word boundary
+  if (spaced.length <= 30) return spaced;
+  const truncated = spaced.slice(0, 30);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > 10 ? truncated.slice(0, lastSpace) : truncated;
+}
+
 interface WorkspaceState {
   id: string;
   repositoryId: string | null;
@@ -241,6 +255,10 @@ interface WorkspaceState {
   ghTokenRefreshTimer: ReturnType<typeof setInterval> | null;
   /** Host-side path to the GH token file (for cleanup). */
   ghTokenFilePath: string | null;
+  /** Inferred topic label for sidebar display. */
+  topic: string | null;
+  /** How the topic was derived (controls overwrite precedence). */
+  topicSource: TopicSource;
 }
 
 export class WorkspaceManager {
@@ -328,6 +346,8 @@ export class WorkspaceManager {
       pendingMessage: null,
       ghTokenRefreshTimer: null,
       ghTokenFilePath: null,
+      topic: worktree ? topicFromBranch(worktree.branch) : null,
+      topicSource: worktree ? 'branch' : 'placeholder',
     };
     this.workspaces.set(id, workspace);
     this.emit('workspace-update', {
@@ -1862,6 +1882,7 @@ export class WorkspaceManager {
       canResume:
         workspace.acpSessionId !== '' &&
         (workspace.status === 'error' || workspace.status === 'suspended'),
+      topic: workspace.topic,
     };
   }
 
@@ -1883,6 +1904,8 @@ export class WorkspaceManager {
       phase: workspace.phase,
       prUrl: workspace.prUrl,
       promptCount: workspace.promptCount,
+      topic: workspace.topic,
+      topicSource: workspace.topicSource,
     }).catch((err) =>
       console.warn(`[workspace] Failed to persist state for ${workspace.id}:`, err),
     );
@@ -2547,6 +2570,8 @@ export class WorkspaceManager {
         pendingMessage: null,
         ghTokenRefreshTimer: null,
         ghTokenFilePath: null,
+        topic: pw.topic ?? (pw.worktreeBranch ? topicFromBranch(pw.worktreeBranch) : null),
+        topicSource: pw.topicSource ?? (pw.worktreeBranch ? 'branch' : 'placeholder'),
       };
       this.workspaces.set(pw.id, workspace);
       console.log(

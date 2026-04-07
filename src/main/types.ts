@@ -42,6 +42,8 @@ export type WorkspacePhase =
   | 'pr-open' // PR created, CI/review loop
   | 'ready'; // CI green, reviews clean
 
+export type TopicSource = 'placeholder' | 'branch' | 'inferred' | 'pr-title' | 'user';
+
 export interface WorkspaceSummary {
   id: string;
   repositoryId: string | null;
@@ -60,6 +62,7 @@ export interface WorkspaceSummary {
   prUrl: string | null;
   phase: WorkspacePhase | null;
   networkAccess: 'full' | 'none' | 'filtered' | null;
+  topic: string | null;
 }
 
 // --- GitHub Application-Layer Policy Types (M5) ---
