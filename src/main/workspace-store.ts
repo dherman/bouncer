@@ -29,8 +29,8 @@ export interface PersistedWorkspace {
   phase: WorkspacePhase | null;
   prUrl: string | null;
   promptCount: number;
-  topic: string | null;
-  topicSource: TopicSource;
+  topic?: string | null;
+  topicSource?: TopicSource;
   archived?: boolean;
 }
 

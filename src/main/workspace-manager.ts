@@ -1961,11 +1961,13 @@ export class WorkspaceManager {
     if (heuristic) applyTopic(heuristic);
 
     // Then try ACP-based inference for a better label (async)
-    const cwd = workspace.projectDir;
+    const cwd = workspace.worktree?.path ?? workspace.projectDir;
     workspace.topicSessionText = '';
+    let topicSessionId: string | null = null;
     workspace.connection
       .newSession({ cwd, mcpServers: [] })
       .then((resp) => {
+        topicSessionId = resp.sessionId;
         workspace.topicSessionId = resp.sessionId;
         console.log(`[topic] Created topic session: ${resp.sessionId}`);
         const truncatedMessage = userMessage.slice(0, 500);
@@ -1989,7 +1991,12 @@ export class WorkspaceManager {
         console.warn('[topic] ACP inference failed:', err);
         workspace.topicSessionId = null;
         workspace.topicSessionText = '';
-        // Heuristic was already applied above — nothing more to do
+      })
+      .finally(() => {
+        // Clean up the side session to avoid resource leaks
+        if (topicSessionId) {
+          workspace.connection.unstable_closeSession({ sessionId: topicSessionId }).catch(() => {});
+        }
       });
   }
 
