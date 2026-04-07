@@ -1381,21 +1381,25 @@ export class WorkspaceManager {
     }
     // Fire topic inference on first prompt (async, best-effort)
     if (workspace.promptCount === 0 && workspace.topicSource !== 'user') {
-      inferTopic(text).then((topic) => {
-        if (topic && workspace.topicSource !== 'user' && workspace.topicSource !== 'pr-title') {
-          workspace.topic = topic;
-          workspace.topicSource = 'inferred';
-          this.persistState(workspace);
-          this.summarize(workspace).then((summary) => {
-            this.emit('workspace-update', {
-              workspaceId,
-              type: 'status-change',
-              status: workspace.status,
-              summary,
+      console.log(`[topic] Firing inference for workspace ${workspaceId}`);
+      inferTopic(text)
+        .then((topic) => {
+          if (topic && workspace.topicSource !== 'user' && workspace.topicSource !== 'pr-title') {
+            console.log(`[topic] Updating workspace ${workspaceId} topic to: "${topic}"`);
+            workspace.topic = topic;
+            workspace.topicSource = 'inferred';
+            this.persistState(workspace);
+            this.summarize(workspace).then((summary) => {
+              this.emit('workspace-update', {
+                workspaceId,
+                type: 'status-change',
+                status: workspace.status,
+                summary,
+              });
             });
-          });
-        }
-      });
+          }
+        })
+        .catch((err) => console.warn('[topic] Inference error:', err));
     }
 
     workspace.promptCount++;

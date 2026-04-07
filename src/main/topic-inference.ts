@@ -20,7 +20,10 @@ Task: `;
  */
 export async function inferTopic(userMessage: string): Promise<string | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.log('[topic] No ANTHROPIC_API_KEY — skipping topic inference');
+    return null;
+  }
 
   const truncatedMessage = userMessage.slice(0, 500);
 
@@ -45,7 +48,11 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
 
     clearTimeout(timeout);
 
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      console.warn(`[topic] API returned ${resp.status}: ${body.slice(0, 200)}`);
+      return null;
+    }
 
     const data = (await resp.json()) as {
       content: Array<{ type: string; text?: string }>;
@@ -54,10 +61,16 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
     if (!text) return null;
 
     // Enforce 30-char limit
-    if (text.length <= 30) return text;
+    if (text.length <= 30) {
+      console.log(`[topic] Inferred: "${text}"`);
+      return text;
+    }
     const lastSpace = text.slice(0, 30).lastIndexOf(' ');
-    return lastSpace > 10 ? text.slice(0, lastSpace) : text.slice(0, 30);
-  } catch {
-    return null; // Timeout, network error, etc. — fail silently
+    const truncated = lastSpace > 10 ? text.slice(0, lastSpace) : text.slice(0, 30);
+    console.log(`[topic] Inferred (truncated): "${truncated}"`);
+    return truncated;
+  } catch (err) {
+    console.warn('[topic] Inference failed:', err);
+    return null; // Timeout, network error, etc.
   }
 }

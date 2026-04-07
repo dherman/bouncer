@@ -150,7 +150,7 @@ function RepoGroup({
       </div>
       {expanded &&
         visibleWorkspaces.map((ws) => {
-          const topicText = ws.topic ?? workspaceLabel(ws);
+          const topicText = ws.topic || 'New workspace';
           const isPlaceholder = !ws.topic;
           return (
             <div
