@@ -68,6 +68,7 @@ import type {
   TopicSource,
 } from './types.js';
 import type { RepositoryStore } from './repository-store.js';
+import { inferTopic } from './topic-inference.js';
 import {
   isDockerAvailable,
   ensureAgentImage,
@@ -712,9 +713,20 @@ export class WorkspaceManager {
                     if (urlMatch) {
                       workspace.prUrl = urlMatch[0];
                     }
+                    // Extract PR title and use as topic (higher quality than inferred)
+                    const titleMatch = event.operation.match(/title:(.+)$/);
+                    if (titleMatch && workspace.topicSource !== 'user') {
+                      let title = titleMatch[1];
+                      if (title.length > 30) {
+                        const lastSpace = title.slice(0, 30).lastIndexOf(' ');
+                        title = lastSpace > 10 ? title.slice(0, lastSpace) : title.slice(0, 30);
+                      }
+                      workspace.topic = title;
+                      workspace.topicSource = 'pr-title';
+                    }
                     workspace.phase = 'pr-open';
                     this.persistState(workspace);
-                    // Emit a summary update so the UI picks up the phase/prUrl change
+                    // Emit a summary update so the UI picks up the phase/prUrl/topic change
                     this.summarize(workspace)
                       .then((summary) => {
                         this.emit('workspace-update', {
@@ -1362,6 +1374,25 @@ export class WorkspaceManager {
         text: `<system-instruction>\n${systemParts.join('\n')}\n</system-instruction>`,
       });
     }
+    // Fire topic inference on first prompt (async, best-effort)
+    if (workspace.promptCount === 0 && workspace.topicSource !== 'user') {
+      inferTopic(text).then((topic) => {
+        if (topic && workspace.topicSource !== 'user' && workspace.topicSource !== 'pr-title') {
+          workspace.topic = topic;
+          workspace.topicSource = 'inferred';
+          this.persistState(workspace);
+          this.summarize(workspace).then((summary) => {
+            this.emit('workspace-update', {
+              workspaceId,
+              type: 'status-change',
+              status: workspace.status,
+              summary,
+            });
+          });
+        }
+      });
+    }
+
     workspace.promptCount++;
     this.persistState(workspace);
 
@@ -2145,6 +2176,17 @@ export class WorkspaceManager {
                   writePolicyState(workspaceId, workspace.githubPolicy).catch(() => {});
                   const urlMatch = event.operation.match(/https:\/\/\S+/);
                   if (urlMatch) workspace.prUrl = urlMatch[0];
+                  // Extract PR title and use as topic
+                  const titleMatch = event.operation.match(/title:(.+)$/);
+                  if (titleMatch && workspace.topicSource !== 'user') {
+                    let title = titleMatch[1];
+                    if (title.length > 30) {
+                      const lastSpace = title.slice(0, 30).lastIndexOf(' ');
+                      title = lastSpace > 10 ? title.slice(0, lastSpace) : title.slice(0, 30);
+                    }
+                    workspace.topic = title;
+                    workspace.topicSource = 'pr-title';
+                  }
                   workspace.phase = 'pr-open';
                   this.persistState(workspace);
                   this.summarize(workspace)
