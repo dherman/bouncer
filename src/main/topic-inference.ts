@@ -3,6 +3,11 @@
  * Used to generate short sidebar labels from the first user prompt.
  */
 
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFileCb);
+
 const TOPIC_PROMPT = `Summarize this task request in 3-5 words for use as a sidebar label in a coding workspace manager. Output ONLY the label, nothing else. Be specific — prefer concrete nouns and verbs over abstract descriptions.
 
 Examples:
@@ -13,15 +18,64 @@ Examples:
 
 Task: `;
 
+/** Cached auth header to avoid repeated keychain lookups. */
+let cachedAuth: { header: string; expiresAt: number } | null = null;
+
+/**
+ * Get auth credentials for the Anthropic API.
+ * Tries ANTHROPIC_API_KEY first, then falls back to macOS keychain OAuth token.
+ */
+async function getAuthHeader(): Promise<{ key: string; value: string } | null> {
+  // Prefer explicit API key
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (apiKey) {
+    return { key: 'x-api-key', value: apiKey };
+  }
+
+  // Check cached OAuth token
+  if (cachedAuth && Date.now() < cachedAuth.expiresAt) {
+    return { key: 'Authorization', value: cachedAuth.header };
+  }
+
+  // Extract from macOS keychain
+  if (process.platform !== 'darwin') return null;
+
+  try {
+    const { stdout } = await execFileAsync('security', [
+      'find-generic-password',
+      '-s',
+      'Claude Code-credentials',
+      '-w',
+    ]);
+    const creds = JSON.parse(stdout.trim());
+    const accessToken = creds?.claudeAiOauth?.accessToken;
+    const expiresAt = creds?.claudeAiOauth?.expiresAt;
+    if (!accessToken) {
+      console.warn('[topic] Keychain credentials missing accessToken');
+      return null;
+    }
+    const header = `Bearer ${accessToken}`;
+    // Cache until token expires (with 60s buffer), or 5 minutes if no expiry
+    cachedAuth = {
+      header,
+      expiresAt: expiresAt ? expiresAt - 60_000 : Date.now() + 5 * 60_000,
+    };
+    return { key: 'Authorization', value: header };
+  } catch (err) {
+    console.warn('[topic] Could not extract credentials from keychain:', err);
+    return null;
+  }
+}
+
 /**
  * Infer a short topic label from a user message using Claude Haiku.
  * Returns null on any failure (missing key, timeout, API error) — callers
  * should treat this as best-effort and keep the existing label.
  */
 export async function inferTopic(userMessage: string): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.log('[topic] No ANTHROPIC_API_KEY — skipping topic inference');
+  const auth = await getAuthHeader();
+  if (!auth) {
+    console.log('[topic] No API credentials available — skipping topic inference');
     return null;
   }
 
@@ -35,7 +89,7 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        [auth.key]: auth.value,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -51,6 +105,8 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
     if (!resp.ok) {
       const body = await resp.text().catch(() => '');
       console.warn(`[topic] API returned ${resp.status}: ${body.slice(0, 200)}`);
+      // Clear cached auth on auth failure so next attempt re-reads keychain
+      if (resp.status === 401 || resp.status === 403) cachedAuth = null;
       return null;
     }
 
@@ -71,6 +127,6 @@ export async function inferTopic(userMessage: string): Promise<string | null> {
     return truncated;
   } catch (err) {
     console.warn('[topic] Inference failed:', err);
-    return null; // Timeout, network error, etc.
+    return null;
   }
 }
