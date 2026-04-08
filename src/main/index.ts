@@ -67,8 +67,6 @@ app.whenReady().then(async () => {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
 
-  createWindow();
-
   // Pre-warm Docker: check availability and build/cache the agent image
   isDockerAvailable().then((available) => {
     console.log(`[main] Docker available: ${available}`);
@@ -100,19 +98,16 @@ app.whenReady().then(async () => {
     mainWindow?.webContents.send(channel, data);
   });
 
-  // Restore persisted workspaces from previous sessions as "suspended".
-  // Must happen before orphan cleanup so their worktrees/artifacts aren't removed.
-  await workspaceManager.restorePersistedWorkspaces().catch((err) => {
-    console.warn('Failed to restore persisted workspaces:', err);
+  // Gate that workspace-dependent IPC handlers await before responding.
+  // This lets us register handlers and create the window immediately (so the
+  // UI renders promptly) while ensuring the renderer never gets a stale empty
+  // list because restoration hasn't finished yet.
+  let resolveStartupReady: () => void;
+  const startupReady = new Promise<void>((r) => {
+    resolveStartupReady = r;
   });
 
-  // Clean up orphan worktrees, containers, and policies from previous crashes.
-  // Awaited so no workspace can be created before cleanup finishes.
-  await workspaceManager.cleanupOrphans().catch((err) => {
-    console.warn('Failed to clean up orphans:', err);
-  });
-
-  // Repository IPC handlers
+  // Repository IPC handlers (no startup gate needed — repos load synchronously above)
   ipcMain.handle('repositories:list', () => repoStore.list());
   ipcMain.handle('repositories:add', async (_e, localPath: unknown) => {
     if (typeof localPath !== 'string') {
@@ -156,9 +151,14 @@ app.whenReady().then(async () => {
     return prefsStore.setFocusedRepoId(id);
   });
 
-  // Workspace IPC handlers
-  ipcMain.handle('workspaces:list', () => workspaceManager.listWorkspaces());
-  ipcMain.handle('workspaces:create', (_e, repositoryId: unknown) => {
+  // Workspace IPC handlers — gated on startupReady so early renderer calls
+  // wait for workspace restoration instead of returning an empty list.
+  ipcMain.handle('workspaces:list', async () => {
+    await startupReady;
+    return workspaceManager.listWorkspaces();
+  });
+  ipcMain.handle('workspaces:create', async (_e, repositoryId: unknown) => {
+    await startupReady;
     if (typeof repositoryId !== 'string') {
       throw new Error('Invalid argument: repositoryId must be a string');
     }
@@ -168,37 +168,43 @@ app.whenReady().then(async () => {
   ipcMain.handle('policies:list', () => {
     return workspaceManager.policyRegistry.list();
   });
-  ipcMain.handle('workspaces:getMessages', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:getMessages', async (_e, sessionId: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');
     }
     return workspaceManager.getMessages(sessionId);
   });
-  ipcMain.handle('workspaces:sendMessage', (_e, sessionId: unknown, text: unknown) => {
+  ipcMain.handle('workspaces:sendMessage', async (_e, sessionId: unknown, text: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string' || typeof text !== 'string') {
       throw new Error('Invalid arguments: sessionId and text must be strings');
     }
     return workspaceManager.sendMessage(sessionId, text);
   });
-  ipcMain.handle('workspaces:close', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:close', async (_e, sessionId: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');
     }
     return workspaceManager.closeWorkspace(sessionId);
   });
-  ipcMain.handle('workspaces:archive', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:archive', async (_e, sessionId: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');
     }
     return workspaceManager.archiveWorkspace(sessionId);
   });
-  ipcMain.handle('workspaces:refreshCredentials', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:refreshCredentials', async (_e, sessionId: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');
     }
     return workspaceManager.refreshCredentials(sessionId);
   });
-  ipcMain.handle('workspaces:resume', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:resume', async (_e, sessionId: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');
     }
@@ -206,7 +212,8 @@ app.whenReady().then(async () => {
   });
 
   if (!app.isPackaged) {
-    ipcMain.handle('workspaces:simulateAuthError', (_e, sessionId: unknown) => {
+    ipcMain.handle('workspaces:simulateAuthError', async (_e, sessionId: unknown) => {
+      await startupReady;
       if (typeof sessionId !== 'string') {
         throw new Error('Invalid argument: sessionId must be a string');
       }
@@ -214,7 +221,8 @@ app.whenReady().then(async () => {
     });
   }
 
-  ipcMain.handle('workspaces:getSandboxViolations', (_e, sessionId: unknown) => {
+  ipcMain.handle('workspaces:getSandboxViolations', async (_e, sessionId: unknown) => {
+    await startupReady;
     if (typeof sessionId !== 'string') {
       throw new Error('Invalid argument: sessionId must be a string');
     }
@@ -245,6 +253,27 @@ app.whenReady().then(async () => {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+
+  // Create the window now that all IPC handlers are registered. The window
+  // loads asynchronously; workspace-dependent handlers await startupReady so
+  // the renderer never sees an empty list even if it calls before restoration
+  // finishes.
+  createWindow();
+
+  // Restore persisted workspaces from previous sessions as "suspended".
+  // Must happen before orphan cleanup so their worktrees/artifacts aren't removed.
+  await workspaceManager.restorePersistedWorkspaces().catch((err) => {
+    console.warn('Failed to restore persisted workspaces:', err);
+  });
+
+  // Clean up orphan worktrees, containers, and policies from previous crashes.
+  // Awaited so no workspace can be created before cleanup finishes.
+  await workspaceManager.cleanupOrphans().catch((err) => {
+    console.warn('Failed to clean up orphans:', err);
+  });
+
+  // All startup I/O complete — unblock any workspace IPC handlers that arrived early.
+  resolveStartupReady!();
 
   // Clean up all workspaces before quitting
   let isQuitting = false;
