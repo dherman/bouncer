@@ -67,8 +67,6 @@ app.whenReady().then(async () => {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
 
-  createWindow();
-
   // Pre-warm Docker: check availability and build/cache the agent image
   isDockerAvailable().then((available) => {
     console.log(`[main] Docker available: ${available}`);
@@ -245,6 +243,12 @@ app.whenReady().then(async () => {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+
+  // Create the window AFTER all IPC handlers are registered and workspaces are
+  // restored.  Previously the window was created first, which let the renderer
+  // call `workspaces:list` before the handler existed — the resulting silent
+  // promise rejection left the sidebar permanently empty.
+  createWindow();
 
   // Clean up all workspaces before quitting
   let isQuitting = false;
